@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import useThemeStore from "@/store/theme-store";
+import { useGetBranding } from "@/api/services/system/settings-service";
 
 function getLuminance(hex: string) {
   // Convert hex to RGB
@@ -44,6 +45,29 @@ function adjustColorBrightness(hex: string, percent: number) {
 export function ThemeInitializer() {
   const theme = useThemeStore((s) => s.theme);
   const primaryColor = useThemeStore((s) => s.primaryColor);
+  const companyName = useThemeStore((s) => s.companyName);
+  const slogan = useThemeStore((s) => s.slogan);
+
+  const { data: branding } = useGetBranding();
+  const setCompanyName = useThemeStore((s) => s.setCompanyName);
+  const setSlogan = useThemeStore((s) => s.setSlogan);
+  const setPrimaryColor = useThemeStore((s) => s.setPrimaryColor);
+  const setLogoUrl = useThemeStore((s) => s.setLogoUrl);
+
+  useEffect(() => {
+    if (branding) {
+      setCompanyName(branding.companyName);
+      setSlogan(branding.slogan);
+      setPrimaryColor(branding.primaryColor);
+      setLogoUrl(branding.logoUrl || null);
+    }
+  }, [branding, setCompanyName, setSlogan, setPrimaryColor, setLogoUrl]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      document.title = `${companyName} — ${slogan}`;
+    }
+  }, [companyName, slogan]);
 
   useEffect(() => {
     const root = document.documentElement;

@@ -1,1 +1,0 @@
-export { ElectionGrid } from "./electionGrid";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "@/api/services/auth/auth-service";
 import Link from "next/link";
+import useThemeStore from "@/store/theme-store";
+import useSessionStore from "@/store/session-store";
 
 // ── Validation Schema ──────────────────────────────────────────
 const loginSchema = z.object({
@@ -25,6 +27,23 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const loginMutation = useLogin();
+  const { companyName, slogan, logoUrl } = useThemeStore();
+  const [mounted, setMounted] = useState(false);
+  const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
+  const hasHydrated = useSessionStore((s) => s.hasHydrated);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasHydrated && isLoggedIn) {
+      router.replace("/dashboard");
+    }
+  }, [hasHydrated, isLoggedIn, router]);
+
+  const displayName = companyName;
+  const displaySlogan = slogan;
 
   const {
     register,
@@ -47,15 +66,23 @@ export default function LoginPage() {
     <div className="animate-fade-in">
       {/* Logo & Title */}
       <div className="text-center mb-8">
-        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
-          <Headset className="h-7 w-7" />
-        </div>
+        {mounted && logoUrl ? (
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden shadow-lg mb-4">
+            <img
+              src={logoUrl}
+              alt={`${displayName} Logo`}
+              className="h-full w-full object-contain p-1.5"
+            />
+          </div>
+        ) : (
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
+            <Headset className="h-7 w-7" />
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Welcome Back
         </h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Sign in to Prologics Support Division
-        </p>
+       
       </div>
 
       {/* Login Card */}
@@ -69,7 +96,7 @@ export default function LoginPage() {
             <Input
               id="login-email"
               type="email"
-              placeholder="you@prologics.lk"
+              placeholder="you@company.com"
               autoComplete="email"
               className="h-11 bg-[var(--background)] border-[var(--border)] focus:border-[var(--border-focus)] transition-colors"
               {...register("email")}
@@ -145,11 +172,6 @@ export default function LoginPage() {
           </Button>
         </form>
       </div>
-
-      {/* Footer */}
-      <p className="text-center text-xs text-[var(--text-tertiary)] mt-6">
-        Prologics (Pvt) Ltd — Support Division System v1.0
-      </p>
     </div>
   );
 }

@@ -7,12 +7,12 @@ import { ROLE_LABELS } from "@/lib/constants";
 
 // Mock users for shell
 const MOCK_USERS = [
-  { name: "Kavindu Perera", email: "kavindu@prologics.lk", role: "super_admin", isActive: true },
-  { name: "Dilshan Silva", email: "dilshan@prologics.lk", role: "manager", isActive: true },
-  { name: "Nuwan Jayawardena", email: "nuwan@prologics.lk", role: "senior_engineer", isActive: true },
-  { name: "Hasitha Fernando", email: "hasitha@prologics.lk", role: "engineer", isActive: true },
-  { name: "Amaya Wickramasinghe", email: "amaya@prologics.lk", role: "engineer", isActive: false },
-  { name: "Sachini Rathnayake", email: "sachini@prologics.lk", role: "intern", isActive: true },
+  { name: "Kavindu Perera", email: "kavindu@company.com", role: "super_admin", isActive: true },
+  { name: "Dilshan Silva", email: "dilshan@company.com", role: "manager", isActive: true },
+  { name: "Nuwan Jayawardena", email: "nuwan@company.com", role: "senior_engineer", isActive: true },
+  { name: "Hasitha Fernando", email: "hasitha@company.com", role: "engineer", isActive: true },
+  { name: "Amaya Wickramasinghe", email: "amaya@company.com", role: "engineer", isActive: false },
+  { name: "Sachini Rathnayake", email: "sachini@company.com", role: "intern", isActive: true },
 ];
 
 export default function UsersPage() {
