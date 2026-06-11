@@ -1,0 +1,1 @@
+export { CandidatesManager } from "./candidatesManager";

@@ -1,0 +1,1 @@
+export { ShareManager } from "./shareManager";

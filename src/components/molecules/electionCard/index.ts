@@ -1,0 +1,1 @@
+export { ElectionCard } from "./electionCard";
