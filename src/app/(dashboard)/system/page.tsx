@@ -3,14 +3,17 @@
 import { Palette, Settings, Shield, Tag, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge } from "@/components";
 import { PRIORITIES } from "@/lib/constants";
+import useThemeStore from "@/store/theme-store";
 
 export default function SystemPage() {
+  const primaryColor = useThemeStore((s) => s.primaryColor);
+  const setPrimaryColor = useThemeStore((s) => s.setPrimaryColor);
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-          <Settings className="h-6 w-6 text-[var(--primary)]" />
+          <Settings className="h-6 w-6 text-[var(--primary-text)]" />
           System Settings
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -134,6 +137,36 @@ export default function SystemPage() {
               <div className="space-y-2">
                 <Label className="text-sm">Slogan</Label>
                 <Input defaultValue="Support Division System" className="bg-[var(--background)]" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm">Primary Brand Color</Label>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="color"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      className="h-10 w-14 p-1 cursor-pointer bg-[var(--background)] border-[var(--border)] rounded shrink-0"
+                    />
+                    <Input
+                      type="text"
+                      value={primaryColor}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.startsWith("#") && val.length <= 7) {
+                          setPrimaryColor(val);
+                        } else if (!val.startsWith("#") && val.length <= 6) {
+                          setPrimaryColor("#" + val);
+                        }
+                      }}
+                      placeholder="#6366f1"
+                      className="h-10 w-28 bg-[var(--background)] text-center font-mono text-sm shrink-0"
+                    />
+                  </div>
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    This color will apply globally to buttons, active links, highlights, and icons.
+                  </span>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label className="text-sm">Logo</Label>

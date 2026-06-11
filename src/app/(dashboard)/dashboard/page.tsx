@@ -45,7 +45,7 @@ export default function DashboardPage() {
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mt-1">
           Welcome back, {userInfo?.name ?? "User"} •{" "}
-          <span className="text-[var(--primary)]">
+          <span className="text-[var(--primary-text)]">
             {ROLE_LABELS[userInfo?.role ?? "engineer"]}
           </span>
         </p>
@@ -70,7 +70,7 @@ export default function DashboardPage() {
         <Card className="lg:col-span-2 bg-[var(--surface)] border-[var(--border)]">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-              <Activity className="h-4 w-4 text-[var(--primary)]" />
+              <Activity className="h-4 w-4 text-[var(--primary-text)]" />
               {isManager ? "Active Issues Feed" : "My Active Issues"}
             </CardTitle>
           </CardHeader>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
           <Card className="bg-[var(--surface)] border-[var(--border)]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                <Timer className="h-4 w-4 text-[var(--primary)]" />
+                <Timer className="h-4 w-4 text-[var(--primary-text)]" />
                 Quick Timer
               </CardTitle>
             </CardHeader>
@@ -137,7 +137,7 @@ export default function DashboardPage() {
             <Card className="bg-[var(--surface)] border-[var(--border)]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                  <FolderKanban className="h-4 w-4 text-[var(--primary)]" />
+                  <FolderKanban className="h-4 w-4 text-[var(--primary-text)]" />
                   Project Hours
                 </CardTitle>
               </CardHeader>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
           <Card className="bg-[var(--surface)] border-[var(--border)]">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                <BarChart3 className="h-4 w-4 text-[var(--primary)]" />
+                <BarChart3 className="h-4 w-4 text-[var(--primary-text)]" />
                 Resolution Trend
               </CardTitle>
             </CardHeader>

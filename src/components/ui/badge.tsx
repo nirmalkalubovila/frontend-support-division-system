@@ -8,7 +8,7 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-[var(--primary-light)] text-[var(--primary)]",
+        default: "bg-[var(--primary-light)] text-[var(--primary-text)]",
         secondary: "bg-[var(--secondary-light)] text-[var(--secondary)]",
         destructive: "bg-[var(--destructive-light)] text-[var(--destructive)]",
         warning: "bg-[var(--warning-light)] text-[var(--warning)]",
