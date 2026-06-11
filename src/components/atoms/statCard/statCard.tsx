@@ -18,7 +18,7 @@ export function StatCard({ icon: Icon, label, value, trend, className }: StatCar
       )}
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--primary-light)]">
-        <Icon className="h-5 w-5 text-[var(--primary)]" />
+        <Icon className="h-5 w-5 text-[var(--primary-text)]" />
       </div>
       <div className="min-w-0">
         <p className="text-sm text-[var(--text-secondary)] truncate">{label}</p>

@@ -7,6 +7,7 @@
 :root {
   /* ── Brand Colors ───────────────────────────────────────── */
   --primary: #6366f1;
+  --primary-text: #6366f1;
   --primary-hover: #4f46e5;
   --primary-light: #eef2ff;
   --primary-foreground: #ffffff;
