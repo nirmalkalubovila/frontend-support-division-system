@@ -134,7 +134,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
       return;
     }
 
-    const payload: CreateProjectPayload = {
+    const payload: CreateProjectPayload & { isActive?: boolean } = {
       name: form.name.trim(),
       description: form.description || null,
       isActive: form.isActive,
