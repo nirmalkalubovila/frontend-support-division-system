@@ -30,3 +30,4 @@ export { Separator } from "./separator";
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from "./card";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
 export { Progress } from "./progress";
+export { Select } from "./select";
