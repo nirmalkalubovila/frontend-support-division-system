@@ -14,39 +14,76 @@ export interface ProjectMember {
   role: string;
 }
 
+export interface MainContact {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+}
+
 export interface Project extends GlobalRecords {
   name: string;
-  client: Client | string;
-  contractType: "Monthly Retainer" | "Per-Incident" | "Time & Material" | "Fixed";
+  client: Client | string | null;
+  contractType: "Monthly Retainer" | "Per-Incident" | "Time & Material" | "Fixed" | null;
   allocatedHours: number;
   usedHours: number;
   members: ProjectMember[] | string[];
   isActive: boolean;
+  description?: string | null;
+  photo?: string | null;
+  completion: number;
+  startDate?: string | null;
+  endDate?: string | null;
+  projectType: ("New Development" | "CR" | "Support")[];
+  mainContact?: MainContact;
+  techStack: string[];
 }
 
-export interface CreateProject {
+export interface CreateProjectPayload {
   name: string;
-  client: string;
-  contractType: string;
+  client?: string | null;
+  contractType?: string | null;
   allocatedHours?: number;
   members?: string[];
+  description?: string | null;
+  photo?: File | null;
+  completion?: number;
+  startDate?: string | null;
+  endDate?: string | null;
+  projectType?: string[];
+  mainContact?: MainContact;
+  techStack?: string[];
 }
 
-export interface UpdateProject {
-  name?: string;
-  contractType?: string;
-  allocatedHours?: number;
-  members?: string[];
-  isActive?: boolean;
+export type UpdateProjectPayload = Partial<CreateProjectPayload> & { isActive?: boolean };
+
+// ──────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────
+
+function toFormData(data: CreateProjectPayload | UpdateProjectPayload): FormData {
+  const fd = new FormData();
+  const { photo, projectType, techStack, members, mainContact, ...rest } = data as any;
+
+  Object.entries(rest).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) fd.append(k, String(v));
+  });
+
+  if (photo instanceof File) fd.append("photo", photo);
+  if (projectType) fd.append("projectType", JSON.stringify(projectType));
+  if (techStack) fd.append("techStack", JSON.stringify(techStack));
+  if (members) fd.append("members", JSON.stringify(members));
+  if (mainContact) fd.append("mainContact", JSON.stringify(mainContact));
+
+  return fd;
 }
 
 // ──────────────────────────────────────────────────────────────
-// Project API Service Hooks
+// Hooks
 // ──────────────────────────────────────────────────────────────
 
-export const usePaginateProjects = (params: PaginationRequest & { client?: string }) =>
+export const usePaginateProjects = (params: PaginationRequest & { client?: string; isActive?: boolean }) =>
   useQuery({
-    queryKey: ["/projects/paginate", params.page, params.limit, params.search, params.client],
+    queryKey: ["/projects/paginate", params.page, params.limit, params.search, params.client, params.isActive],
     queryFn: async (): Promise<PaginateResult<Project>> => {
       const res = await axiosInstance.get("/projects", { params });
       return res.data;
@@ -77,8 +114,10 @@ export const useGetProjectById = (id: string) =>
 export const useCreateProject = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: CreateProject): Promise<Project> => {
-      const res = await axiosInstance.post("/projects", data);
+    mutationFn: async (data: CreateProjectPayload): Promise<Project> => {
+      const res = await axiosInstance.post("/projects", toFormData(data), {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       return res.data;
     },
     onSuccess: () => {
@@ -91,8 +130,10 @@ export const useCreateProject = () => {
 export const useUpdateProject = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: UpdateProject }): Promise<Project> => {
-      const res = await axiosInstance.patch(`/projects/${id}`, data);
+    mutationFn: async ({ id, data }: { id: string; data: UpdateProjectPayload }): Promise<Project> => {
+      const res = await axiosInstance.patch(`/projects/${id}`, toFormData(data), {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       return res.data;
     },
     onSuccess: (_, variables) => {
