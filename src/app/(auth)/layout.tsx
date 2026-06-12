@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Login — Prologics Support",
+  title: "Login — Support Division System",
 };
 
 export default function AuthLayout({

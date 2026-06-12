@@ -2,7 +2,7 @@
 // Application Constants
 // ──────────────────────────────────────────────────────────────
 
-export const APP_NAME = "Prologics Support";
+export const APP_NAME = "Your Company (Pvt) Ltd";
 export const APP_SLOGAN = "Support Division System";
 export const APP_VERSION = "1.0.0";
 
