@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import type { ElectionStatus } from "@/types/election";
+export type ElectionStatus = "draft" | "scheduled" | "open" | "closed" | "archived";
 
 interface SearchFilterBarProps {
   searchQuery: string;

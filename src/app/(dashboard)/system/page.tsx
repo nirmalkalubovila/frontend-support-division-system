@@ -1,15 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Palette, Settings, Shield, Tag, Bell, Loader2 } from "lucide-react";
+import { Palette, Settings, Shield, Tag, Bell, Loader2, Calendar } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge, ImageUploader } from "@/components";
 import { PRIORITIES } from "@/lib/constants";
 import useThemeStore from "@/store/theme-store";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useUpdateBranding, useUploadLogo } from "@/api/services/system/settings-service";
+import {
+  useUpdateBranding,
+  useUploadLogo,
+  useGetPriorities,
+  useUpdatePriorities,
+  useGetCategories,
+  useUpdateCategories,
+  useGetNotifications,
+  useUpdateNotifications,
+} from "@/api/services/system/settings-service";
+import {
+  useGetReportSchedule,
+  useUpdateReportSchedule,
+} from "@/api/services/reports/report-service";
 
 const brandingSchema = z.object({
   companyName: z.string().min(1, "Company Name is required"),
@@ -17,6 +30,71 @@ const brandingSchema = z.object({
 });
 
 type BrandingForm = z.infer<typeof brandingSchema>;
+
+const prioritySlaSchema = z.object({
+  firstResponse: z.coerce.number().min(0, "Must be >= 0"),
+  resolution: z.coerce.number().min(0, "Must be >= 0"),
+  escalation: z.coerce.number().min(0, "Must be >= 0"),
+});
+
+const prioritiesSchema = z.object({
+  Critical: prioritySlaSchema,
+  High: prioritySlaSchema,
+  Medium: prioritySlaSchema,
+  Low: prioritySlaSchema,
+});
+
+type PrioritiesForm = z.infer<typeof prioritiesSchema>;
+
+const notificationsSchema = z.object({
+  emailCritical: z.boolean(),
+  inAppSlaBreach: z.boolean(),
+  dailySummary: z.boolean(),
+  projectHourWarning: z.boolean(),
+});
+
+type NotificationsForm = z.infer<typeof notificationsSchema>;
+
+const reportScheduleSchema = z.object({
+  dailyEnabled: z.boolean(),
+  dailyTime: z.string().regex(/^\d{2}:\d{2}$/, "Time is required"),
+  dailyDays: z.enum(["1-5", "*"]),
+  weeklyEnabled: z.boolean(),
+  weeklyTime: z.string().regex(/^\d{2}:\d{2}$/, "Time is required"),
+  weeklyDay: z.string().min(1, "Day of week is required"),
+  monthlyEnabled: z.boolean(),
+  monthlyTime: z.string().regex(/^\d{2}:\d{2}$/, "Time is required"),
+  monthlyDay: z.enum(["L", "1"]),
+});
+
+type ReportScheduleForm = z.infer<typeof reportScheduleSchema>;
+
+function parseCron(cron: string) {
+  const defaultVal = { time: "18:00", dom: "*", dow: "*" };
+  if (!cron) return defaultVal;
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return defaultVal;
+  const [min, hour, dom, month, dow] = parts;
+  
+  const paddedHour = hour.padStart(2, "0");
+  const paddedMin = min.padStart(2, "0");
+  return {
+    time: `${paddedHour}:${paddedMin}`,
+    dom,
+    dow,
+  };
+}
+
+const formatMinutes = (mins: number) => {
+  if (mins === 0) return "No SLA / disabled";
+  if (mins < 60) return `${mins} min${mins > 1 ? "s" : ""}`;
+  const hours = mins / 60;
+  if (hours < 24) {
+    return `${Number(hours.toFixed(1))} hour${hours > 1 ? "s" : ""}`;
+  }
+  const days = hours / 24;
+  return `${Number(days.toFixed(1))} day${days > 1 ? "s" : ""}`;
+};
 
 export default function SystemPage() {
   const {
@@ -48,6 +126,171 @@ export default function SystemPage() {
     resolver: zodResolver(brandingSchema),
     values: { companyName, slogan },
   });
+
+  // Priorities SLA config
+  const { data: prioritiesData, isLoading: isLoadingPriorities } = useGetPriorities();
+  const updatePrioritiesMutation = useUpdatePriorities();
+
+  const prioritiesForm = useForm<PrioritiesForm>({
+    resolver: zodResolver(prioritiesSchema),
+    values: prioritiesData || {
+      Critical: { firstResponse: 30, resolution: 240, escalation: 120 },
+      High: { firstResponse: 120, resolution: 480, escalation: 480 },
+      Medium: { firstResponse: 240, resolution: 4320, escalation: 2880 },
+      Low: { firstResponse: 1440, resolution: 10080, escalation: 0 },
+    },
+  });
+
+  const onSubmitPriorities = (data: PrioritiesForm) => {
+    updatePrioritiesMutation.mutate(data, {
+      onSuccess: () => {
+        toast.success("SLA configuration saved successfully!");
+      },
+      onError: (err: any) => {
+        const errMsg = err?.response?.data?.message || err?.message || "Failed to save SLA configuration";
+        toast.error(errMsg);
+      },
+    });
+  };
+
+  // Categories
+  const { data: categoriesData, isLoading: isLoadingCategories } = useGetCategories();
+  const updateCategoriesMutation = useUpdateCategories();
+  const [categories, setCategories] = useState<string[]>([]);
+  const [newCategory, setNewCategory] = useState("");
+
+  useEffect(() => {
+    if (categoriesData) {
+      setCategories(categoriesData);
+    }
+  }, [categoriesData]);
+
+  const handleAddCategory = () => {
+    const trimmed = newCategory.trim();
+    if (!trimmed) return;
+    if (categories.includes(trimmed)) {
+      toast.error("Category already exists");
+      return;
+    }
+    setCategories([...categories, trimmed]);
+    setNewCategory("");
+  };
+
+  const handleRemoveCategory = (cat: string) => {
+    setCategories(categories.filter((c) => c !== cat));
+  };
+
+  const handleSaveCategories = () => {
+    updateCategoriesMutation.mutate(categories, {
+      onSuccess: () => {
+        toast.success("Categories saved successfully!");
+      },
+      onError: (err: any) => {
+        const errMsg = err?.response?.data?.message || err?.message || "Failed to save categories";
+        toast.error(errMsg);
+      },
+    });
+  };
+
+  // Notifications
+  const { data: notificationsData, isLoading: isLoadingNotifications } = useGetNotifications();
+  const updateNotificationsMutation = useUpdateNotifications();
+
+  const notificationsForm = useForm<NotificationsForm>({
+    resolver: zodResolver(notificationsSchema),
+    values: notificationsData || {
+      emailCritical: true,
+      inAppSlaBreach: true,
+      dailySummary: false,
+      projectHourWarning: true,
+    },
+  });
+
+  const onSubmitNotifications = (data: NotificationsForm) => {
+    updateNotificationsMutation.mutate(data, {
+      onSuccess: () => {
+        toast.success("Notification preferences saved successfully!");
+      },
+      onError: (err: any) => {
+        const errMsg = err?.response?.data?.message || err?.message || "Failed to save notification preferences";
+        toast.error(errMsg);
+      },
+    });
+  };
+
+  // Report schedules configuration form
+  const { data: reportScheduleData, isLoading: isLoadingSchedule } = useGetReportSchedule();
+  const updateScheduleMutation = useUpdateReportSchedule();
+
+  const reportScheduleForm = useForm<ReportScheduleForm>({
+    resolver: zodResolver(reportScheduleSchema),
+    defaultValues: {
+      dailyEnabled: true,
+      dailyTime: "18:00",
+      dailyDays: "1-5",
+      weeklyEnabled: true,
+      weeklyTime: "17:00",
+      weeklyDay: "5",
+      monthlyEnabled: true,
+      monthlyTime: "18:00",
+      monthlyDay: "L",
+    },
+  });
+
+  const { reset: resetReportSchedule } = reportScheduleForm;
+
+  useEffect(() => {
+    if (reportScheduleData) {
+      const daily = parseCron(reportScheduleData.dailyCron);
+      const weekly = parseCron(reportScheduleData.weeklyCron);
+      const monthly = parseCron(reportScheduleData.monthlyCron);
+
+      resetReportSchedule({
+        dailyEnabled: reportScheduleData.dailyEnabled,
+        dailyTime: daily.time,
+        dailyDays: daily.dow === "1-5" ? "1-5" : "*",
+        weeklyEnabled: reportScheduleData.weeklyEnabled,
+        weeklyTime: weekly.time,
+        weeklyDay: weekly.dow !== "*" ? weekly.dow : "5",
+        monthlyEnabled: reportScheduleData.monthlyEnabled,
+        monthlyTime: monthly.time,
+        monthlyDay: monthly.dom === "L" ? "L" : "1",
+      });
+    }
+  }, [reportScheduleData, resetReportSchedule]);
+
+  const onSubmitSchedule = (values: ReportScheduleForm) => {
+    const formatTimePart = (timeStr: string) => {
+      const [h, m] = timeStr.split(":");
+      return {
+        min: parseInt(m).toString(),
+        hour: parseInt(h).toString(),
+      };
+    };
+
+    const dailyTimePart = formatTimePart(values.dailyTime);
+    const weeklyTimePart = formatTimePart(values.weeklyTime);
+    const monthlyTimePart = formatTimePart(values.monthlyTime);
+
+    const payload = {
+      dailyEnabled: values.dailyEnabled,
+      dailyCron: `${dailyTimePart.min} ${dailyTimePart.hour} * * ${values.dailyDays}`,
+      weeklyEnabled: values.weeklyEnabled,
+      weeklyCron: `${weeklyTimePart.min} ${weeklyTimePart.hour} * * ${values.weeklyDay}`,
+      monthlyEnabled: values.monthlyEnabled,
+      monthlyCron: `${monthlyTimePart.min} ${monthlyTimePart.hour} ${values.monthlyDay} * *`,
+    };
+
+    updateScheduleMutation.mutate(payload, {
+      onSuccess: () => {
+        toast.success("Report schedule configuration saved successfully!");
+      },
+      onError: (err: any) => {
+        const errMsg = err?.response?.data?.message || err?.message || "Failed to save schedule configuration";
+        toast.error(errMsg);
+      },
+    });
+  };
 
   const onSubmitBranding = (data: BrandingForm) => {
     updateBrandingMutation.mutate({
@@ -91,12 +334,13 @@ export default function SystemPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
-          <Settings className="h-6 w-6 text-[var(--primary-text)]" />
+          <Settings className="h-6 w-6 text-[var(--text-primary)]" />
           System Settings
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -123,85 +367,227 @@ export default function SystemPage() {
             <Palette className="h-3.5 w-3.5" />
             Branding
           </TabsTrigger>
+          <TabsTrigger value="report-schedule" className="gap-1">
+            <Calendar className="h-3.5 w-3.5" />
+            Report Schedule
+          </TabsTrigger>
         </TabsList>
 
         {/* Priorities */}
         <TabsContent value="priorities" className="mt-4 space-y-4">
-          <Card className="bg-[var(--surface)] border-[var(--border)]">
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
             <CardHeader>
-              <CardTitle className="text-base">SLA Configuration</CardTitle>
+              <CardTitle className="text-base text-[var(--text-primary)]">SLA Configuration</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {PRIORITIES.map((priority) => (
-                  <div key={priority} className="flex items-center gap-4 p-4 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-                    <Badge
-                      className="text-xs min-w-[80px] justify-center"
-                      style={{
-                        backgroundColor: `var(--priority-${priority.toLowerCase()})`,
-                        color: "white",
-                      }}
-                    >
-                      {priority}
-                    </Badge>
-                    <div className="grid grid-cols-3 gap-4 flex-1">
-                      <div className="space-y-1">
-                        <Label className="text-xs text-[var(--text-secondary)]">First Response</Label>
-                        <Input placeholder="30 min" className="h-8 text-xs bg-[var(--surface)]" disabled />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-[var(--text-secondary)]">Resolution</Label>
-                        <Input placeholder="4 hours" className="h-8 text-xs bg-[var(--surface)]" disabled />
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs text-[var(--text-secondary)]">Escalation</Label>
-                        <Input placeholder="2 hours" className="h-8 text-xs bg-[var(--surface)]" disabled />
-                      </div>
-                    </div>
+              {isLoadingPriorities ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                </div>
+              ) : (
+                <form onSubmit={prioritiesForm.handleSubmit(onSubmitPriorities)} className="space-y-6">
+                  <div className="space-y-4">
+                    {PRIORITIES.map((priority) => {
+                      const pName = priority;
+                      return (
+                        <div key={priority} className="flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] transition-all hover:border-[var(--primary-light)]">
+                          <Badge
+                            className="text-xs min-w-[85px] justify-center h-6 py-1 select-none font-semibold shadow-sm"
+                            style={{
+                              backgroundColor: `var(--priority-${priority.toLowerCase()})`,
+                              color: "white",
+                            }}
+                          >
+                            {priority}
+                          </Badge>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 flex-1">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-medium text-[var(--text-secondary)]">First Response (min)</Label>
+                              <Input
+                                type="number"
+                                className="h-8 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                                {...prioritiesForm.register(`${pName}.firstResponse`)}
+                              />
+                              <span className="text-[10px] text-[var(--primary-text)] font-medium block pl-1">
+                                {formatMinutes(Number(prioritiesForm.watch(`${pName}.firstResponse`) || 0))}
+                              </span>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-medium text-[var(--text-secondary)]">Resolution (min)</Label>
+                              <Input
+                                type="number"
+                                className="h-8 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                                {...prioritiesForm.register(`${pName}.resolution`)}
+                              />
+                              <span className="text-[10px] text-[var(--primary-text)] font-medium block pl-1">
+                                {formatMinutes(Number(prioritiesForm.watch(`${pName}.resolution`) || 0))}
+                              </span>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-xs font-medium text-[var(--text-secondary)]">Escalation Timer (min)</Label>
+                              <Input
+                                type="number"
+                                className="h-8 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                                {...prioritiesForm.register(`${pName}.escalation`)}
+                              />
+                              <span className="text-[10px] text-[var(--primary-text)] font-medium block pl-1">
+                                {formatMinutes(Number(prioritiesForm.watch(`${pName}.escalation`) || 0))}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+                  <Button
+                    type="submit"
+                    disabled={updatePrioritiesMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95"
+                  >
+                    {updatePrioritiesMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving SLA...
+                      </>
+                    ) : (
+                      "Save SLA Configuration"
+                    )}
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Categories */}
         <TabsContent value="categories" className="mt-4">
-          <Card className="bg-[var(--surface)] border-[var(--border)]">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Issue Categories</CardTitle>
-              <Button size="sm" variant="outline">Add Category</Button>
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
+            <CardHeader>
+              <CardTitle className="text-base text-[var(--text-primary)]">Issue Categories</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {["Bug", "Feature Request", "Access Issue", "Data Correction", "Performance", "Consultation"].map((cat) => (
-                  <Badge key={cat} variant="outline" className="py-1.5 px-3 text-xs cursor-pointer hover:bg-[var(--surface-hover)]">
-                    {cat}
-                  </Badge>
-                ))}
-              </div>
+            <CardContent className="space-y-6">
+              {isLoadingCategories ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex gap-2 max-w-md">
+                    <Input
+                      placeholder="Add new category (e.g. Mobile Support)"
+                      value={newCategory}
+                      onChange={(e) => setNewCategory(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCategory();
+                        }
+                      }}
+                      className="bg-[var(--background)] border-[var(--border)] text-sm focus-visible:ring-[var(--primary)]"
+                    />
+                    <Button 
+                      onClick={handleAddCategory} 
+                      className="shrink-0 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white font-medium"
+                    >
+                      Add
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-[var(--text-secondary)]">Active Categories</Label>
+                    <div className="flex flex-wrap gap-2.5 p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] min-h-[100px] items-center">
+                      {categories.length === 0 ? (
+                        <span className="text-sm text-[var(--text-secondary)] italic">No categories defined. Add some above.</span>
+                      ) : (
+                        categories.map((cat) => (
+                          <Badge
+                            key={cat}
+                            variant="outline"
+                            className="group py-1.5 px-3 text-xs bg-[var(--surface)] border-[var(--border)] hover:bg-[var(--surface-hover)] flex items-center gap-2 transition-all hover:border-[var(--primary-light)]"
+                          >
+                            <span>{cat}</span>
+                            <span
+                              onClick={() => handleRemoveCategory(cat)}
+                              className="text-[var(--text-secondary)] hover:text-[var(--destructive)] cursor-pointer text-sm font-bold opacity-60 group-hover:opacity-100 transition-opacity"
+                              title={`Remove ${cat}`}
+                            >
+                              &times;
+                            </span>
+                          </Badge>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={handleSaveCategories}
+                    disabled={updateCategoriesMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95"
+                  >
+                    {updateCategoriesMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving Categories...
+                      </>
+                    ) : (
+                      "Save Categories"
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Notifications */}
         <TabsContent value="notifications" className="mt-4">
-          <Card className="bg-[var(--surface)] border-[var(--border)]">
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
             <CardHeader>
-              <CardTitle className="text-base">Notification Preferences</CardTitle>
+              <CardTitle className="text-base text-[var(--text-primary)]">Notification Preferences</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {[
-                { label: "Email for critical issues", defaultChecked: true },
-                { label: "In-app SLA breach alerts", defaultChecked: true },
-                { label: "Daily summary emails", defaultChecked: false },
-                { label: "Project hour warnings (80%)", defaultChecked: true },
-              ].map((pref) => (
-                <div key={pref.label} className="flex items-center justify-between py-2">
-                  <span className="text-sm text-[var(--text-primary)]">{pref.label}</span>
-                  <Switch defaultChecked={pref.defaultChecked} />
+            <CardContent>
+              {isLoadingNotifications ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
                 </div>
-              ))}
+              ) : (
+                <form onSubmit={notificationsForm.handleSubmit(onSubmitNotifications)} className="space-y-4">
+                  {[
+                    { name: "emailCritical" as const, label: "Email for critical issues" },
+                    { name: "inAppSlaBreach" as const, label: "In-app SLA breach alerts" },
+                    { name: "dailySummary" as const, label: "Daily summary emails" },
+                    { name: "projectHourWarning" as const, label: "Project hour warnings (80%)" },
+                  ].map((pref) => (
+                    <div key={pref.name} className="flex items-center justify-between py-3 border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-hover)] px-2 rounded transition-colors">
+                      <span className="text-sm font-medium text-[var(--text-primary)]">{pref.label}</span>
+                      <Controller
+                        control={notificationsForm.control}
+                        name={pref.name}
+                        render={({ field }) => (
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        )}
+                      />
+                    </div>
+                  ))}
+                  <Button
+                    type="submit"
+                    disabled={updateNotificationsMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95 mt-4"
+                  >
+                    {updateNotificationsMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Preferences"
+                    )}
+                  </Button>
+                </form>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -295,6 +681,172 @@ export default function SystemPage() {
                 <div className="h-48 flex items-center justify-center">
                   <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
                 </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Report Schedule */}
+        <TabsContent value="report-schedule" className="mt-4">
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
+            <CardHeader>
+              <CardTitle className="text-base text-[var(--text-primary)]">Automatic Report Generation Schedule</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingSchedule ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                </div>
+              ) : (
+                <form onSubmit={reportScheduleForm.handleSubmit(onSubmitSchedule)} className="space-y-6">
+                  <div className="space-y-6">
+                    {/* Daily Report Schedule */}
+                    <div className="p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[var(--text-primary)]">Daily Operations Report</h4>
+                          <p className="text-xs text-[var(--text-secondary)] font-normal">Automatically compile resolved issues and logged hours daily</p>
+                        </div>
+                        <Controller
+                          control={reportScheduleForm.control}
+                          name="dailyEnabled"
+                          render={({ field }) => (
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          )}
+                        />
+                      </div>
+                      {reportScheduleForm.watch("dailyEnabled") && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md animate-fade-in">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Run On</Label>
+                            <select
+                              className="w-full h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("dailyDays")}
+                            >
+                              <option value="1-5">Weekdays (Monday - Friday)</option>
+                              <option value="*">Every Day</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Time of Day</Label>
+                            <Input
+                              type="time"
+                              className="h-9 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("dailyTime")}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Weekly Report Schedule */}
+                    <div className="p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[var(--text-primary)]">Weekly Performance Report</h4>
+                          <p className="text-xs text-[var(--text-secondary)] font-normal">Weekly SLA, backlog health, and workload summaries</p>
+                        </div>
+                        <Controller
+                          control={reportScheduleForm.control}
+                          name="weeklyEnabled"
+                          render={({ field }) => (
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          )}
+                        />
+                      </div>
+                      {reportScheduleForm.watch("weeklyEnabled") && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md animate-fade-in">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Day of Week</Label>
+                            <select
+                              className="w-full h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("weeklyDay")}
+                            >
+                              <option value="1">Monday</option>
+                              <option value="2">Tuesday</option>
+                              <option value="3">Wednesday</option>
+                              <option value="4">Thursday</option>
+                              <option value="5">Friday</option>
+                              <option value="6">Saturday</option>
+                              <option value="0">Sunday</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Time of Day</Label>
+                            <Input
+                              type="time"
+                              className="h-9 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("weeklyTime")}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Monthly Report Schedule */}
+                    <div className="p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-[var(--text-primary)]">Monthly Executive Report</h4>
+                          <p className="text-xs text-[var(--text-secondary)] font-normal">Full resource allocation, client breakdown, and KPI scorecard monthly</p>
+                        </div>
+                        <Controller
+                          control={reportScheduleForm.control}
+                          name="monthlyEnabled"
+                          render={({ field }) => (
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          )}
+                        />
+                      </div>
+                      {reportScheduleForm.watch("monthlyEnabled") && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md animate-fade-in">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Run On</Label>
+                            <select
+                              className="w-full h-9 px-3 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("monthlyDay")}
+                            >
+                              <option value="L">Last day of month</option>
+                              <option value="1">First day of month</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-medium text-[var(--text-secondary)]">Time of Day</Label>
+                            <Input
+                              type="time"
+                              className="h-9 text-xs bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] font-medium"
+                              {...reportScheduleForm.register("monthlyTime")}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={updateScheduleMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95 mt-4"
+                  >
+                    {updateScheduleMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving Schedule...
+                      </>
+                    ) : (
+                      "Save Schedule Configuration"
+                    )}
+                  </Button>
+                </form>
               )}
             </CardContent>
           </Card>
