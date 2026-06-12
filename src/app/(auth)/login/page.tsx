@@ -18,6 +18,7 @@ import useSessionStore from "@/store/session-store";
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -32,9 +33,24 @@ export default function LoginPage() {
   const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
 
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "", rememberMe: false },
+  });
+
   useEffect(() => {
     setMounted(true);
-  }, []);
+    const savedEmail = localStorage.getItem("remembered-email");
+    if (savedEmail) {
+      setValue("email", savedEmail);
+      setValue("rememberMe", true);
+    }
+  }, [setValue]);
 
   useEffect(() => {
     if (hasHydrated && isLoggedIn) {
@@ -45,18 +61,15 @@ export default function LoginPage() {
   const displayName = companyName;
   const displaySlogan = slogan;
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
-
   const onSubmit = (data: LoginForm) => {
-    loginMutation.mutate(data, {
+    const { email, password, rememberMe } = data;
+    loginMutation.mutate({ email, password }, {
       onSuccess: () => {
+        if (rememberMe) {
+          localStorage.setItem("remembered-email", email);
+        } else {
+          localStorage.removeItem("remembered-email");
+        }
         router.push("/dashboard");
       },
     });
@@ -67,11 +80,11 @@ export default function LoginPage() {
       {/* Logo & Title */}
       <div className="text-center mb-8">
         {mounted && logoUrl ? (
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden shadow-lg mb-4">
+          <div className="inline-flex h-16 max-w-[280px] items-center justify-center mb-4">
             <img
               src={logoUrl}
               alt={`${displayName} Logo`}
-              className="h-full w-full object-contain p-1.5"
+              className="h-full w-auto object-contain"
             />
           </div>
         ) : (
@@ -143,6 +156,19 @@ export default function LoginPage() {
             {errors.password && (
               <p className="text-xs text-[var(--destructive)]">{errors.password.message}</p>
             )}
+          </div>
+
+          {/* Remember Me */}
+          <div className="flex items-center space-x-2 py-1">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+              {...register("rememberMe")}
+            />
+            <Label htmlFor="rememberMe" className="text-xs font-medium text-[var(--text-secondary)] cursor-pointer select-none">
+              Remember me
+            </Label>
           </div>
 
           {/* Error Message */}

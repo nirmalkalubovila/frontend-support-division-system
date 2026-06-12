@@ -49,11 +49,11 @@ export default function ForgotPasswordPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         {mounted && logoUrl ? (
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface)] border border-[var(--border)] overflow-hidden shadow-lg mb-4">
+          <div className="inline-flex h-16 max-w-[280px] items-center justify-center mb-4">
             <img
               src={logoUrl}
               alt="Logo"
-              className="h-full w-full object-contain p-1.5"
+              className="h-full w-auto object-contain"
             />
           </div>
         ) : (
