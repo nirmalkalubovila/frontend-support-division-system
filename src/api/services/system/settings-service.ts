@@ -45,3 +45,92 @@ export const useUploadLogo = () => {
     },
   });
 };
+
+export interface PrioritySla {
+  firstResponse: number; // in minutes
+  resolution: number; // in minutes
+  escalation: number; // in minutes
+}
+
+export interface PrioritiesSettings {
+  Critical: PrioritySla;
+  High: PrioritySla;
+  Medium: PrioritySla;
+  Low: PrioritySla;
+}
+
+export const useGetPriorities = () =>
+  useQuery({
+    queryKey: ["/system/priorities"],
+    queryFn: async (): Promise<PrioritiesSettings> => {
+      const res = await axiosInstance.get("/system/priorities");
+      return res.data;
+    },
+  });
+
+export const useUpdatePriorities = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: PrioritiesSettings): Promise<PrioritiesSettings> => {
+      const res = await axiosInstance.patch("/system/priorities", data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/system/priorities"], data);
+      queryClient.invalidateQueries({ queryKey: ["/system/priorities"] });
+    },
+  });
+};
+
+export const useGetCategories = () =>
+  useQuery({
+    queryKey: ["/system/categories"],
+    queryFn: async (): Promise<string[]> => {
+      const res = await axiosInstance.get("/system/categories");
+      return res.data;
+    },
+  });
+
+export const useUpdateCategories = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (categories: string[]): Promise<string[]> => {
+      const res = await axiosInstance.patch("/system/categories", { categories });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/system/categories"], data);
+      queryClient.invalidateQueries({ queryKey: ["/system/categories"] });
+    },
+  });
+};
+
+export interface NotificationSettings {
+  emailCritical: boolean;
+  inAppSlaBreach: boolean;
+  dailySummary: boolean;
+  projectHourWarning: boolean;
+}
+
+export const useGetNotifications = () =>
+  useQuery({
+    queryKey: ["/system/notifications"],
+    queryFn: async (): Promise<NotificationSettings> => {
+      const res = await axiosInstance.get("/system/notifications");
+      return res.data;
+    },
+  });
+
+export const useUpdateNotifications = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<NotificationSettings>): Promise<NotificationSettings> => {
+      const res = await axiosInstance.patch("/system/notifications", data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/system/notifications"], data);
+      queryClient.invalidateQueries({ queryKey: ["/system/notifications"] });
+    },
+  });
+};
