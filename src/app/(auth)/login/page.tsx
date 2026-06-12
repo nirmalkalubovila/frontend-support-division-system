@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,11 +11,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "@/api/services/auth/auth-service";
 import Link from "next/link";
+import useThemeStore from "@/store/theme-store";
+import useSessionStore from "@/store/session-store";
 
 // ── Validation Schema ──────────────────────────────────────────
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -25,19 +28,48 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const loginMutation = useLogin();
+  const { companyName, slogan, logoUrl } = useThemeStore();
+  const [mounted, setMounted] = useState(false);
+  const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
+  const hasHydrated = useSessionStore((s) => s.hasHydrated);
 
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors },
   } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", rememberMe: false },
   });
 
+  useEffect(() => {
+    setMounted(true);
+    const savedEmail = localStorage.getItem("remembered-email");
+    if (savedEmail) {
+      setValue("email", savedEmail);
+      setValue("rememberMe", true);
+    }
+  }, [setValue]);
+
+  useEffect(() => {
+    if (hasHydrated && isLoggedIn) {
+      router.replace("/dashboard");
+    }
+  }, [hasHydrated, isLoggedIn, router]);
+
+  const displayName = companyName;
+  const displaySlogan = slogan;
+
   const onSubmit = (data: LoginForm) => {
-    loginMutation.mutate(data, {
+    const { email, password, rememberMe } = data;
+    loginMutation.mutate({ email, password }, {
       onSuccess: () => {
+        if (rememberMe) {
+          localStorage.setItem("remembered-email", email);
+        } else {
+          localStorage.removeItem("remembered-email");
+        }
         router.push("/dashboard");
       },
     });
@@ -47,15 +79,23 @@ export default function LoginPage() {
     <div className="animate-fade-in">
       {/* Logo & Title */}
       <div className="text-center mb-8">
-        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
-          <Headset className="h-7 w-7" />
-        </div>
+        {mounted && logoUrl ? (
+          <div className="inline-flex h-16 max-w-[280px] items-center justify-center mb-4">
+            <img
+              src={logoUrl}
+              alt={`${displayName} Logo`}
+              className="h-full w-auto object-contain"
+            />
+          </div>
+        ) : (
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
+            <Headset className="h-7 w-7" />
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Welcome Back
         </h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Sign in to Prologics Support Division
-        </p>
+       
       </div>
 
       {/* Login Card */}
@@ -69,7 +109,7 @@ export default function LoginPage() {
             <Input
               id="login-email"
               type="email"
-              placeholder="you@prologics.lk"
+              placeholder="you@company.com"
               autoComplete="email"
               className="h-11 bg-[var(--background)] border-[var(--border)] focus:border-[var(--border-focus)] transition-colors"
               {...register("email")}
@@ -118,6 +158,19 @@ export default function LoginPage() {
             )}
           </div>
 
+          {/* Remember Me */}
+          <div className="flex items-center space-x-2 py-1">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+              {...register("rememberMe")}
+            />
+            <Label htmlFor="rememberMe" className="text-xs font-medium text-[var(--text-secondary)] cursor-pointer select-none">
+              Remember me
+            </Label>
+          </div>
+
           {/* Error Message */}
           {loginMutation.isError && (
             <div className="rounded-lg bg-[var(--destructive-light)] border border-[var(--destructive)]/20 p-3">
@@ -145,11 +198,6 @@ export default function LoginPage() {
           </Button>
         </form>
       </div>
-
-      {/* Footer */}
-      <p className="text-center text-xs text-[var(--text-tertiary)] mt-6">
-        Prologics (Pvt) Ltd — Support Division System v1.0
-      </p>
     </div>
   );
 }

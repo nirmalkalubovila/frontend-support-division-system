@@ -14,11 +14,13 @@ interface SessionState {
 
   // NOT persisted — re-fetched on layout mount
   userInfo: UserInfo | null;
+  hasHydrated: boolean;
 
   // Actions
   setTokens: (access: string, refresh: string) => void;
   setUserInfo: (info: UserInfo) => void;
   clearSession: () => void;
+  setHasHydrated: (val: boolean) => void;
 }
 
 const useSessionStore = create<SessionState>()(
@@ -28,6 +30,7 @@ const useSessionStore = create<SessionState>()(
       refreshToken: null,
       isUserLoggedIn: false,
       userInfo: null,
+      hasHydrated: false,
 
       setTokens: (access, refresh) =>
         set({
@@ -45,6 +48,8 @@ const useSessionStore = create<SessionState>()(
           isUserLoggedIn: false,
           userInfo: null,
         }),
+
+      setHasHydrated: (val) => set({ hasHydrated: val }),
     }),
     {
       name: "session-store",
@@ -54,6 +59,9 @@ const useSessionStore = create<SessionState>()(
         refreshToken: state.refreshToken,
         isUserLoggedIn: state.isUserLoggedIn,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
     }
   )
 );

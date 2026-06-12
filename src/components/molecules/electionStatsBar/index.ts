@@ -1,1 +1,0 @@
-export { ElectionStatsBar } from "./electionStatsBar";
