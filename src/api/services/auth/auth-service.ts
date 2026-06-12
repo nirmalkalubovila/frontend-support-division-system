@@ -98,3 +98,41 @@ export const useResetPassword = () => {
     },
   });
 };
+
+// ── Update Profile (PATCH /auth/me) ───────────────────────────
+interface UpdateProfilePayload {
+  name?: string;
+  phone?: string | null;
+  designation?: string | null;
+  avatar?: string | null;
+}
+
+export const useUpdateMe = () => {
+  const queryClient = useQueryClient();
+  const setUserInfo = useSessionStore((s) => s.setUserInfo);
+
+  return useMutation({
+    mutationFn: async (data: UpdateProfilePayload): Promise<UserInfo> => {
+      const res = await axiosInstance.patch("/auth/me", data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setUserInfo(data);
+      queryClient.setQueryData(["/auth/me"], data);
+    },
+  });
+};
+
+// ── Change Password (PATCH /auth/me/change-password) ─────────
+interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export const useChangePassword = () => {
+  return useMutation({
+    mutationFn: async (data: ChangePasswordPayload): Promise<void> => {
+      await axiosInstance.patch("/auth/me/change-password", data);
+    },
+  });
+};

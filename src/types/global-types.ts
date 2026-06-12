@@ -69,6 +69,8 @@ export interface UserInfo {
   role: UserRole;
   permissions: string[];
   avatar?: string;
+  phone?: string;
+  designation?: string;
   isActive: boolean;
   createdAt: string;
 }
