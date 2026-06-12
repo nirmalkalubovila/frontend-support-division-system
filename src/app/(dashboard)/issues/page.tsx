@@ -20,6 +20,7 @@ import {
   Calendar,
   Eye,
   SlidersHorizontal,
+  ArrowLeft,
 } from "lucide-react";
 import { Button, Badge, Input, Select, Card, CardContent } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
@@ -182,12 +183,14 @@ function ProjectCard({
   isExpanded,
   onToggle,
   onIssueClick,
+  onBack,
 }: {
   group: ProjectGroup;
   viewMode: "board" | "list";
   isExpanded: boolean;
   onToggle: () => void;
   onIssueClick: (issue: Issue) => void;
+  onBack?: () => void;
 }) {
   const issues = group.issues;
 
@@ -216,96 +219,108 @@ function ProjectCard({
     return grouped;
   }, [issues]);
 
-  return (
-    <div className="border border-[var(--border)] rounded-2xl bg-[var(--surface)] overflow-hidden shadow-sm transition-all duration-300 hover:border-[var(--border-hover)] hover:shadow-md">
-      {/* Card Header (clickable) */}
-      <div
-        onClick={onToggle}
-        className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none bg-[var(--surface-hover)]/20 hover:bg-[var(--surface-hover)]/40 transition-colors"
-      >
-        <div className="flex items-center gap-3.5 flex-1 min-w-0">
-          {/* Client badge */}
-          {group.clientCode ? (
-            <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
-              {group.clientCode}
-            </span>
-          ) : (
-            <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
-              GEN
-            </span>
-          )}
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-[var(--text-primary)] truncate" title={group.name}>
-              {group.name}
-            </h3>
-            {group.clientName && (
-              <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{group.clientName}</p>
+  if (isExpanded) {
+    return (
+      <div className="col-span-full border border-[var(--border)] rounded-2xl bg-[var(--surface)] overflow-hidden shadow-sm transition-all duration-300 hover:border-[var(--border-hover)] hover:shadow-md">
+        {/* Card Header (clickable to collapse) */}
+        <div
+          onClick={onToggle}
+          className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none bg-[var(--surface-hover)]/20 hover:bg-[var(--surface-hover)]/40 transition-colors"
+        >
+          <div className="flex items-center gap-3.5 flex-1 min-w-0">
+            {/* Back Icon Button */}
+            {onBack && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBack();
+                }}
+                className="shrink-0 h-8 w-8 rounded-full hover:bg-[var(--surface-hover)] flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--primary-text)] mr-1"
+                title="Back to Projects"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
             )}
-          </div>
-        </div>
 
-        {/* Stats & Progress Bar */}
-        <div className="flex flex-wrap items-center gap-6 md:gap-8 shrink-0">
-          {/* Stats Badges */}
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Total</span>
-              <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
-            </div>
-
-            <div className="h-6 w-px bg-[var(--border)]" />
-
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Breach Risk</span>
-              <span className={`font-bold mt-0.5 flex items-center gap-1 ${critical > 0 ? "text-[var(--destructive)] font-extrabold animate-pulse-soft" : "text-[var(--text-secondary)]"}`}>
-                {critical}
-                {critical > 0 && <span className="h-1.5 w-1.5 rounded-full bg-[var(--destructive)] animate-ping" />}
+            {/* Client badge */}
+            {group.clientCode ? (
+              <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+                {group.clientCode}
               </span>
-            </div>
-
-            <div className="h-6 w-px bg-[var(--border)]" />
-
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Active</span>
-              <span className="font-bold text-[var(--warning)] mt-0.5">{active}</span>
-            </div>
-
-            <div className="h-6 w-px bg-[var(--border)]" />
-
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Resolved</span>
-              <span className="font-bold text-[var(--success)] mt-0.5">{resolved}</span>
+            ) : (
+              <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
+                GEN
+              </span>
+            )}
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-[var(--text-primary)] truncate" title={group.name}>
+                {group.name}
+              </h3>
+              {group.clientName && (
+                <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{group.clientName}</p>
+              )}
             </div>
           </div>
 
-          {/* Completion Progress Bar */}
-          <div className="w-28 md:w-36 flex flex-col gap-1.5">
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="font-medium text-[var(--text-tertiary)]">Resolved Rate</span>
-              <span className="font-bold text-[var(--success)]">{completionRate}%</span>
+          {/* Stats & Progress Bar */}
+          <div className="flex flex-wrap items-center gap-6 md:gap-8 shrink-0">
+            {/* Stats Badges */}
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Total</span>
+                <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Breach Risk</span>
+                <span className={`font-bold mt-0.5 flex items-center gap-1 ${critical > 0 ? "text-[var(--destructive)] font-extrabold animate-pulse-soft" : "text-[var(--text-secondary)]"}`}>
+                  {critical}
+                  {critical > 0 && <span className="h-1.5 w-1.5 rounded-full bg-[var(--destructive)] animate-ping" />}
+                </span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Active</span>
+                <span className="font-bold text-[var(--warning)] mt-0.5">{active}</span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Resolved</span>
+                <span className="font-bold text-[var(--success)] mt-0.5">{resolved}</span>
+              </div>
             </div>
-            <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
-              <div
-                className="h-full bg-gradient-to-r from-[var(--success)] to-emerald-400 transition-all duration-500 rounded-full"
-                style={{ width: `${completionRate}%` }}
+
+            {/* Completion Progress Bar */}
+            <div className="w-28 md:w-36 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-medium text-[var(--text-tertiary)]">Resolved Rate</span>
+                <span className="font-bold text-[var(--success)]">{completionRate}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
+                <div
+                  className="h-full bg-gradient-to-r from-[var(--success)] to-emerald-400 transition-all duration-500 rounded-full"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Expand Chevron */}
+            <button className="h-8 w-8 rounded-full hover:bg-[var(--surface-hover)] flex items-center justify-center transition-colors">
+              <ChevronDown
+                className="h-5 w-5 text-[var(--text-tertiary)] transition-transform duration-300 rotate-180 text-[var(--primary)]"
               />
-            </div>
+            </button>
           </div>
-
-          {/* Expand Chevron */}
-          <button className="h-8 w-8 rounded-full hover:bg-[var(--surface-hover)] flex items-center justify-center transition-colors">
-            <ChevronDown
-              className={`h-5 w-5 text-[var(--text-tertiary)] transition-transform duration-300 ${
-                isExpanded ? "rotate-180 text-[var(--primary)]" : ""
-              }`}
-            />
-          </button>
         </div>
-      </div>
 
-      {/* Expanded Issues View Container */}
-      {isExpanded && (
-        <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5">
+        {/* Expanded Issues View Container */}
+        <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5 animate-fade-in">
           {viewMode === "list" ? (
             <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
               <table className="w-full text-left border-collapse">
@@ -453,7 +468,80 @@ function ProjectCard({
             </div>
           )}
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // Collapsed Vertical Card View
+  return (
+    <div
+      onClick={onToggle}
+      className="col-span-1 border border-[var(--border)] rounded-2xl bg-[var(--surface)] hover:border-[var(--border-hover)] hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col p-5 h-full min-h-[220px] cursor-pointer select-none"
+    >
+      {/* Top Header Row */}
+      <div className="flex items-center justify-between">
+        {group.clientCode ? (
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+            {group.clientCode}
+          </span>
+        ) : (
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
+            GEN
+          </span>
+        )}
+
+        <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
+      </div>
+
+      {/* Title & Description */}
+      <div className="flex-1 mt-4">
+        <h3 className="text-base font-bold text-[var(--text-primary)] leading-tight line-clamp-2" title={group.name}>
+          {group.name}
+        </h3>
+        {group.clientName && (
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5 truncate">{group.clientName}</p>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-[var(--border)] my-3.5 opacity-50" />
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-4 gap-2 text-center text-xs text-[var(--text-tertiary)] mb-3">
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Total</span>
+          <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Risk</span>
+          <span className={`font-bold mt-0.5 flex items-center justify-center gap-0.5 ${critical > 0 ? "text-[var(--destructive)] font-extrabold animate-pulse-soft" : "text-[var(--text-secondary)]"}`}>
+            {critical}
+            {critical > 0 && <span className="h-1 w-1 rounded-full bg-[var(--destructive)]" />}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Active</span>
+          <span className="font-bold text-[var(--warning)] mt-0.5">{active}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Done</span>
+          <span className="font-bold text-[var(--success)] mt-0.5">{resolved}</span>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="font-medium text-[var(--text-tertiary)]">Resolved Rate</span>
+          <span className="font-bold text-[var(--success)]">{completionRate}%</span>
+        </div>
+        <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
+          <div
+            className="h-full bg-gradient-to-r from-[var(--success)] to-emerald-400 transition-all duration-500 rounded-full"
+            style={{ width: `${completionRate}%` }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -471,7 +559,7 @@ export default function IssuesPage() {
   const [filterType, setFilterType] = useState("");
   const [viewMode, setViewMode] = useState<"board" | "list">("board");
   const [mounted, setMounted] = useState(false);
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -516,38 +604,20 @@ export default function IssuesPage() {
     return Object.values(groups);
   }, [issues]);
 
-  // Expand matching project cards on search/filtering
+  // Active Project Group Lookup
+  const activeGroup = useMemo(() => {
+    if (!activeProjectId) return null;
+    return groupedByProject.find((g) => g.id === activeProjectId) || null;
+  }, [activeProjectId, groupedByProject]);
+
+  // Clear active project if it's filtered out of the current issues dataset
   useEffect(() => {
-    if (search || filterPriority || filterType) {
-      const nextExpanded: Record<string, boolean> = {};
-      groupedByProject.forEach((group) => {
-        nextExpanded[group.id] = true;
-      });
-      setExpandedProjects(nextExpanded);
+    if (activeProjectId && activeProjectId !== "unassigned" && !groupedByProject.some((g) => g.id === activeProjectId)) {
+      if (!isLoading && issues.length > 0) {
+        setActiveProjectId(null);
+      }
     }
-  }, [search, filterPriority, filterType, groupedByProject]);
-
-  const allProjectIds = useMemo(() => groupedByProject.map((g) => g.id), [groupedByProject]);
-  const isAllExpanded = allProjectIds.length > 0 && allProjectIds.every((id) => expandedProjects[id]);
-
-  const toggleExpandAll = () => {
-    if (isAllExpanded) {
-      setExpandedProjects({});
-    } else {
-      const nextExpanded: Record<string, boolean> = {};
-      allProjectIds.forEach((id) => {
-        nextExpanded[id] = true;
-      });
-      setExpandedProjects(nextExpanded);
-    }
-  };
-
-  const handleToggleProject = (id: string) => {
-    setExpandedProjects((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
+  }, [groupedByProject, activeProjectId, isLoading, issues.length]);
 
   const handleIssueClick = (issue: Issue) => {
     setSelectedIssue(issue);
@@ -578,10 +648,18 @@ export default function IssuesPage() {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2 tracking-tight">
             <Ticket className="h-6 w-6 text-[var(--primary)]" />
-            Issues Management
+            {activeGroup ? (
+              <span className="flex items-center gap-2">
+                <span className="text-[var(--text-secondary)] font-normal">Issues</span>
+                <span className="text-sm font-medium text-[var(--text-tertiary)]">/</span>
+                <span>{activeGroup.name}</span>
+              </span>
+            ) : (
+              "Issues Management"
+            )}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            Track, prioritize, and resolve customer issues and technical tasks
+            {activeGroup ? `Viewing active issues for ${activeGroup.name}` : "Track, prioritize, and resolve customer issues and technical tasks"}
           </p>
         </div>
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
@@ -612,17 +690,6 @@ export default function IssuesPage() {
               <span className="hidden md:inline">List</span>
             </button>
           </div>
-
-          {/* Expand All / Collapse All button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs gap-1.5 font-medium border border-[var(--border)] hover:bg-[var(--surface-hover)] shadow-sm"
-            onClick={toggleExpandAll}
-            disabled={groupedByProject.length === 0}
-          >
-            {isAllExpanded ? "Collapse All" : "Expand All"}
-          </Button>
 
           <Button
             variant="outline"
@@ -758,42 +825,56 @@ export default function IssuesPage() {
       )}
 
       {/* Projects and Issues list */}
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           // Skeleton loader cards
-          <div className="space-y-4">
+          <>
             {[1, 2, 3].map((i) => (
-              <div key={i} className="border border-[var(--border)] rounded-2xl bg-[var(--surface)] p-5 animate-pulse space-y-4">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5 flex-1">
-                    <div className="h-6 w-12 bg-[var(--surface-hover)] rounded shrink-0" />
-                    <div className="space-y-2 flex-1">
-                      <div className="h-4 w-48 bg-[var(--surface-hover)] rounded" />
-                      <div className="h-3 w-32 bg-[var(--surface-hover)] rounded" />
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-6 shrink-0">
-                    <div className="h-8 w-48 bg-[var(--surface-hover)] rounded" />
-                    <div className="h-8 w-24 bg-[var(--surface-hover)] rounded" />
-                    <div className="h-8 w-8 bg-[var(--surface-hover)] rounded-full" />
-                  </div>
+              <div key={i} className="border border-[var(--border)] rounded-2xl bg-[var(--surface)] p-5 space-y-4 min-h-[220px] animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-12 bg-[var(--surface-hover)] rounded shrink-0" />
+                  <div className="h-4 w-4 bg-[var(--surface-hover)] rounded-full shrink-0" />
+                </div>
+                <div className="space-y-2 flex-1 mt-4">
+                  <div className="h-5 w-48 bg-[var(--surface-hover)] rounded" />
+                  <div className="h-3.5 w-32 bg-[var(--surface-hover)] rounded" />
+                </div>
+                <div className="border-t border-[var(--border)] my-3.5 opacity-50" />
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((j) => (
+                    <div key={j} className="h-8 bg-[var(--surface-hover)] rounded" />
+                  ))}
+                </div>
+                <div className="space-y-1.5 mt-2">
+                  <div className="h-3 w-16 bg-[var(--surface-hover)] rounded" />
+                  <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full" />
                 </div>
               </div>
             ))}
-          </div>
+          </>
+        ) : activeGroup ? (
+          <ProjectCard
+            key={activeGroup.id}
+            group={activeGroup}
+            viewMode={viewMode}
+            isExpanded={true}
+            onToggle={() => setActiveProjectId(null)}
+            onIssueClick={handleIssueClick}
+            onBack={() => setActiveProjectId(null)}
+          />
         ) : groupedByProject.length > 0 ? (
           groupedByProject.map((group) => (
             <ProjectCard
               key={group.id}
               group={group}
               viewMode={viewMode}
-              isExpanded={!!expandedProjects[group.id]}
-              onToggle={() => handleToggleProject(group.id)}
+              isExpanded={false}
+              onToggle={() => setActiveProjectId(group.id)}
               onIssueClick={handleIssueClick}
             />
           ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)]/50 text-[var(--text-secondary)] shadow-sm">
+          <div className="col-span-full flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)]/50 text-[var(--text-secondary)] shadow-sm">
             <Ticket className="h-10 w-10 text-[var(--text-tertiary)] opacity-40 mb-3" />
             <h3 className="text-base font-bold text-[var(--text-primary)]">No issues found</h3>
             <p className="text-xs text-[var(--text-tertiary)] mt-1">Try resetting your filters or search query.</p>
