@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import useThemeStore from "@/store/theme-store";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -25,6 +26,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const loginMutation = useLogin();
+  const { companyName, slogan, logoUrl } = useThemeStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const companyToShow = mounted ? (companyName || "Prologics Support") : "Prologics Support";
+  const sloganToShow = mounted ? (slogan || "Support Division System") : "Support Division System";
+  const logoToShow = mounted ? logoUrl : null;
 
   const {
     register,
@@ -47,14 +58,18 @@ export default function LoginPage() {
     <div className="animate-fade-in">
       {/* Logo & Title */}
       <div className="text-center mb-8">
-        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
-          <Headset className="h-7 w-7" />
-        </div>
+        {logoToShow ? (
+          <img src={logoToShow} alt="Logo" className="h-14 w-14 object-contain mx-auto mb-4 bg-[var(--surface)] rounded-2xl shadow-md p-1" />
+        ) : (
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
+            <Headset className="h-7 w-7" />
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Welcome Back
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mt-1">
-          Sign in to Prologics Support Division
+          Sign in to {companyToShow}
         </p>
       </div>
 
@@ -148,7 +163,7 @@ export default function LoginPage() {
 
       {/* Footer */}
       <p className="text-center text-xs text-[var(--text-tertiary)] mt-6">
-        Prologics (Pvt) Ltd — Support Division System v1.0
+        {companyToShow} — {sloganToShow} v1.0
       </p>
     </div>
   );

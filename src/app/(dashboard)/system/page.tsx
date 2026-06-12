@@ -1,13 +1,74 @@
 "use client";
 
-import { Palette, Settings, Shield, Tag, Bell } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Palette, Settings, Shield, Tag, Bell, UploadCloud, Trash } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge } from "@/components";
 import { PRIORITIES } from "@/lib/constants";
 import useThemeStore from "@/store/theme-store";
+import { toast } from "sonner";
 
 export default function SystemPage() {
   const primaryColor = useThemeStore((s) => s.primaryColor);
   const setPrimaryColor = useThemeStore((s) => s.setPrimaryColor);
+  const storeCompanyName = useThemeStore((s) => s.companyName);
+  const storeSlogan = useThemeStore((s) => s.slogan);
+  const storeLogoUrl = useThemeStore((s) => s.logoUrl);
+  const setCompanyName = useThemeStore((s) => s.setCompanyName);
+  const setSlogan = useThemeStore((s) => s.setSlogan);
+  const setLogoUrl = useThemeStore((s) => s.setLogoUrl);
+
+  const [tempCompanyName, setTempCompanyName] = useState(storeCompanyName);
+  const [tempSlogan, setTempSlogan] = useState(storeSlogan);
+  const [tempLogoUrl, setTempLogoUrl] = useState(storeLogoUrl);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTempCompanyName(storeCompanyName);
+    setTempSlogan(storeSlogan);
+    setTempLogoUrl(storeLogoUrl);
+  }, [storeCompanyName, storeSlogan, storeLogoUrl]);
+
+  const handleDropzoneClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file (PNG, JPG, SVG, WebP)");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Logo size should be less than 2MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === "string") {
+        setTempLogoUrl(result);
+        toast.success("Logo uploaded successfully! Click 'Save Changes' to apply.");
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTempLogoUrl(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    toast.success("Logo marked for removal. Click 'Save Changes' to apply.");
+  };
+
+  const handleSaveChanges = () => {
+    setCompanyName(tempCompanyName);
+    setSlogan(tempSlogan);
+    setLogoUrl(tempLogoUrl);
+    toast.success("Branding settings saved successfully!");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -132,11 +193,19 @@ export default function SystemPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label className="text-sm">Company Name</Label>
-                <Input defaultValue="Prologics (Pvt) Ltd" className="bg-[var(--background)]" />
+                <Input
+                  value={tempCompanyName}
+                  onChange={(e) => setTempCompanyName(e.target.value)}
+                  className="bg-[var(--background)]"
+                />
               </div>
               <div className="space-y-2">
                 <Label className="text-sm">Slogan</Label>
-                <Input defaultValue="Support Division System" className="bg-[var(--background)]" />
+                <Input
+                  value={tempSlogan}
+                  onChange={(e) => setTempSlogan(e.target.value)}
+                  className="bg-[var(--background)]"
+                />
               </div>
               <div className="space-y-2">
                 <Label className="text-sm">Primary Brand Color</Label>
@@ -170,11 +239,65 @@ export default function SystemPage() {
               </div>
               <div className="space-y-2">
                 <Label className="text-sm">Logo</Label>
-                <div className="h-24 rounded-lg border-2 border-dashed border-[var(--border)] flex items-center justify-center text-sm text-[var(--text-tertiary)]">
-                  Drop logo here or click to upload
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFile(file);
+                  }}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <div
+                  onClick={handleDropzoneClick}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleFile(file);
+                  }}
+                  className={`h-32 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-sm cursor-pointer transition-all ${
+                    isDragging
+                      ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                      : "border-[var(--border)] hover:border-[var(--primary)] bg-[var(--background)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                >
+                  {tempLogoUrl ? (
+                    <div className="relative h-full w-full flex items-center justify-center p-4">
+                      <img
+                        src={tempLogoUrl}
+                        alt="Logo Preview"
+                        className="max-h-24 max-w-full object-contain rounded-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute top-2 right-2 p-1.5 rounded-full bg-[var(--destructive)] hover:bg-[var(--destructive-hover)] text-white shadow transition-colors"
+                        title="Remove Logo"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-center p-6 space-y-2">
+                      <UploadCloud className="mx-auto h-8 w-8 text-[var(--text-tertiary)] animate-pulse-soft" />
+                      <div className="text-[var(--text-primary)] font-medium">
+                        Click to upload or drag & drop
+                      </div>
+                      <div className="text-xs text-[var(--text-tertiary)]">
+                        PNG, JPG, SVG or WEBP (max 2MB)
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              <Button className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+              <Button onClick={handleSaveChanges} className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
                 Save Changes
               </Button>
             </CardContent>
