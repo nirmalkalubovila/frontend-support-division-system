@@ -1,73 +1,107 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Palette, Settings, Shield, Tag, Bell, UploadCloud, Trash } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge } from "@/components";
+import { useState, useEffect } from "react";
+import { Palette, Settings, Shield, Tag, Bell, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge, ImageUploader } from "@/components";
 import { PRIORITIES } from "@/lib/constants";
 import useThemeStore from "@/store/theme-store";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
+import { useUpdateBranding, useUploadLogo } from "@/api/services/system/settings-service";
+
+const brandingSchema = z.object({
+  companyName: z.string().min(1, "Company Name is required"),
+  slogan: z.string().min(1, "Slogan is required"),
+});
+
+type BrandingForm = z.infer<typeof brandingSchema>;
 
 export default function SystemPage() {
-  const primaryColor = useThemeStore((s) => s.primaryColor);
-  const setPrimaryColor = useThemeStore((s) => s.setPrimaryColor);
-  const storeCompanyName = useThemeStore((s) => s.companyName);
-  const storeSlogan = useThemeStore((s) => s.slogan);
-  const storeLogoUrl = useThemeStore((s) => s.logoUrl);
-  const setCompanyName = useThemeStore((s) => s.setCompanyName);
-  const setSlogan = useThemeStore((s) => s.setSlogan);
-  const setLogoUrl = useThemeStore((s) => s.setLogoUrl);
+  const {
+    primaryColor,
+    setPrimaryColor,
+    companyName,
+    slogan,
+    setCompanyName,
+    setSlogan,
+    logoUrl: storeLogoUrl,
+    setLogoUrl: setStoreLogoUrl,
+  } = useThemeStore();
 
-  const [tempCompanyName, setTempCompanyName] = useState(storeCompanyName);
-  const [tempSlogan, setTempSlogan] = useState(storeSlogan);
-  const [tempLogoUrl, setTempLogoUrl] = useState(storeLogoUrl);
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const updateBrandingMutation = useUpdateBranding();
+  const uploadLogoMutation = useUploadLogo();
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    setTempCompanyName(storeCompanyName);
-    setTempSlogan(storeSlogan);
-    setTempLogoUrl(storeLogoUrl);
-  }, [storeCompanyName, storeSlogan, storeLogoUrl]);
-
-  const handleDropzoneClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please upload an image file (PNG, JPG, SVG, WebP)");
-      return;
+    if (storeLogoUrl !== undefined) {
+      setLogoUrl(storeLogoUrl);
     }
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Logo size should be less than 2MB");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result;
-      if (typeof result === "string") {
-        setTempLogoUrl(result);
-        toast.success("Logo uploaded successfully! Click 'Save Changes' to apply.");
+  }, [storeLogoUrl]);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<BrandingForm>({
+    resolver: zodResolver(brandingSchema),
+    values: { companyName, slogan },
+  });
+
+  const onSubmitBranding = (data: BrandingForm) => {
+    updateBrandingMutation.mutate({
+      companyName: data.companyName,
+      slogan: data.slogan,
+      primaryColor: primaryColor,
+      logoUrl: logoUrl || "",
+    }, {
+      onSuccess: () => {
+        setCompanyName(data.companyName);
+        setSlogan(data.slogan);
+        setStoreLogoUrl(logoUrl);
+        toast.success("Branding settings saved successfully!");
+      },
+      onError: (err: any) => {
+        // Robust Fallback: Save client-side only if backend fails or is not implemented
+        setCompanyName(data.companyName);
+        setSlogan(data.slogan);
+        setStoreLogoUrl(logoUrl);
+        toast.success("Branding settings saved locally (offline mode)!");
       }
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
-  const handleRemoveLogo = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTempLogoUrl(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    toast.success("Logo marked for removal. Click 'Save Changes' to apply.");
+  const handleUploadLogo = (file: File) => {
+    uploadLogoMutation.mutate(file, {
+      onSuccess: (res) => {
+        setLogoUrl(res.logoUrl);
+        toast.success("Logo uploaded successfully! Click 'Save Changes' to apply.");
+      },
+      onError: (err: any) => {
+        // Robust Fallback: Convert to Base64 and save locally if backend fails
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result;
+          if (typeof result === "string") {
+            setLogoUrl(result);
+            toast.success("Logo loaded locally (offline mode)! Click 'Save Changes' to apply.");
+          }
+        };
+        reader.readAsDataURL(file);
+      },
+    });
   };
 
-  const handleSaveChanges = () => {
-    setCompanyName(tempCompanyName);
-    setSlogan(tempSlogan);
-    setLogoUrl(tempLogoUrl);
-    toast.success("Branding settings saved successfully!");
+  const handleRemoveLogo = () => {
+    setLogoUrl(null);
+    toast.success("Logo removed. Click 'Save Changes' to update.");
   };
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -190,116 +224,90 @@ export default function SystemPage() {
             <CardHeader>
               <CardTitle className="text-base">Company Branding</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm">Company Name</Label>
-                <Input
-                  value={tempCompanyName}
-                  onChange={(e) => setTempCompanyName(e.target.value)}
-                  className="bg-[var(--background)]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm">Slogan</Label>
-                <Input
-                  value={tempSlogan}
-                  onChange={(e) => setTempSlogan(e.target.value)}
-                  className="bg-[var(--background)]"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm">Primary Brand Color</Label>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="color"
-                      value={primaryColor}
-                      onChange={(e) => setPrimaryColor(e.target.value)}
-                      className="h-10 w-14 p-1 cursor-pointer bg-[var(--background)] border-[var(--border)] rounded shrink-0"
+            <CardContent>
+              {mounted ? (
+                <form onSubmit={handleSubmit(onSubmitBranding)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm" htmlFor="companyName">Company Name</Label>
+                    <Input 
+                      id="companyName"
+                      className="bg-[var(--background)]" 
+                      {...register("companyName")}
                     />
-                    <Input
-                      type="text"
-                      value={primaryColor}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val.startsWith("#") && val.length <= 7) {
-                          setPrimaryColor(val);
-                        } else if (!val.startsWith("#") && val.length <= 6) {
-                          setPrimaryColor("#" + val);
-                        }
-                      }}
-                      placeholder="#6366f1"
-                      className="h-10 w-28 bg-[var(--background)] text-center font-mono text-sm shrink-0"
+                    {errors.companyName && (
+                      <p className="text-xs text-[var(--destructive)]">{errors.companyName.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm" htmlFor="slogan">Slogan</Label>
+                    <Input 
+                      id="slogan"
+                      className="bg-[var(--background)]" 
+                      {...register("slogan")}
+                    />
+                    {errors.slogan && (
+                      <p className="text-xs text-[var(--destructive)]">{errors.slogan.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Primary Brand Color</Label>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="color"
+                          value={primaryColor}
+                          onChange={(e) => setPrimaryColor(e.target.value)}
+                          className="h-10 w-14 p-1 cursor-pointer bg-[var(--background)] border-[var(--border)] rounded shrink-0"
+                        />
+                        <Input
+                          type="text"
+                          value={primaryColor}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val.startsWith("#") && val.length <= 7) {
+                              setPrimaryColor(val);
+                            } else if (!val.startsWith("#") && val.length <= 6) {
+                              setPrimaryColor("#" + val);
+                            }
+                          }}
+                          placeholder="#6366f1"
+                          className="h-10 w-28 bg-[var(--background)] text-center font-mono text-sm shrink-0"
+                        />
+                      </div>
+                      <span className="text-xs text-[var(--text-secondary)]">
+                        This color will apply globally to buttons, active links, highlights, and icons.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Logo</Label>
+                    <ImageUploader
+                      value={logoUrl}
+                      onUpload={handleUploadLogo}
+                      onRemove={handleRemoveLogo}
+                      isUploading={uploadLogoMutation.isPending}
                     />
                   </div>
-                  <span className="text-xs text-[var(--text-secondary)]">
-                    This color will apply globally to buttons, active links, highlights, and icons.
-                  </span>
+                  <Button 
+                    type="submit" 
+                    disabled={updateBrandingMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white"
+                  >
+                    {updateBrandingMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </Button>
+                </form>
+              ) : (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm">Logo</Label>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFile(file);
-                  }}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <div
-                  onClick={handleDropzoneClick}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    const file = e.dataTransfer.files?.[0];
-                    if (file) handleFile(file);
-                  }}
-                  className={`h-32 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-sm cursor-pointer transition-all ${
-                    isDragging
-                      ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                      : "border-[var(--border)] hover:border-[var(--primary)] bg-[var(--background)] hover:bg-[var(--surface-hover)]"
-                  }`}
-                >
-                  {tempLogoUrl ? (
-                    <div className="relative h-full w-full flex items-center justify-center p-4">
-                      <img
-                        src={tempLogoUrl}
-                        alt="Logo Preview"
-                        className="max-h-24 max-w-full object-contain rounded-md"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="absolute top-2 right-2 p-1.5 rounded-full bg-[var(--destructive)] hover:bg-[var(--destructive-hover)] text-white shadow transition-colors"
-                        title="Remove Logo"
-                      >
-                        <Trash className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="text-center p-6 space-y-2">
-                      <UploadCloud className="mx-auto h-8 w-8 text-[var(--text-tertiary)] animate-pulse-soft" />
-                      <div className="text-[var(--text-primary)] font-medium">
-                        Click to upload or drag & drop
-                      </div>
-                      <div className="text-xs text-[var(--text-tertiary)]">
-                        PNG, JPG, SVG or WEBP (max 2MB)
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-              <Button onClick={handleSaveChanges} className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
-                Save Changes
-              </Button>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

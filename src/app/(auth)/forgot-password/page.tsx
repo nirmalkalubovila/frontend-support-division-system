@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useForgotPassword } from "@/api/services/auth/auth-service";
 import Link from "next/link";
+import useThemeStore from "@/store/theme-store";
 
 const forgotSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -20,6 +21,12 @@ type ForgotForm = z.infer<typeof forgotSchema>;
 export default function ForgotPasswordPage() {
   const [sent, setSent] = useState(false);
   const forgotMutation = useForgotPassword();
+  const { logoUrl } = useThemeStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const {
     register,
@@ -41,9 +48,19 @@ export default function ForgotPasswordPage() {
     <div className="animate-fade-in">
       {/* Logo */}
       <div className="text-center mb-8">
-        <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
-          <Headset className="h-7 w-7" />
-        </div>
+        {mounted && logoUrl ? (
+          <div className="inline-flex h-16 max-w-[280px] items-center justify-center mb-4">
+            <img
+              src={logoUrl}
+              alt="Logo"
+              className="h-full w-auto object-contain"
+            />
+          </div>
+        ) : (
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
+            <Headset className="h-7 w-7" />
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Reset Password
         </h1>
@@ -83,7 +100,7 @@ export default function ForgotPasswordPage() {
               <Input
                 id="forgot-email"
                 type="email"
-                placeholder="you@prologics.lk"
+                placeholder="you@company.com"
                 className="h-11 bg-[var(--background)] border-[var(--border)]"
                 {...register("email")}
               />

@@ -19,18 +19,19 @@ export default function DashboardLayout({
   const router = useRouter();
   const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
   const userInfo = useSessionStore((s) => s.userInfo);
+  const hasHydrated = useSessionStore((s) => s.hasHydrated);
 
   // Fetch user info on mount (re-hydrate from server)
   useGetMe();
 
   useEffect(() => {
-    if (!isLoggedIn) {
+    if (hasHydrated && !isLoggedIn) {
       router.replace("/login");
     }
-  }, [isLoggedIn, router]);
+  }, [hasHydrated, isLoggedIn, router]);
 
   // Show loading while checking auth
-  if (!isLoggedIn || !userInfo) {
+  if (!hasHydrated || !isLoggedIn || !userInfo) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
         <div className="flex flex-col items-center gap-3">

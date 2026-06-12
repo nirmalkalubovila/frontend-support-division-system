@@ -36,7 +36,6 @@ import {
 import useSessionStore from "@/store/session-store";
 import useThemeStore from "@/store/theme-store";
 import { useHasPermission } from "@/hooks/use-permissions";
-import { APP_NAME } from "@/lib/constants";
 
 const SIDEBAR_OPEN = 220;
 const SIDEBAR_CLOSED = 56;
@@ -109,7 +108,7 @@ function NavItem({
 
 // ── AppShell ────────────────────────────────────────────────────
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const pathname = usePathname();
   const userInfo = useSessionStore((s) => s.userInfo);
   const clearSession = useSessionStore((s) => s.clearSession);
@@ -120,9 +119,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  const companyToShow = mounted ? (companyName || APP_NAME) : APP_NAME;
-  const sloganToShow = mounted ? (slogan || "Division System") : "Division System";
-  const logoToShow = mounted ? logoUrl : null;
+  const displayName = mounted ? (companyName || "Prologics Support") : "Prologics Support";
+  const displaySlogan = mounted ? (slogan || "Support Division System") : "Support Division System";
+  const displayLogo = mounted ? logoUrl : null;
 
   // Most-specific-match-wins active detection
   const activeHref = useMemo(() => {
@@ -200,21 +199,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Center: Company Logo */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            {logoToShow ? (
-              <img src={logoToShow} alt="Logo" className="h-9 w-9 object-contain rounded-xl shadow-sm bg-[var(--surface)]" />
+            {displayLogo ? (
+              <div className="h-10 max-w-[240px] shrink-0 flex items-center justify-center">
+                <img
+                  src={displayLogo}
+                  alt={`${displayName} Logo`}
+                  className="h-full w-auto object-contain"
+                />
+              </div>
             ) : (
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-md">
-                <Headset className="h-4.5 w-4.5" />
-              </span>
+              <>
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-md">
+                  <Headset className="h-4.5 w-4.5" />
+                </span>
+                <div className="text-left hidden sm:block max-w-[180px]">
+                  <span className="text-sm font-bold tracking-wide block gradient-text truncate">
+                    {displayName}
+                  </span>
+                  <span className="text-[10px] text-[var(--text-tertiary)] block -mt-0.5 truncate">
+                    {displaySlogan}
+                  </span>
+                </div>
+              </>
             )}
-            <div className="text-left hidden sm:block">
-              <span className="text-sm font-bold tracking-wide whitespace-nowrap block gradient-text">
-                {companyToShow}
-              </span>
-              <span className="text-[10px] text-[var(--text-tertiary)] whitespace-nowrap block -mt-0.5">
-                {sloganToShow}
-              </span>
-            </div>
           </div>
 
           {/* Right side: Theme toggle, Notification bell, Profile dropdown */}
@@ -242,7 +249,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <Separator orientation="vertical" className="h-6 mx-1" />
 
-            {/* Profile Dropdown */}
+            {/* Profile Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 border border-[var(--border)] overflow-hidden shrink-0">

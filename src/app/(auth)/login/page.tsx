@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import useThemeStore from "@/store/theme-store";
+import useSessionStore from "@/store/session-store";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -17,6 +18,7 @@ import Link from "next/link";
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -29,26 +31,47 @@ export default function LoginPage() {
   const { companyName, slogan, logoUrl } = useThemeStore();
   const [mounted, setMounted] = useState(false);
 
+  const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
+  const hasHydrated = useSessionStore((s) => s.hasHydrated);
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm<LoginForm>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "", rememberMe: false },
+  });
+
   useEffect(() => {
     setMounted(true);
-  }, []);
+    const savedEmail = localStorage.getItem("remembered-email");
+    if (savedEmail) {
+      setValue("email", savedEmail);
+      setValue("rememberMe", true);
+    }
+  }, [setValue]);
+
+  useEffect(() => {
+    if (hasHydrated && isLoggedIn) {
+      router.replace("/dashboard");
+    }
+  }, [hasHydrated, isLoggedIn, router]);
 
   const companyToShow = mounted ? (companyName || "Prologics Support") : "Prologics Support";
   const sloganToShow = mounted ? (slogan || "Support Division System") : "Support Division System";
   const logoToShow = mounted ? logoUrl : null;
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
-
   const onSubmit = (data: LoginForm) => {
-    loginMutation.mutate(data, {
+    const { email, password, rememberMe } = data;
+    loginMutation.mutate({ email, password }, {
       onSuccess: () => {
+        if (rememberMe) {
+          localStorage.setItem("remembered-email", email);
+        } else {
+          localStorage.removeItem("remembered-email");
+        }
         router.push("/dashboard");
       },
     });
@@ -84,7 +107,7 @@ export default function LoginPage() {
             <Input
               id="login-email"
               type="email"
-              placeholder="you@prologics.lk"
+              placeholder="you@company.com"
               autoComplete="email"
               className="h-11 bg-[var(--background)] border-[var(--border)] focus:border-[var(--border-focus)] transition-colors"
               {...register("email")}
@@ -131,6 +154,19 @@ export default function LoginPage() {
             {errors.password && (
               <p className="text-xs text-[var(--destructive)]">{errors.password.message}</p>
             )}
+          </div>
+
+          {/* Remember Me */}
+          <div className="flex items-center space-x-2 py-1">
+            <input
+              id="rememberMe"
+              type="checkbox"
+              className="h-4 w-4 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+              {...register("rememberMe")}
+            />
+            <Label htmlFor="rememberMe" className="text-xs font-medium text-[var(--text-secondary)] cursor-pointer select-none">
+              Remember me
+            </Label>
           </div>
 
           {/* Error Message */}

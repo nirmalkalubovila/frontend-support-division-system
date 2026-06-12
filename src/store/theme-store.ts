@@ -17,7 +17,7 @@ interface ThemeState {
   setPrimaryColor: (color: string) => void;
   setCompanyName: (name: string) => void;
   setSlogan: (slogan: string) => void;
-  setLogoUrl: (url: string | null) => void;
+  setLogoUrl: (logoUrl: string | null) => void;
 }
 
 const useThemeStore = create<ThemeState>()(
