@@ -119,8 +119,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  const displayName = mounted ? companyName : "Your Company (Pvt) Ltd";
-  const displaySlogan = mounted ? slogan : "Support Division System";
+  const displayName = mounted ? (companyName || "Prologics Support") : "Prologics Support";
+  const displaySlogan = mounted ? (slogan || "Support Division System") : "Support Division System";
+  const displayLogo = mounted ? logoUrl : null;
 
   // Most-specific-match-wins active detection
   const activeHref = useMemo(() => {
@@ -198,10 +199,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Center: Company Logo */}
           <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            {mounted && logoUrl ? (
+            {displayLogo ? (
               <div className="h-10 max-w-[240px] shrink-0 flex items-center justify-center">
                 <img
-                  src={logoUrl}
+                  src={displayLogo}
                   alt={`${displayName} Logo`}
                   className="h-full w-auto object-contain"
                 />
@@ -248,7 +249,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
             <Separator orientation="vertical" className="h-6 mx-1" />
 
-            {/* Profile Dropdown */}
+            {/* Profile Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 border border-[var(--border)] overflow-hidden shrink-0">

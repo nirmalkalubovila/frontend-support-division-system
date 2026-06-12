@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Ticket,
   Plus,
@@ -12,34 +12,70 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  LayoutGrid,
+  List,
+  CheckCircle2,
+  AlertCircle,
+  PlayCircle,
+  Calendar,
+  Eye,
+  SlidersHorizontal,
+  ArrowLeft,
 } from "lucide-react";
-import { Button, Badge, Input, Select } from "@/components";
+import { Button, Badge, Input, Select, Card, CardContent } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { CreateIssueModal, IssueDetailsModal } from "@/components";
 import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES } from "@/lib/constants";
 import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
-import type { Client } from "@/api/services/project-management/client-service";
-import type { Project } from "@/api/services/project-management/project-service";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
 // ──────────────────────────────────────────────────────────────
 const PRIORITY_COLORS: Record<string, string> = {
-  Critical: "var(--error)",
-  High: "#f97316",
-  Medium: "var(--warning)",
-  Low: "var(--success)",
+  Critical: "var(--priority-critical)",
+  High: "var(--priority-high)",
+  Medium: "var(--priority-medium)",
+  Low: "var(--priority-low)",
 };
 
 const PRIORITY_BG: Record<string, string> = {
   Critical: "rgba(239, 68, 68, 0.12)",
   High: "rgba(249, 115, 22, 0.12)",
   Medium: "rgba(234, 179, 8, 0.12)",
-  Low: "rgba(34, 197, 94, 0.12)",
+  Low: "rgba(107, 114, 128, 0.12)",
+};
+
+const PRIORITY_BORDER_CLASSES: Record<string, string> = {
+  Critical: "border-l-4 border-l-[var(--priority-critical)] bg-gradient-to-r from-red-500/[0.03] to-transparent",
+  High: "border-l-4 border-l-[var(--priority-high)] bg-gradient-to-r from-orange-500/[0.03] to-transparent",
+  Medium: "border-l-4 border-l-[var(--priority-medium)] bg-gradient-to-r from-yellow-500/[0.03] to-transparent",
+  Low: "border-l-4 border-l-[var(--priority-low)] bg-gradient-to-r from-gray-500/[0.03] to-transparent",
 };
 
 // ──────────────────────────────────────────────────────────────
-// Issue Card
+// Issue Type Pill Styling
+// ──────────────────────────────────────────────────────────────
+const getIssueTypeStyle = (type: string) => {
+  switch (type) {
+    case "Bug":
+      return "bg-[var(--destructive-light)] text-[var(--destructive)] border border-[var(--destructive)]/10";
+    case "Feature Request":
+      return "bg-[var(--primary-light)] text-[var(--primary-text)] border border-[var(--primary)]/10";
+    case "Access Issue":
+      return "bg-purple-500/10 text-purple-500 dark:text-purple-400 border border-purple-500/20";
+    case "Data Correction":
+      return "bg-amber-500/10 text-amber-500 border border-amber-500/20";
+    case "Performance":
+      return "bg-cyan-500/10 text-cyan-500 dark:text-cyan-400 border border-cyan-500/20";
+    case "Consultation":
+      return "bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 border border-emerald-500/20";
+    default:
+      return "bg-[var(--surface-hover)] text-[var(--text-secondary)] border border-[var(--border)]";
+  }
+};
+
+// ──────────────────────────────────────────────────────────────
+// Issue Card Component
 // ──────────────────────────────────────────────────────────────
 function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
   const client = typeof issue.client === "object" ? issue.client : null;
@@ -53,18 +89,22 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="group bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3.5 hover:border-[var(--border-hover)] hover:shadow-md transition-all duration-200 cursor-pointer"
+      className={`group relative rounded-xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer ${
+        PRIORITY_BORDER_CLASSES[issue.priority] || "bg-[var(--surface)]"
+      }`}
+      style={{ backgroundColor: "var(--surface)" }}
     >
       {/* Issue ID & Priority */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-mono font-medium text-[var(--text-tertiary)]">
+      <div className="flex items-center justify-between mb-2.5">
+        <span className="text-[10px] font-mono font-medium text-[var(--text-tertiary)] group-hover:text-[var(--primary-text)] transition-colors">
           {issue.issueId}
         </span>
         <span
-          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md"
+          className="text-[9px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider shadow-sm"
           style={{
             color: PRIORITY_COLORS[issue.priority],
             backgroundColor: PRIORITY_BG[issue.priority],
+            border: `1px solid ${PRIORITY_COLORS[issue.priority]}20`,
           }}
         >
           {issue.priority}
@@ -72,29 +112,34 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
       </div>
 
       {/* Title */}
-      <h4 className="text-sm font-medium text-[var(--text-primary)] line-clamp-2 mb-2 group-hover:text-[var(--primary)] transition-colors">
+      <h4 className="text-sm font-semibold text-[var(--text-primary)] line-clamp-2 mb-2 group-hover:text-[var(--primary)] transition-colors leading-snug">
         {issue.title}
       </h4>
 
       {/* Type Badge */}
-      <div className="mb-2.5">
-        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+      <div className="mb-3">
+        <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${getIssueTypeStyle(issue.type)}`}>
           {issue.type}
-        </Badge>
+        </span>
       </div>
 
+      {/* Divider */}
+      <div className="border-t border-[var(--border)] my-2.5 opacity-60" />
+
       {/* Meta Row */}
-      <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)]">
+      <div className="flex items-center justify-between text-[10px] text-[var(--text-tertiary)] pt-0.5">
         {/* Client / Project */}
-        <span className="truncate max-w-[120px]" title={project?.name ?? ""}>
-          {client?.code ?? "—"} / {project?.name ?? "—"}
+        <span className="truncate max-w-[125px] font-medium" title={project?.name ?? ""}>
+          <span className="text-[var(--text-secondary)]">{client?.code ?? "—"}</span>
+          <span className="mx-1 text-[var(--text-tertiary)]">/</span>
+          <span className="text-[var(--text-primary)] font-semibold">{project?.name ?? "—"}</span>
         </span>
 
         <div className="flex items-center gap-2">
           {/* Due Date */}
           <span
-            className={`flex items-center gap-0.5 ${
-              isOverdue ? "text-[var(--error)] font-medium" : ""
+            className={`flex items-center gap-0.5 font-medium px-1.5 py-0.5 rounded-md bg-[var(--background)] ${
+              isOverdue ? "text-[var(--destructive)] bg-[var(--destructive-light)] font-semibold animate-pulse-soft" : ""
             }`}
           >
             {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
@@ -105,16 +150,396 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
           {/* Assignee Avatar */}
           {assignee ? (
             <div
-              className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold"
-              title={assignee.name}
+              className="h-5.5 w-5.5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shadow-sm ring-1 ring-[var(--border)]"
+              title={`Assigned to: ${assignee.name}`}
             >
               {assignee.name.charAt(0).toUpperCase()}
             </div>
           ) : (
-            <div className="h-5 w-5 rounded-full bg-[var(--surface-hover)] flex items-center justify-center">
+            <div className="h-5.5 w-5.5 rounded-full bg-[var(--surface-hover)] border border-[var(--border)] flex items-center justify-center" title="Unassigned">
               <UserIcon className="h-2.5 w-2.5 text-[var(--text-tertiary)]" />
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Project Card & Grouping Types
+// ──────────────────────────────────────────────────────────────
+interface ProjectGroup {
+  id: string;
+  name: string;
+  clientCode: string;
+  clientName: string;
+  issues: Issue[];
+}
+
+function ProjectCard({
+  group,
+  viewMode,
+  isExpanded,
+  onToggle,
+  onIssueClick,
+  onBack,
+}: {
+  group: ProjectGroup;
+  viewMode: "board" | "list";
+  isExpanded: boolean;
+  onToggle: () => void;
+  onIssueClick: (issue: Issue) => void;
+  onBack?: () => void;
+}) {
+  const issues = group.issues;
+
+  // Calculate project specific stats
+  const total = issues.length;
+  const critical = issues.filter((i) => i.priority === "Critical" || i.priority === "High").length;
+  const active = issues.filter((i) => ["Assigned", "In Progress", "Testing", "Planned Solution"].includes(i.status)).length;
+  const resolved = issues.filter((i) => ["Resolved", "Closed"].includes(i.status)).length;
+  const completionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+
+  // Group issues by status for this project's Kanban board
+  const projectIssuesByStatus = useMemo(() => {
+    const grouped: Record<string, Issue[]> = {};
+    for (const col of KANBAN_COLUMNS) {
+      grouped[col] = [];
+    }
+    for (const issue of issues) {
+      if (grouped[issue.status]) {
+        grouped[issue.status].push(issue);
+      } else {
+        if (grouped["Backlog"]) {
+          grouped["Backlog"].push(issue);
+        }
+      }
+    }
+    return grouped;
+  }, [issues]);
+
+  if (isExpanded) {
+    return (
+      <div className="col-span-full border border-[var(--border)] rounded-2xl bg-[var(--surface)] overflow-hidden shadow-sm transition-all duration-300 hover:border-[var(--border-hover)] hover:shadow-md">
+        {/* Card Header (clickable to collapse) */}
+        <div
+          onClick={onToggle}
+          className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer select-none bg-[var(--surface-hover)]/20 hover:bg-[var(--surface-hover)]/40 transition-colors"
+        >
+          <div className="flex items-center gap-3.5 flex-1 min-w-0">
+            {/* Back Icon Button */}
+            {onBack && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBack();
+                }}
+                className="shrink-0 h-8 w-8 rounded-full hover:bg-[var(--surface-hover)] flex items-center justify-center transition-colors text-[var(--text-secondary)] hover:text-[var(--primary-text)] mr-1"
+                title="Back to Projects"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+
+            {/* Client badge */}
+            {group.clientCode ? (
+              <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+                {group.clientCode}
+              </span>
+            ) : (
+              <span className="shrink-0 text-[10px] font-bold px-2 py-1 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
+                GEN
+              </span>
+            )}
+            <div className="min-w-0">
+              <h3 className="text-base font-bold text-[var(--text-primary)] truncate" title={group.name}>
+                {group.name}
+              </h3>
+              {group.clientName && (
+                <p className="text-xs text-[var(--text-tertiary)] truncate mt-0.5">{group.clientName}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Stats & Progress Bar */}
+          <div className="flex flex-wrap items-center gap-6 md:gap-8 shrink-0">
+            {/* Stats Badges */}
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Total</span>
+                <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Breach Risk</span>
+                <span className={`font-bold mt-0.5 flex items-center gap-1 ${critical > 0 ? "text-[var(--destructive)] font-extrabold animate-pulse-soft" : "text-[var(--text-secondary)]"}`}>
+                  {critical}
+                  {critical > 0 && <span className="h-1.5 w-1.5 rounded-full bg-[var(--destructive)] animate-ping" />}
+                </span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Active</span>
+                <span className="font-bold text-[var(--warning)] mt-0.5">{active}</span>
+              </div>
+
+              <div className="h-6 w-px bg-[var(--border)]" />
+
+              <div className="flex flex-col items-center">
+                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Resolved</span>
+                <span className="font-bold text-[var(--success)] mt-0.5">{resolved}</span>
+              </div>
+            </div>
+
+            {/* Completion Progress Bar */}
+            <div className="w-28 md:w-36 flex flex-col gap-1.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="font-medium text-[var(--text-tertiary)]">Resolved Rate</span>
+                <span className="font-bold text-[var(--success)]">{completionRate}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
+                <div
+                  className="h-full bg-gradient-to-r from-[var(--success)] to-emerald-400 transition-all duration-500 rounded-full"
+                  style={{ width: `${completionRate}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Expand Chevron */}
+            <button className="h-8 w-8 rounded-full hover:bg-[var(--surface-hover)] flex items-center justify-center transition-colors">
+              <ChevronDown
+                className="h-5 w-5 text-[var(--text-tertiary)] transition-transform duration-300 rotate-180 text-[var(--primary)]"
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Expanded Issues View Container */}
+        <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5 animate-fade-in">
+          {viewMode === "list" ? (
+            <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-xs font-bold tracking-wider text-[var(--text-secondary)] uppercase">
+                    <th className="py-3 px-4 font-semibold">ID</th>
+                    <th className="py-3 px-4 font-semibold">Title</th>
+                    <th className="py-3 px-4 font-semibold">Type</th>
+                    <th className="py-3 px-4 font-semibold">Priority</th>
+                    <th className="py-3 px-4 font-semibold">Status</th>
+                    <th className="py-3 px-4 font-semibold">Assignee</th>
+                    <th className="py-3 px-4 font-semibold">Due Date</th>
+                    <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--border)] text-xs">
+                  {issues.map((issue) => {
+                    const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
+                    const dueDate = new Date(issue.dueDate);
+                    const isOverdue = dueDate < new Date() && !["Resolved", "Closed"].includes(issue.status);
+
+                    return (
+                      <tr
+                        key={issue._id}
+                        className="hover:bg-[var(--surface-hover)]/40 transition-colors cursor-pointer group"
+                        onClick={() => onIssueClick(issue)}
+                      >
+                        <td className="py-3 px-4 font-mono text-[var(--text-secondary)] font-semibold whitespace-nowrap">
+                          {issue.issueId}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors max-w-sm truncate">
+                          {issue.title}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${getIssueTypeStyle(issue.type)}`}>
+                            {issue.type}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span
+                            className="px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider"
+                            style={{
+                              color: PRIORITY_COLORS[issue.priority],
+                              backgroundColor: PRIORITY_BG[issue.priority],
+                            }}
+                          >
+                            {issue.priority}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="flex items-center gap-1.5 font-semibold text-[var(--text-primary)]">
+                            <span
+                              className="h-2 w-2 rounded-full shadow-sm"
+                              style={{ backgroundColor: `var(--status-${issue.status.toLowerCase().replace(/ /g, "-")})` }}
+                            />
+                            {issue.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {assignee ? (
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-5.5 w-5.5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shadow-sm">
+                                {assignee.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-medium text-[var(--text-secondary)] hidden md:inline truncate max-w-[80px]">
+                                {assignee.name}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[var(--text-tertiary)] font-medium">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span
+                            className={`flex items-center gap-1 font-medium ${
+                              isOverdue ? "text-[var(--destructive)] font-semibold animate-pulse-soft" : "text-[var(--text-secondary)]"
+                            }`}
+                          >
+                            <Calendar className="h-3.5 w-3.5" />
+                            {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onIssueClick(issue)}
+                            className="h-7 w-7 p-0 rounded-full hover:bg-[var(--surface-hover)]"
+                            title="View Details"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="kanban-scroll flex gap-4 pb-2 overflow-x-auto min-h-[420px]">
+              {KANBAN_COLUMNS.map((column) => {
+                const columnIssues = projectIssuesByStatus[column] ?? [];
+                return (
+                  <div
+                    key={column}
+                    className="flex-shrink-0 w-72 bg-[var(--surface)]/30 dark:bg-[var(--surface)]/5 backdrop-blur-sm rounded-xl border border-[var(--border)] p-3.5 flex flex-col h-[420px] shadow-sm"
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between mb-3.5 pb-2 border-b border-[var(--border)] shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shadow-sm"
+                          style={{
+                            backgroundColor: `var(--status-${column.toLowerCase().replace(/ /g, "-")})`,
+                            boxShadow: `0 0 8px var(--status-${column.toLowerCase().replace(/ /g, "-")})80`,
+                          }}
+                        />
+                        <h4 className="text-xs font-bold text-[var(--text-primary)] tracking-wide">{column}</h4>
+                      </div>
+                      <span className="text-[9px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-secondary)] px-1.5 py-0.2 rounded-full">
+                        {columnIssues.length}
+                      </span>
+                    </div>
+
+                    {/* Column Issues Cards */}
+                    <div className="space-y-3 overflow-y-auto flex-1 pr-1 -mr-1">
+                      {columnIssues.length > 0 ? (
+                        columnIssues.map((issue) => (
+                          <IssueCard
+                            key={issue._id}
+                            issue={issue}
+                            onClick={() => onIssueClick(issue)}
+                          />
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-24 rounded-lg border border-dashed border-[var(--border)] text-[10px] text-[var(--text-tertiary)] bg-[var(--surface)]/10 p-3 select-none">
+                          No issues
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Collapsed Vertical Card View
+  return (
+    <div
+      onClick={onToggle}
+      className="col-span-1 border border-[var(--border)] rounded-2xl bg-[var(--surface)] hover:border-[var(--border-hover)] hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col p-5 h-full min-h-[220px] cursor-pointer select-none"
+    >
+      {/* Top Header Row */}
+      <div className="flex items-center justify-between">
+        {group.clientCode ? (
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+            {group.clientCode}
+          </span>
+        ) : (
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
+            GEN
+          </span>
+        )}
+
+        <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
+      </div>
+
+      {/* Title & Description */}
+      <div className="flex-1 mt-4">
+        <h3 className="text-base font-bold text-[var(--text-primary)] leading-tight line-clamp-2" title={group.name}>
+          {group.name}
+        </h3>
+        {group.clientName && (
+          <p className="text-xs text-[var(--text-tertiary)] mt-1.5 truncate">{group.clientName}</p>
+        )}
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-[var(--border)] my-3.5 opacity-50" />
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-4 gap-2 text-center text-xs text-[var(--text-tertiary)] mb-3">
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Total</span>
+          <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Risk</span>
+          <span className={`font-bold mt-0.5 flex items-center justify-center gap-0.5 ${critical > 0 ? "text-[var(--destructive)] font-extrabold animate-pulse-soft" : "text-[var(--text-secondary)]"}`}>
+            {critical}
+            {critical > 0 && <span className="h-1 w-1 rounded-full bg-[var(--destructive)]" />}
+          </span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Active</span>
+          <span className="font-bold text-[var(--warning)] mt-0.5">{active}</span>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Done</span>
+          <span className="font-bold text-[var(--success)] mt-0.5">{resolved}</span>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="font-medium text-[var(--text-tertiary)]">Resolved Rate</span>
+          <span className="font-bold text-[var(--success)]">{completionRate}%</span>
+        </div>
+        <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
+          <div
+            className="h-full bg-gradient-to-r from-[var(--success)] to-emerald-400 transition-all duration-500 rounded-full"
+            style={{ width: `${completionRate}%` }}
+          />
         </div>
       </div>
     </div>
@@ -132,8 +557,15 @@ export default function IssuesPage() {
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
+  const [mounted, setMounted] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-  // Fetch all issues (large limit to get everything for kanban view)
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Fetch all issues
   const { data: issuesData, isLoading } = useGetIssues({
     limit: 200,
     search: search || undefined,
@@ -144,28 +576,64 @@ export default function IssuesPage() {
 
   const issues: Issue[] = issuesData?.data ?? [];
 
-  // Group issues by status for kanban columns
-  const issuesByStatus = useMemo(() => {
-    const grouped: Record<string, Issue[]> = {};
-    for (const col of KANBAN_COLUMNS) {
-      grouped[col] = [];
-    }
-    for (const issue of issues) {
-      if (grouped[issue.status]) {
-        grouped[issue.status].push(issue);
-      } else {
-        // Issues with statuses not in Kanban columns (e.g. On Hold, Pending Client, Closed)
-        // go into Backlog as a fallback display
-        if (grouped["Backlog"]) {
-          grouped["Backlog"].push(issue);
-        }
+  // Group issues by project for project cards representation
+  const groupedByProject = useMemo(() => {
+    const groups: Record<string, ProjectGroup> = {};
+
+    issues.forEach((issue) => {
+      const projectObj = typeof issue.project === "object" && issue.project ? issue.project : null;
+      const clientObj = typeof issue.client === "object" && issue.client ? issue.client : null;
+
+      const projectId = projectObj?._id || "unassigned";
+      const projectName = projectObj?.name || "General Support / Unassigned";
+      const clientCode = clientObj?.code || "";
+      const clientName = clientObj?.name || "";
+
+      if (!groups[projectId]) {
+        groups[projectId] = {
+          id: projectId,
+          name: projectName,
+          clientCode,
+          clientName,
+          issues: [],
+        };
       }
-    }
-    return grouped;
+      groups[projectId].issues.push(issue);
+    });
+
+    return Object.values(groups);
   }, [issues]);
 
-  const totalIssues = issues.length;
-  const hasActiveFilters = !!filterPriority || !!filterType;
+  // Active Project Group Lookup
+  const activeGroup = useMemo(() => {
+    if (!activeProjectId) return null;
+    return groupedByProject.find((g) => g.id === activeProjectId) || null;
+  }, [activeProjectId, groupedByProject]);
+
+  // Clear active project if it's filtered out of the current issues dataset
+  useEffect(() => {
+    if (activeProjectId && activeProjectId !== "unassigned" && !groupedByProject.some((g) => g.id === activeProjectId)) {
+      if (!isLoading && issues.length > 0) {
+        setActiveProjectId(null);
+      }
+    }
+  }, [groupedByProject, activeProjectId, isLoading, issues.length]);
+
+  const handleIssueClick = (issue: Issue) => {
+    setSelectedIssue(issue);
+    setShowDetailsModal(true);
+  };
+
+  // KPI Calculations in memory
+  const kpis = useMemo(() => {
+    const total = issues.length;
+    const critical = issues.filter((i) => i.priority === "Critical" || i.priority === "High").length;
+    const active = issues.filter((i) => ["Assigned", "In Progress", "Testing", "Planned Solution"].includes(i.status)).length;
+    const resolved = issues.filter((i) => ["Resolved", "Closed"].includes(i.status)).length;
+    return { total, critical, active, resolved };
+  }, [issues]);
+
+  const hasActiveFilters = !!filterPriority || !!filterType || !!search;
 
   const clearFilters = () => {
     setFilterPriority("");
@@ -174,38 +642,74 @@ export default function IssuesPage() {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] flex items-center gap-2 tracking-tight">
             <Ticket className="h-6 w-6 text-[var(--primary)]" />
-            Issues
+            {activeGroup ? (
+              <span className="flex items-center gap-2">
+                <span className="text-[var(--text-secondary)] font-normal">Issues</span>
+                <span className="text-sm font-medium text-[var(--text-tertiary)]">/</span>
+                <span>{activeGroup.name}</span>
+              </span>
+            ) : (
+              "Issues Management"
+            )}
           </h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            {isLoading ? "Loading..." : `${totalIssues} issues across ${KANBAN_COLUMNS.length} columns`}
+            {activeGroup ? `Viewing active issues for ${activeGroup.name}` : "Track, prioritize, and resolve customer issues and technical tasks"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          {/* View Switcher Toggle */}
+          <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
+            <button
+              onClick={() => setViewMode("board")}
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                viewMode === "board"
+                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+              }`}
+              title="Board View"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Board</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                viewMode === "list"
+                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+              }`}
+              title="List View"
+            >
+              <List className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">List</span>
+            </button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
-            className={`gap-1 ${hasActiveFilters ? "border-[var(--primary)] text-[var(--primary)]" : ""}`}
+            className={`gap-1.5 font-medium shadow-sm transition-all ${
+              hasActiveFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
+            }`}
             onClick={() => setShowFilters(!showFilters)}
           >
-            <Filter className="h-3.5 w-3.5" />
+            <SlidersHorizontal className="h-3.5 w-3.5" />
             Filter
             {hasActiveFilters && (
-              <Badge variant="default" className="text-[9px] px-1 py-0 ml-1">
-                !
-              </Badge>
+              <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse" />
             )}
             {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
           <ValidatePermission permission="issues.issue.create">
             <Button
               size="sm"
-              className="gap-1 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white"
+              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
               onClick={() => setShowCreateModal(true)}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -215,14 +719,78 @@ export default function IssuesPage() {
         </div>
       </div>
 
+      {/* KPI Overview Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1 */}
+        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Total Issues</span>
+              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">{isLoading ? "—" : kpis.total}</h2>
+              <p className="text-[10px] text-[var(--text-tertiary)]">All registered issues</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--primary-light)] text-[var(--primary-text)]">
+              <Ticket className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI 2 */}
+        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">SLA Breach Risk</span>
+              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--destructive)] flex items-center gap-1.5">
+                {isLoading ? "—" : kpis.critical}
+                {kpis.critical > 0 && <span className="h-2 w-2 rounded-full bg-[var(--destructive)] animate-pulse" />}
+              </h2>
+              <p className="text-[10px] text-[var(--text-tertiary)]">Critical / High priority</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--destructive-light)] text-[var(--destructive)]">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI 3 */}
+        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Active Progress</span>
+              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--warning)]">{isLoading ? "—" : kpis.active}</h2>
+              <p className="text-[10px] text-[var(--text-tertiary)]">In development or testing</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--warning-light)] text-[var(--warning)]">
+              <PlayCircle className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI 4 */}
+        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-1">
+              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Resolved Rate</span>
+              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--success)]">
+                {isLoading ? "—" : `${kpis.total > 0 ? Math.round((kpis.resolved / kpis.total) * 100) : 0}%`}
+              </h2>
+              <p className="text-[10px] text-[var(--text-tertiary)]">{kpis.resolved} tickets completed</p>
+            </div>
+            <div className="p-3 rounded-xl bg-[var(--success-light)] text-[var(--success)]">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Search & Filters Bar */}
       {showFilters && (
-        <div className="flex flex-wrap items-center gap-3 p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-fade-in">
-          <div className="relative flex-1 min-w-[200px]">
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
+          <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
             <Input
               placeholder="Search by title or issue ID..."
-              className="pl-9 h-9 bg-[var(--background)]"
+              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
               value={search}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
             />
@@ -235,7 +803,7 @@ export default function IssuesPage() {
               { label: "All Priorities", value: "" },
               ...PRIORITIES.map((p) => ({ label: p, value: p })),
             ]}
-            className="w-40 h-9"
+            className="w-44 h-9.5 bg-[var(--background)]"
           />
           <Select
             placeholder="All Types"
@@ -245,85 +813,79 @@ export default function IssuesPage() {
               { label: "All Types", value: "" },
               ...ISSUE_TYPES.map((t) => ({ label: t, value: t })),
             ]}
-            className="w-44 h-9"
+            className="w-48 h-9.5 bg-[var(--background)]"
           />
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs">
-              <X className="h-3 w-3" />
-              Clear
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
+              <X className="h-3.5 w-3.5" />
+              Reset Filters
             </Button>
           )}
         </div>
       )}
 
-      {/* Kanban Board */}
-      <div className="kanban-scroll flex gap-4 pb-4 min-h-[calc(100vh-260px)] overflow-x-auto">
-        {KANBAN_COLUMNS.map((column) => {
-          const columnIssues = issuesByStatus[column] ?? [];
-          return (
-            <div
-              key={column}
-              className="flex-shrink-0 w-72 bg-[var(--background)] rounded-xl border border-[var(--border)] p-3"
-            >
-              {/* Column Header */}
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{
-                      backgroundColor: `var(--status-${column.toLowerCase().replace(/ /g, "-")})`,
-                    }}
-                  />
-                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">{column}</h3>
+      {/* Projects and Issues list */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {isLoading ? (
+          // Skeleton loader cards
+          <>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="border border-[var(--border)] rounded-2xl bg-[var(--surface)] p-5 space-y-4 min-h-[220px] animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-12 bg-[var(--surface-hover)] rounded shrink-0" />
+                  <div className="h-4 w-4 bg-[var(--surface-hover)] rounded-full shrink-0" />
                 </div>
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                  {columnIssues.length}
-                </Badge>
+                <div className="space-y-2 flex-1 mt-4">
+                  <div className="h-5 w-48 bg-[var(--surface-hover)] rounded" />
+                  <div className="h-3.5 w-32 bg-[var(--surface-hover)] rounded" />
+                </div>
+                <div className="border-t border-[var(--border)] my-3.5 opacity-50" />
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((j) => (
+                    <div key={j} className="h-8 bg-[var(--surface-hover)] rounded" />
+                  ))}
+                </div>
+                <div className="space-y-1.5 mt-2">
+                  <div className="h-3 w-16 bg-[var(--surface-hover)] rounded" />
+                  <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full" />
+                </div>
               </div>
-
-              {/* Issue Cards */}
-              <div className="space-y-2.5 max-h-[calc(100vh-340px)] overflow-y-auto pr-0.5">
-                {isLoading ? (
-                  // Skeleton loaders
-                  <>
-                    {[1, 2].map((i) => (
-                      <div
-                        key={i}
-                        className="bg-[var(--surface)] rounded-xl border border-[var(--border)] p-3.5 animate-pulse"
-                      >
-                        <div className="flex justify-between mb-2">
-                          <div className="h-3 w-16 bg-[var(--surface-hover)] rounded" />
-                          <div className="h-3 w-12 bg-[var(--surface-hover)] rounded" />
-                        </div>
-                        <div className="h-4 w-full bg-[var(--surface-hover)] rounded mb-2" />
-                        <div className="h-3 w-2/3 bg-[var(--surface-hover)] rounded mb-2" />
-                        <div className="flex justify-between">
-                          <div className="h-3 w-20 bg-[var(--surface-hover)] rounded" />
-                          <div className="h-5 w-5 bg-[var(--surface-hover)] rounded-full" />
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                ) : columnIssues.length > 0 ? (
-                  columnIssues.map((issue) => (
-                    <IssueCard
-                      key={issue._id}
-                      issue={issue}
-                      onClick={() => {
-                        setSelectedIssue(issue);
-                        setShowDetailsModal(true);
-                      }}
-                    />
-                  ))
-                ) : (
-                  <div className="flex items-center justify-center h-24 rounded-lg border border-dashed border-[var(--border)] text-xs text-[var(--text-tertiary)]">
-                    No issues
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+            ))}
+          </>
+        ) : activeGroup ? (
+          <ProjectCard
+            key={activeGroup.id}
+            group={activeGroup}
+            viewMode={viewMode}
+            isExpanded={true}
+            onToggle={() => setActiveProjectId(null)}
+            onIssueClick={handleIssueClick}
+            onBack={() => setActiveProjectId(null)}
+          />
+        ) : groupedByProject.length > 0 ? (
+          groupedByProject.map((group) => (
+            <ProjectCard
+              key={group.id}
+              group={group}
+              viewMode={viewMode}
+              isExpanded={false}
+              onToggle={() => setActiveProjectId(group.id)}
+              onIssueClick={handleIssueClick}
+            />
+          ))
+        ) : (
+          <div className="col-span-full flex flex-col items-center justify-center py-16 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface)]/50 text-[var(--text-secondary)] shadow-sm">
+            <Ticket className="h-10 w-10 text-[var(--text-tertiary)] opacity-40 mb-3" />
+            <h3 className="text-base font-bold text-[var(--text-primary)]">No issues found</h3>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">Try resetting your filters or search query.</p>
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={clearFilters} className="mt-4 gap-1 text-xs">
+                <X className="h-3.5 w-3.5" />
+                Reset Filters
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Create Issue Modal */}

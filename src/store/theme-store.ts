@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 // ──────────────────────────────────────────────────────────────
-// Theme Store — Light/Dark mode preference
+// Theme Store — Light/Dark mode preference + branding settings
 // ──────────────────────────────────────────────────────────────
 
 type Theme = "light" | "dark" | "system";
@@ -25,7 +25,7 @@ const useThemeStore = create<ThemeState>()(
     (set) => ({
       theme: "dark",
       primaryColor: "#6366f1",
-      companyName: "Your Company (Pvt) Ltd",
+      companyName: "Prologics Support",
       slogan: "Support Division System",
       logoUrl: null,
       setTheme: (theme) => set({ theme }),

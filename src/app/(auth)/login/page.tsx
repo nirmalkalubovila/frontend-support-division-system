@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import useThemeStore from "@/store/theme-store";
+import useSessionStore from "@/store/session-store";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -11,8 +13,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLogin } from "@/api/services/auth/auth-service";
 import Link from "next/link";
-import useThemeStore from "@/store/theme-store";
-import useSessionStore from "@/store/session-store";
 
 // ── Validation Schema ──────────────────────────────────────────
 const loginSchema = z.object({
@@ -30,6 +30,7 @@ export default function LoginPage() {
   const loginMutation = useLogin();
   const { companyName, slogan, logoUrl } = useThemeStore();
   const [mounted, setMounted] = useState(false);
+
   const isLoggedIn = useSessionStore((s) => s.isUserLoggedIn);
   const hasHydrated = useSessionStore((s) => s.hasHydrated);
 
@@ -58,8 +59,9 @@ export default function LoginPage() {
     }
   }, [hasHydrated, isLoggedIn, router]);
 
-  const displayName = companyName;
-  const displaySlogan = slogan;
+  const companyToShow = mounted ? (companyName || "Prologics Support") : "Prologics Support";
+  const sloganToShow = mounted ? (slogan || "Support Division System") : "Support Division System";
+  const logoToShow = mounted ? logoUrl : null;
 
   const onSubmit = (data: LoginForm) => {
     const { email, password, rememberMe } = data;
@@ -79,14 +81,8 @@ export default function LoginPage() {
     <div className="animate-fade-in">
       {/* Logo & Title */}
       <div className="text-center mb-8">
-        {mounted && logoUrl ? (
-          <div className="inline-flex h-16 max-w-[280px] items-center justify-center mb-4">
-            <img
-              src={logoUrl}
-              alt={`${displayName} Logo`}
-              className="h-full w-auto object-contain"
-            />
-          </div>
+        {logoToShow ? (
+          <img src={logoToShow} alt="Logo" className="h-14 w-14 object-contain mx-auto mb-4 bg-[var(--surface)] rounded-2xl shadow-md p-1" />
         ) : (
           <div className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] text-white shadow-lg mb-4">
             <Headset className="h-7 w-7" />
@@ -95,7 +91,9 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
           Welcome Back
         </h1>
-       
+        <p className="text-sm text-[var(--text-secondary)] mt-1">
+          Sign in to {companyToShow}
+        </p>
       </div>
 
       {/* Login Card */}
@@ -198,6 +196,11 @@ export default function LoginPage() {
           </Button>
         </form>
       </div>
+
+      {/* Footer */}
+      <p className="text-center text-xs text-[var(--text-tertiary)] mt-6">
+        {companyToShow} — {sloganToShow} v1.0
+      </p>
     </div>
   );
 }
