@@ -27,6 +27,7 @@ import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { CreateIssueModal, IssueDetailsModal } from "@/components";
 import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES } from "@/lib/constants";
 import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
@@ -421,13 +422,13 @@ function ProjectCard({
               </table>
             </div>
           ) : (
-            <div className="kanban-scroll flex gap-4 pb-2 overflow-x-auto min-h-[420px]">
+            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 w-full min-h-[550px]">
               {KANBAN_COLUMNS.map((column) => {
                 const columnIssues = projectIssuesByStatus[column] ?? [];
                 return (
                   <div
                     key={column}
-                    className="flex-shrink-0 w-72 bg-[var(--surface)]/30 dark:bg-[var(--surface)]/5 backdrop-blur-sm rounded-xl border border-[var(--border)] p-3.5 flex flex-col h-[420px] shadow-sm"
+                    className="bg-[var(--surface)]/30 dark:bg-[var(--surface)]/5 backdrop-blur-sm rounded-xl border border-[var(--border)] p-3.5 flex flex-col min-h-[550px] shadow-sm"
                   >
                     {/* Column Header */}
                     <div className="flex items-center justify-between mb-3.5 pb-2 border-b border-[var(--border)] shrink-0">
@@ -566,7 +567,7 @@ export default function IssuesPage() {
   }, []);
 
   // Fetch all issues
-  const { data: issuesData, isLoading } = useGetIssues({
+  const { data: issuesData, isLoading: isLoadingIssues } = useGetIssues({
     limit: 200,
     search: search || undefined,
     priority: filterPriority || undefined,
@@ -574,11 +575,32 @@ export default function IssuesPage() {
     sortBy: "createdAt:desc",
   });
 
+  // Fetch all projects
+  const { data: projectsData, isLoading: isLoadingProjects } = useGetAllProjects();
+
   const issues: Issue[] = issuesData?.data ?? [];
+  const projects: Project[] = projectsData?.data ?? [];
+
+  const isLoading = isLoadingIssues || isLoadingProjects;
 
   // Group issues by project for project cards representation
   const groupedByProject = useMemo(() => {
     const groups: Record<string, ProjectGroup> = {};
+
+    // Initialize groups for all projects in database
+    projects.forEach((proj) => {
+      const clientObj = typeof proj.client === "object" ? proj.client : null;
+      const clientCode = clientObj?.code || "";
+      const clientName = clientObj?.name || "";
+
+      groups[proj._id] = {
+        id: proj._id,
+        name: proj.name,
+        clientCode,
+        clientName,
+        issues: [],
+      };
+    });
 
     issues.forEach((issue) => {
       const projectObj = typeof issue.project === "object" && issue.project ? issue.project : null;
@@ -602,7 +624,7 @@ export default function IssuesPage() {
     });
 
     return Object.values(groups);
-  }, [issues]);
+  }, [projects, issues]);
 
   // Active Project Group Lookup
   const activeGroup = useMemo(() => {
@@ -623,15 +645,6 @@ export default function IssuesPage() {
     setSelectedIssue(issue);
     setShowDetailsModal(true);
   };
-
-  // KPI Calculations in memory
-  const kpis = useMemo(() => {
-    const total = issues.length;
-    const critical = issues.filter((i) => i.priority === "Critical" || i.priority === "High").length;
-    const active = issues.filter((i) => ["Assigned", "In Progress", "Testing", "Planned Solution"].includes(i.status)).length;
-    const resolved = issues.filter((i) => ["Resolved", "Closed"].includes(i.status)).length;
-    return { total, critical, active, resolved };
-  }, [issues]);
 
   const hasActiveFilters = !!filterPriority || !!filterType || !!search;
 
@@ -719,69 +732,7 @@ export default function IssuesPage() {
         </div>
       </div>
 
-      {/* KPI Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1 */}
-        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Total Issues</span>
-              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--text-primary)]">{isLoading ? "—" : kpis.total}</h2>
-              <p className="text-[10px] text-[var(--text-tertiary)]">All registered issues</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--primary-light)] text-[var(--primary-text)]">
-              <Ticket className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 2 */}
-        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">SLA Breach Risk</span>
-              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--destructive)] flex items-center gap-1.5">
-                {isLoading ? "—" : kpis.critical}
-                {kpis.critical > 0 && <span className="h-2 w-2 rounded-full bg-[var(--destructive)] animate-pulse" />}
-              </h2>
-              <p className="text-[10px] text-[var(--text-tertiary)]">Critical / High priority</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--destructive-light)] text-[var(--destructive)]">
-              <AlertCircle className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 3 */}
-        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Active Progress</span>
-              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--warning)]">{isLoading ? "—" : kpis.active}</h2>
-              <p className="text-[10px] text-[var(--text-tertiary)]">In development or testing</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--warning-light)] text-[var(--warning)]">
-              <PlayCircle className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI 4 */}
-        <Card className="bg-[var(--surface)] border-[var(--border)] transition-all duration-300 hover:shadow-md hover:border-[var(--border-hover)]">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[11px] font-semibold tracking-wider text-[var(--text-secondary)] uppercase">Resolved Rate</span>
-              <h2 className="text-3xl font-extrabold tracking-tight text-[var(--success)]">
-                {isLoading ? "—" : `${kpis.total > 0 ? Math.round((kpis.resolved / kpis.total) * 100) : 0}%`}
-              </h2>
-              <p className="text-[10px] text-[var(--text-tertiary)]">{kpis.resolved} tickets completed</p>
-            </div>
-            <div className="p-3 rounded-xl bg-[var(--success-light)] text-[var(--success)]">
-              <CheckCircle2 className="h-6 w-6" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* KPI Overview Cards removed */}
 
       {/* Search & Filters Bar */}
       {showFilters && (

@@ -32,10 +32,11 @@ import {
   useUpdateIssue,
   useUploadAttachments,
   useDeleteAttachment,
+  useDeleteIssue,
   type Issue,
 } from "@/api/services/issue-management/issue-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
-import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
+import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
 import useSessionStore from "@/store/session-store";
 
 interface IssueDetailsModalProps {
@@ -47,11 +48,33 @@ interface IssueDetailsModalProps {
 export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsModalProps) {
   const userInfo = useSessionStore((s) => s.userInfo);
   const isManager = userInfo?.role === "super_admin" || userInfo?.role === "manager";
+
+  const currentAssigneeId = issue && typeof issue.assignedTo === "object" && issue.assignedTo
+    ? issue.assignedTo._id
+    : issue ? (issue.assignedTo as string) || "" : "";
+
+  const canHandover = isManager || (userInfo && userInfo._id === currentAssigneeId);
   
   const updateIssueMutation = useUpdateIssue();
   const uploadAttachmentsMutation = useUploadAttachments();
   const deleteAttachmentMutation = useDeleteAttachment();
+  const deleteIssueMutation = useDeleteIssue();
   const { data: users = [] } = useGetAllUsers();
+  
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Modals and custom dialog prompts state
+  const [showExpandDialog, setShowExpandDialog] = useState(false);
+  const [expandHoursInput, setExpandHoursInput] = useState("1");
+  
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
+  const [requestHoursInput, setRequestHoursInput] = useState("1");
+  const [requestReasonInput, setRequestReasonInput] = useState("");
+  
+  const [showHandoverDialog, setShowHandoverDialog] = useState(false);
+  const [handoverReasonInput, setHandoverReasonInput] = useState("");
+  const [pendingAssigneeId, setPendingAssigneeId] = useState("");
+  const [pendingAssigneeName, setPendingAssigneeName] = useState("");
 
   // ──────────────────────────────────────────────────────────────
   // Form & Fields State
@@ -182,6 +205,54 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     }
   };
 
+  const handleDelete = async () => {
+    if (!issue) return;
+    if (!window.confirm("Are you sure you want to delete this issue?")) return;
+    setIsDeleting(true);
+    try {
+      await deleteIssueMutation.mutateAsync(issue._id);
+      toast.success("Issue deleted successfully!");
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to delete issue.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleExpandSubmit = () => {
+    if (!expandHoursInput || isNaN(Number(expandHoursInput)) || Number(expandHoursInput) <= 0) {
+      toast.error("Please enter a valid number of hours.");
+      return;
+    }
+    const newHours = (Number(estimatedHours || 0) + Number(expandHoursInput)).toFixed(2);
+    setEstimatedHours(String(Number(newHours)));
+    setShowExpandDialog(false);
+    toast.success(`Estimate expanded by ${expandHoursInput} hours! Remember to save changes.`);
+  };
+
+  const handleRequestSubmit = () => {
+    if (!requestHoursInput || isNaN(Number(requestHoursInput)) || Number(requestHoursInput) <= 0) {
+      toast.error("Please enter a valid number of hours.");
+      return;
+    }
+    const reason = requestReasonInput.trim() || "Time extension needed to complete task";
+    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Request] Requested +${requestHoursInput} hours: ${reason} (Requested by ${userInfo?.name})`;
+    setTechnicalApproach(structNote);
+    setShowRequestDialog(false);
+    toast.success(`Time request for +${requestHoursInput} hours added to notes! Click Save Changes to submit.`);
+  };
+
+  const handleHandoverSubmit = () => {
+    const oldAssigneeName = issue && typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo.name : "Unassigned";
+    const reason = handoverReasonInput.trim() || "Engineer handover";
+    const handoverNote = `\n\n[Handover] Issue handed over from ${oldAssigneeName} to ${pendingAssigneeName} by ${userInfo?.name || "System"}. Reason: ${reason}`;
+    setTechnicalApproach((prev) => `${prev}${handoverNote}`);
+    setAssignedTo(pendingAssigneeId);
+    setShowHandoverDialog(false);
+    toast.success(`Handover to ${pendingAssigneeName} set! Please save changes to apply.`);
+  };
+
   // ──────────────────────────────────────────────────────────────
   // File Upload Handlers
   // ──────────────────────────────────────────────────────────────
@@ -271,6 +342,16 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
             })}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Warning Banner if Time Exceeded */}
+        {Number(estimatedHours || 0) > 0 && time > Number(estimatedHours || 0) * 3600 && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl text-xs font-semibold animate-pulse-soft mt-3">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>
+              Warning: Tracked time ({Math.floor(time / 60)} minutes) has exceeded the estimate of {Number(estimatedHours) * 60} minutes!
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 py-4">
           {/* Main Details Panel (Left / Col-Span-2) */}
@@ -396,14 +477,21 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               <select
                 id="status"
                 value={status}
+                disabled={issue.status === "Closed" && userInfo?.role !== "super_admin"}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+                className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-75 disabled:cursor-not-allowed"
               >
-                {KANBAN_COLUMNS.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
+                {ISSUE_STATUSES.map((col) => {
+                  // Only super_admin can change status to "Closed"
+                  if (col === "Closed" && userInfo?.role !== "super_admin" && issue.status !== "Closed") {
+                    return null;
+                  }
+                  return (
+                    <option key={col} value={col}>
+                      {col}
+                    </option>
+                  );
+                })}
               </select>
             </div>
 
@@ -472,9 +560,16 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
               {/* Estimated Hours */}
               <div className="space-y-1.5 pt-2 border-t border-[var(--border)]">
-                <Label htmlFor="estimatedHours" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Est. Hours
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="estimatedHours" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Est. Hours
+                  </Label>
+                  {estimatedHours && (
+                    <span className="text-[10px] font-semibold text-[var(--text-tertiary)]">
+                      ({Number(estimatedHours) * 60} mins)
+                    </span>
+                  )}
+                </div>
                 <Input
                   id="estimatedHours"
                   type="number"
@@ -485,16 +580,58 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                 />
               </div>
 
-              {/* Assignment (Admins/Managers only) */}
+              {/* Adjust / Expand Time Actions */}
+              <div className="flex gap-2 pt-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setExpandHoursInput("1");
+                    setShowExpandDialog(true);
+                  }}
+                  className="flex-1 h-7 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)]"
+                >
+                  + Expand Time
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setRequestHoursInput("1");
+                    setRequestReasonInput("");
+                    setShowRequestDialog(true);
+                  }}
+                  className="flex-1 h-7 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)]"
+                >
+                  ✉ Request Time
+                </Button>
+              </div>
+
+              {/* Assignment (Admins/Managers/Assigned Engineers Handover) */}
               <div className="space-y-1.5 pt-1">
                 <Label htmlFor="assignedTo" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Assigned Engineer
+                  Assigned Engineer {canHandover && !isManager && "(Handover enabled)"}
                 </Label>
                 <select
                   id="assignedTo"
                   value={assignedTo}
-                  disabled={!isManager}
-                  onChange={(e) => setAssignedTo(e.target.value)}
+                  disabled={!canHandover}
+                  onChange={(e) => {
+                    const newAssigneeId = e.target.value;
+                    const oldAssigneeName = issue && typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo.name : "Unassigned";
+                    const newAssigneeName = users.find((u) => u._id === newAssigneeId)?.name || "Unassigned";
+                    
+                    if (newAssigneeId !== currentAssigneeId) {
+                      setPendingAssigneeId(newAssigneeId);
+                      setPendingAssigneeName(newAssigneeName);
+                      setHandoverReasonInput("");
+                      setShowHandoverDialog(true);
+                    } else {
+                      setAssignedTo(newAssigneeId);
+                    }
+                  }}
                   className="w-full h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-70"
                 >
                   <option value="">Unassigned</option>
@@ -510,33 +647,173 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
         </div>
 
         {/* Footer Actions */}
-        <DialogFooter className="pt-4 gap-2 border-t border-[var(--border)]">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={updateIssueMutation.isPending}
-            className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={updateIssueMutation.isPending}
-            className="h-10 text-sm font-semibold bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow hover:opacity-90 transition-opacity"
-          >
-            {updateIssueMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
-            )}
-          </Button>
+        <DialogFooter className="pt-4 gap-2 border-t border-[var(--border)] flex items-center justify-between">
+          {userInfo?.role === "super_admin" && (
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting || updateIssueMutation.isPending}
+              className="mr-auto h-10 text-sm font-semibold bg-red-600 hover:bg-red-700 text-white shadow"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Issue"
+              )}
+            </Button>
+          )}
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={updateIssueMutation.isPending || isDeleting}
+              className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={updateIssueMutation.isPending || isDeleting}
+              className="h-10 text-sm font-semibold bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow hover:opacity-90 transition-opacity"
+            >
+              {updateIssueMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  Saving...
+                </>
+              ) : (
+                "Save Changes"
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Expand Time Custom Dialog */}
+      <Dialog open={showExpandDialog} onOpenChange={setShowExpandDialog}>
+        <DialogContent className="max-w-md bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">Expand Estimated Time</DialogTitle>
+            <DialogDescription className="text-xs text-[var(--text-secondary)]">
+              Directly adjust the estimate by adding additional hours.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="expandHours" className="text-xs font-semibold">Additional Hours</Label>
+            <Input
+              id="expandHours"
+              type="number"
+              min="0.1"
+              step="0.1"
+              value={expandHoursInput}
+              onChange={(e) => setExpandHoursInput(e.target.value)}
+              className="h-10 text-sm"
+              placeholder="e.g. 1 or 0.5"
+            />
+            {expandHoursInput && !isNaN(Number(expandHoursInput)) && (
+              <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                Equivalent to {Number(expandHoursInput) * 60} minutes
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowExpandDialog(false)} className="h-9 text-xs">
+              Cancel
+            </Button>
+            <Button onClick={handleExpandSubmit} className="h-9 text-xs bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+              Expand Time
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request Time Custom Dialog */}
+      <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
+        <DialogContent className="max-w-md bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">Request More Time</DialogTitle>
+            <DialogDescription className="text-xs text-[var(--text-secondary)]">
+              Submit a formal request for manager approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="requestHours" className="text-xs font-semibold">Additional Hours Needed</Label>
+              <Input
+                id="requestHours"
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={requestHoursInput}
+                onChange={(e) => setRequestHoursInput(e.target.value)}
+                className="h-10 text-sm"
+                placeholder="e.g. 1.5"
+              />
+              {requestHoursInput && !isNaN(Number(requestHoursInput)) && (
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  Equivalent to {Number(requestHoursInput) * 60} minutes
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="requestReason" className="text-xs font-semibold">Reason for Request</Label>
+              <Textarea
+                id="requestReason"
+                rows={3}
+                value={requestReasonInput}
+                onChange={(e) => setRequestReasonInput(e.target.value)}
+                className="text-sm bg-[var(--background)] border-[var(--border)]"
+                placeholder="Brief explanation for the extension..."
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowRequestDialog(false)} className="h-9 text-xs">
+              Cancel
+            </Button>
+            <Button onClick={handleRequestSubmit} className="h-9 text-xs bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Handover Custom Dialog */}
+      <Dialog open={showHandoverDialog} onOpenChange={setShowHandoverDialog}>
+        <DialogContent className="max-w-md bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold">Handover Issue</DialogTitle>
+            <DialogDescription className="text-xs text-[var(--text-secondary)]">
+              Specify the reason for handing this issue over to {pendingAssigneeName}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="handoverReason" className="text-xs font-semibold">Reason for Handover</Label>
+            <Textarea
+              id="handoverReason"
+              rows={3}
+              value={handoverReasonInput}
+              onChange={(e) => setHandoverReasonInput(e.target.value)}
+              className="text-sm bg-[var(--background)] border-[var(--border)]"
+              placeholder="e.g., Cannot continue working on this due to scheduling, shift end, etc."
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowHandoverDialog(false)} className="h-9 text-xs">
+              Cancel
+            </Button>
+            <Button onClick={handleHandoverSubmit} className="h-9 text-xs bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+              Confirm Handover
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

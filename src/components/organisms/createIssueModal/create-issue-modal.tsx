@@ -84,7 +84,7 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
   const createIssueMutation = useCreateIssue();
   const uploadAttachmentsMutation = useUploadAttachments();
   const { data: clientsData } = useGetAllClients();
-  const { data: projectsData } = useGetAllProjects(form.client || undefined);
+  const { data: projectsData } = useGetAllProjects();
   const { data: usersData } = useGetAllUsers();
 
   // Reset form when dialog closes
@@ -100,11 +100,6 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Reset project when client changes
-  useEffect(() => {
-    setForm((prev) => ({ ...prev, project: "" }));
-  }, [form.client]);
-
   const clients: Client[] = clientsData?.data ?? [];
   const projects: Project[] = projectsData?.data ?? [];
   const users: User[] = usersData ?? [];
@@ -118,6 +113,52 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
         return next;
       });
     }
+  };
+
+  const handleClientChange = (clientId: string) => {
+    setForm((prev) => {
+      const next = { ...prev, client: clientId };
+      // If the selected project does not belong to the selected client, clear the project
+      if (prev.project) {
+        const proj = projects.find((p) => p._id === prev.project);
+        if (proj) {
+          const projClient = typeof proj.client === "object" ? proj.client?._id : proj.client;
+          if (projClient !== clientId && clientId !== "") {
+            next.project = "";
+          }
+        }
+      }
+      return next;
+    });
+
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.client;
+      return next;
+    });
+  };
+
+  const handleProjectChange = (projectId: string) => {
+    setForm((prev) => {
+      const next = { ...prev, project: projectId };
+      // Resolve client from the selected project if available
+      const proj = projects.find((p) => p._id === projectId);
+      if (proj && proj.client) {
+        if (typeof proj.client === "object") {
+          next.client = proj.client._id;
+        } else {
+          next.client = proj.client;
+        }
+      }
+      return next;
+    });
+
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next.project;
+      delete next.client;
+      return next;
+    });
   };
 
   // ── File handling ──────────────────────────────────────────
@@ -166,7 +207,6 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
     if (!form.title.trim()) errs.title = "Title is required";
     if (form.title.length > 150) errs.title = "Title must be 150 characters or less";
     if (!form.description.trim()) errs.description = "Description is required";
-    if (!form.client) errs.client = "Client is required";
     if (!form.project) errs.project = "Project is required";
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -252,17 +292,20 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="issue-client" className="text-sm font-semibold">
-                Client <span className="text-[var(--error)]">*</span>
+                Client <span className="text-xs font-normal text-[var(--text-tertiary)]">(Optional)</span>
               </Label>
               <Select
                 id="issue-client"
                 placeholder="Select client"
                 value={form.client}
-                onChange={(v) => handleChange("client", v)}
-                options={clients.map((c) => ({
-                  label: `${c.name} (${c.code})`,
-                  value: c._id,
-                }))}
+                onChange={handleClientChange}
+                options={[
+                  { label: "No Client / General Support", value: "" },
+                  ...clients.map((c) => ({
+                    label: `${c.name} (${c.code})`,
+                    value: c._id,
+                  })),
+                ]}
                 className={`h-11 text-sm ${errors.client ? "border-[var(--error)]" : ""}`}
               />
               {errors.client && (
@@ -277,11 +320,16 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
               </Label>
               <Select
                 id="issue-project"
-                placeholder={form.client ? "Select project" : "Select client first"}
+                placeholder="Select project"
                 value={form.project}
-                onChange={(v) => handleChange("project", v)}
-                options={projects.map((p) => ({ label: p.name, value: p._id }))}
-                disabled={!form.client}
+                onChange={handleProjectChange}
+                options={projects
+                  .filter((p) => {
+                    if (!form.client) return true;
+                    const projClient = typeof p.client === "object" ? p.client?._id : p.client;
+                    return projClient === form.client;
+                  })
+                  .map((p) => ({ label: p.name, value: p._id }))}
                 className={`h-11 text-sm ${errors.project ? "border-[var(--error)]" : ""}`}
               />
               {errors.project && (
@@ -344,8 +392,13 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="issue-hours" className="text-sm font-semibold">
-                Estimated Hours
+              <Label htmlFor="issue-hours" className="text-sm font-semibold flex items-center justify-between">
+                <span>Estimated Hours</span>
+                {form.estimatedHours && (
+                  <span className="text-xs font-normal text-[var(--text-tertiary)] bg-[var(--surface-hover)] px-2 py-0.5 rounded-md">
+                    {Number(form.estimatedHours) * 60} minutes
+                  </span>
+                )}
               </Label>
               <Input
                 id="issue-hours"
