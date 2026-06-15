@@ -6,7 +6,7 @@ import {
   ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare, Plus,
   Calendar, Mail, Phone, Tag, Users, BarChart3, GitBranch,
   Kanban, Pencil, Trash2, ChevronRight, ChevronDown,
-  AlertCircle, Clock, CheckCircle2,
+  AlertCircle, Clock, CheckCircle2, GitPullRequest, List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,9 @@ import { StatCard } from "@/components/atoms/statCard";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { TaskFormModal } from "@/components/organisms/taskFormModal/task-form-modal";
 import { KanbanBoard } from "@/components/organisms/kanbanBoard/kanban-board";
+import { CRFormModal } from "@/components/organisms/crFormModal/cr-form-modal";
+import { CRDetailDrawer } from "@/components/organisms/crDetailDrawer/cr-detail-drawer";
+import { CRKanbanBoard } from "@/components/organisms/crKanbanBoard/cr-kanban-board";
 import { useGetProjectById } from "@/api/services/project-management/project-service";
 import { useGetIssues } from "@/api/services/issue-management/issue-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
@@ -25,6 +28,10 @@ import {
   useGetProjectTasks, useDeleteTask,
   type Task, type TaskStatus,
 } from "@/api/services/project-management/task-service";
+import {
+  useGetProjectCRs, useGetCRStats, useDeleteCR,
+  type ChangeRequest, type CRStatus,
+} from "@/api/services/project-management/cr-service";
 import type { User } from "@/api/services/user-management/user-service";
 import { toast } from "sonner";
 
@@ -45,6 +52,18 @@ const PRIORITY_DOT: Record<string, string> = {
   Critical: "bg-red-500", High: "bg-orange-500", Medium: "bg-yellow-400", Low: "bg-green-500",
 };
 
+const CR_STATUS_BADGE: Record<string, string> = {
+  "Draft": "bg-slate-100 text-slate-600 border-slate-200",
+  "Submitted": "bg-blue-50 text-blue-700 border-blue-200",
+  "Under Review": "bg-yellow-50 text-yellow-700 border-yellow-200",
+  "Approved": "bg-emerald-50 text-emerald-700 border-emerald-200",
+  "Rejected": "bg-red-50 text-red-600 border-red-200",
+  "In Development": "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Testing": "bg-purple-50 text-purple-700 border-purple-200",
+  "Completed": "bg-green-50 text-green-700 border-green-200",
+  "Closed": "bg-gray-100 text-gray-500 border-gray-200",
+};
+
 function fmtDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -52,6 +71,11 @@ function fmtDate(d?: string | null) {
 
 function getInitials(name: string) {
   return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
+}
+
+function getParentId(t: Task): string | null {
+  if (!t.parent) return null;
+  return typeof t.parent === "object" ? (t.parent as { _id: string })._id : t.parent;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -157,7 +181,7 @@ function HierarchyRow({
       {expanded && hasChildren && children.map((child) => (
         <HierarchyRow
           key={child._id} task={child} depth={depth + 1}
-          children={allTasks.filter((t) => t.parent === child._id)}
+          children={allTasks.filter((t) => getParentId(t) === child._id)}
           allTasks={allTasks} onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
         />
       ))}
@@ -166,7 +190,7 @@ function HierarchyRow({
 }
 
 // ─────────────────────────────────────────────────────────────
-// Tasks Tab — delegates to KanbanBoard + Hierarchy view
+// Tasks Tab
 // ─────────────────────────────────────────────────────────────
 function TasksTab({ projectId, members }: { projectId: string; members: User[] }) {
   const [taskView, setTaskView] = useState<"hierarchy" | "kanban">("kanban");
@@ -178,13 +202,7 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
   const { data: tasks = [], isLoading } = useGetProjectTasks(projectId);
   const deleteMutation = useDeleteTask(projectId);
 
-  const rootTasks = useMemo(() => tasks.filter((t) => !t.parent), [tasks]);
-
-  const tasksByStatus = useMemo(() => {
-    const map: Record<TaskStatus, Task[]> = { "To Do": [], "In Progress": [], "Review": [], "Done": [] };
-    tasks.forEach((t) => { if (map[t.status]) map[t.status].push(t); });
-    return map;
-  }, [tasks]);
+  const rootTasks = useMemo(() => tasks.filter((t) => !getParentId(t)), [tasks]);
 
   const handleEdit = (t: Task) => { setEditingTask(t); setParentTask(null); setShowForm(true); };
   const handleAddChild = (t: Task) => { setEditingTask(null); setParentTask(t); setShowForm(true); };
@@ -199,7 +217,6 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
 
   return (
     <div className="space-y-4">
-      {/* View Toggle */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
           <button onClick={() => setTaskView("hierarchy")}
@@ -224,7 +241,6 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
         )}
       </div>
 
-      {/* Kanban View — full interactive board */}
       {taskView === "kanban" ? (
         <KanbanBoard projectId={projectId} members={members} />
       ) : isLoading ? (
@@ -240,7 +256,6 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
           </Button>
         </div>
       ) : (
-        /* Hierarchy View */
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex-1 pl-10">Task Name</span>
@@ -253,7 +268,7 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
           <div className="divide-y divide-[var(--border)]">
             {rootTasks.map((t) => (
               <HierarchyRow key={t._id} task={t} depth={0}
-                children={tasks.filter((c) => c.parent === t._id)}
+                children={tasks.filter((c) => getParentId(c) === t._id)}
                 allTasks={tasks}
                 onEdit={handleEdit}
                 onDelete={(t) => setTaskToDelete(t)}
@@ -264,7 +279,6 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
         </div>
       )}
 
-      {/* Form modal (hierarchy view only — kanban has its own) */}
       {taskView === "hierarchy" && (
         <>
           {showForm && (
@@ -289,6 +303,185 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
           />
         </>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CR Tab
+// ─────────────────────────────────────────────────────────────
+function CRTab({ projectId, members }: { projectId: string; members: User[] }) {
+  const [crView, setCRView] = useState<"list" | "kanban">("kanban");
+  const [showForm, setShowForm] = useState(false);
+  const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
+  const [drawerCR, setDrawerCR] = useState<ChangeRequest | null>(null);
+  const [crToDelete, setCRToDelete] = useState<ChangeRequest | null>(null);
+  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("Draft");
+
+  const { data: crsData, isLoading: crsLoading } = useGetProjectCRs(projectId);
+  const { data: stats } = useGetCRStats(projectId);
+  const deleteMutation = useDeleteCR(projectId);
+
+  const crs = crsData?.data ?? [];
+
+  // Keep drawer CR in sync with latest data
+  const currentDrawerCR = useMemo(
+    () => drawerCR ? crs.find((c) => c._id === drawerCR._id) ?? drawerCR : null,
+    [drawerCR, crs]
+  );
+
+  const handleDeleteConfirm = async () => {
+    if (!crToDelete) return;
+    try {
+      await deleteMutation.mutateAsync(crToDelete._id);
+      toast.success("Change request deleted.");
+      setCRToDelete(null);
+      if (drawerCR?._id === crToDelete._id) setDrawerCR(null);
+    } catch { toast.error("Failed to delete CR."); }
+  };
+
+  const statItems = [
+    { label: "Total CRs", value: stats?.total ?? 0, color: "text-[var(--primary)]" },
+    { label: "Open", value: stats?.open ?? 0, color: "text-blue-600" },
+    { label: "Approved", value: stats?.approved ?? 0, color: "text-emerald-600" },
+    { label: "In Dev", value: stats?.inDevelopment ?? 0, color: "text-indigo-600" },
+    { label: "Completed", value: stats?.completed ?? 0, color: "text-green-600" },
+    { label: "Rejected", value: stats?.rejected ?? 0, color: "text-red-500" },
+    { label: "Est. Hours", value: `${stats?.totalEstimatedHours ?? 0}h`, color: "text-[var(--text-primary)]" },
+  ];
+
+  return (
+    <div className="space-y-5">
+      {/* Stats row */}
+      <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
+        {statItems.map(({ label, value, color }) => (
+          <div key={label} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
+            <p className={`text-lg font-bold ${color}`}>{value}</p>
+            <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 font-medium">{label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+          <button onClick={() => setCRView("list")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              crView === "list" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+            }`}>
+            <List className="h-3.5 w-3.5" /> List
+          </button>
+          <button onClick={() => setCRView("kanban")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+              crView === "kanban" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+            }`}>
+            <Kanban className="h-3.5 w-3.5" /> Kanban
+          </button>
+        </div>
+
+        {crView === "list" && (
+          <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
+            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9">
+            <Plus className="h-3.5 w-3.5" /> New Change Request
+          </Button>
+        )}
+      </div>
+
+      {/* Kanban View */}
+      {crView === "kanban" && (
+        <CRKanbanBoard
+          projectId={projectId}
+          members={members}
+          onCRClick={(cr) => setDrawerCR(cr)}
+          onEdit={(cr) => { setEditingCR(cr); setShowForm(true); }}
+          onDelete={(cr) => setCRToDelete(cr)}
+          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "Draft"); setShowForm(true); }}
+        />
+      )}
+
+      {/* List View */}
+      {crView === "list" && (
+        crsLoading ? (
+          <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />)}</div>
+        ) : crs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <GitPullRequest className="h-10 w-10 text-[var(--text-tertiary)] mb-3" />
+            <p className="text-sm font-semibold text-[var(--text-primary)]">No change requests yet</p>
+            <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">Create your first CR to start tracking changes.</p>
+            <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
+              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+              <Plus className="h-3.5 w-3.5" /> New Change Request
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 border-b border-[var(--border)] bg-[var(--background)]">
+              {["CR #", "Title", "Type", "Priority", "Status", "Requested By", "Est. Hrs", "Target Date"].map((h) => (
+                <span key={h} className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{h}</span>
+              ))}
+            </div>
+            <div className="divide-y divide-[var(--border)]">
+              {crs.map((cr) => {
+                const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
+                return (
+                  <div
+                    key={cr._id}
+                    onClick={() => setDrawerCR(cr)}
+                    className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-3 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer items-center group"
+                  >
+                    <span className="text-[10px] font-mono text-[var(--text-tertiary)] truncate">{cr.crNumber}</span>
+                    <span className="text-sm font-medium text-[var(--text-primary)] truncate group-hover:text-[var(--primary)] transition-colors">{cr.title}</span>
+                    <span className="text-xs text-[var(--text-secondary)] truncate">{cr.crType}</span>
+                    <span className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
+                      <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[cr.priority]}`} />{cr.priority}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border w-fit ${CR_STATUS_BADGE[cr.status] ?? ""}`}>{cr.status}</span>
+                    <span className="text-xs text-[var(--text-secondary)] truncate">{cr.requestedBy || "—"}</span>
+                    <span className="text-xs text-[var(--text-secondary)]">{cr.estimatedHours != null ? `${cr.estimatedHours}h` : "—"}</span>
+                    <span className="text-xs text-[var(--text-secondary)]">{fmtDate(cr.targetReleaseDate)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )
+      )}
+
+      {/* CR Form Modal */}
+      {showForm && (
+        <CRFormModal
+          open={showForm}
+          onOpenChange={(v) => { setShowForm(v); if (!v) setEditingCR(null); }}
+          projectId={projectId}
+          cr={editingCR}
+          availableMembers={members}
+        />
+      )}
+
+      {/* CR Detail Drawer */}
+      {currentDrawerCR && (
+        <CRDetailDrawer
+          cr={currentDrawerCR}
+          projectId={projectId}
+          members={members}
+          onClose={() => setDrawerCR(null)}
+          onEdit={(cr) => { setDrawerCR(null); setEditingCR(cr); setShowForm(true); }}
+          onDelete={(cr) => { setDrawerCR(null); setCRToDelete(cr); }}
+        />
+      )}
+
+      {/* Delete Confirm */}
+      <ConfirmDialog
+        open={!!crToDelete}
+        onOpenChange={(v) => { if (!v) setCRToDelete(null); }}
+        title="Delete Change Request"
+        description={`Delete "${crToDelete?.title}"? This action cannot be undone.`}
+        confirmLabel="Delete CR"
+        variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }
@@ -377,7 +570,6 @@ function DashboardTab({ projectId }: { projectId: string }) {
 
       {/* Two-column: Info + Contact */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Project Info */}
         <Card className="bg-[var(--surface)] border-[var(--border)]">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
@@ -407,7 +599,6 @@ function DashboardTab({ projectId }: { projectId: string }) {
           </CardContent>
         </Card>
 
-        {/* Contact */}
         <Card className="bg-[var(--surface)] border-[var(--border)]">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
@@ -506,7 +697,6 @@ export default function ProjectDetailPage() {
   const { data: project, isLoading } = useGetProjectById(projectId);
   const { data: allUsers = [] } = useGetAllUsers();
 
-  // Resolve members: use project.members if populated, else all users as fallback
   const members = useMemo(() => {
     if (!project) return allUsers;
     if (Array.isArray(project.members) && project.members.length > 0 && typeof project.members[0] === "object") {
@@ -565,6 +755,9 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="tasks" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <CheckSquare className="h-4 w-4" /> Tasks
           </TabsTrigger>
+          <TabsTrigger value="crs" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <GitPullRequest className="h-4 w-4" /> CR
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
@@ -573,6 +766,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="tasks">
           <TasksTab projectId={projectId} members={members} />
+        </TabsContent>
+
+        <TabsContent value="crs">
+          <CRTab projectId={projectId} members={members} />
         </TabsContent>
       </Tabs>
     </div>

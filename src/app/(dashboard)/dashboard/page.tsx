@@ -17,7 +17,8 @@ import {
   Square,
   ChevronRight,
 } from "lucide-react";
-import { StatCard, Badge, Card, CardContent, CardHeader, CardTitle } from "@/components";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components";
+import { StatCard } from "@/components/atoms/statCard";
 import { Progress } from "@/components/ui/progress";
 import useSessionStore from "@/store/session-store";
 import { ROLE_LABELS } from "@/lib/constants";
