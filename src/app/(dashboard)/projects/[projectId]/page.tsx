@@ -7,6 +7,7 @@ import {
   Calendar, Mail, Phone, Tag, Users, BarChart3, GitBranch,
   Kanban, Pencil, Trash2, ChevronRight, ChevronDown,
   AlertCircle, Clock, CheckCircle2, GitPullRequest, List, Ticket,
+  LayoutGrid, Eye, AlertTriangle, User as UserIcon, ChevronUp, SlidersHorizontal, Search, X as XIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

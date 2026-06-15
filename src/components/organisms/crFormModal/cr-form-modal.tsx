@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, GitPullRequest } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,6 +34,7 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
   const isEdit = !!cr;
   const createMutation = useCreateCR(projectId);
   const updateMutation = useUpdateCR(projectId);
+  const isPending = createMutation.isPending || updateMutation.isPending;
   const [activeSection, setActiveSection] = useState<Section>("basic");
 
   const emptyForm = {
@@ -113,18 +117,14 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
     } catch { toast.error("Failed to save change request"); }
   };
 
-  if (!open) return null;
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
   const SelectField = ({ label, field, options }: { label: string; field: keyof typeof form; options: string[] }) => (
     <div className="space-y-1.5">
-      <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
+      <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
       <div className="relative">
         <select
           value={form[field]}
           onChange={(e) => set(field, e.target.value)}
-          className="w-full h-9 appearance-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 pr-7 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+          className="w-full h-10 appearance-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 pr-7 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
         >
           {options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
@@ -140,27 +140,22 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => onOpenChange(false)}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <div
-        className="relative z-10 w-full max-w-2xl max-h-[90vh] bg-[var(--surface)] rounded-2xl border border-[var(--border)] shadow-2xl flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open={open} onOpenChange={(v) => { if (!isPending) onOpenChange(v); }}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-0 flex flex-col overflow-hidden">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-[var(--text-primary)]">
-              {isEdit ? "Edit Change Request" : "New Change Request"}
-            </h2>
-            {isEdit && <p className="text-xs text-[var(--text-secondary)] mt-0.5">{cr?.crNumber}</p>}
-          </div>
-          <button onClick={() => onOpenChange(false)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)]">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-[var(--border)] shrink-0">
+          <DialogTitle className="text-xl font-bold flex items-center gap-2">
+            <GitPullRequest className="h-5 w-5 text-[var(--primary)]" />
+            {isEdit ? "Edit Change Request" : "New Change Request"}
+          </DialogTitle>
+          <DialogDescription className="text-sm text-[var(--text-secondary)]">
+            {isEdit ? `Editing ${cr?.crNumber}` : "Fill in the details to create a new change request."}
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Tabs */}
-        <div className="flex border-b border-[var(--border)] px-6 shrink-0">
+        <div className="flex border-b border-[var(--border)] px-6 shrink-0 bg-[var(--surface)]">
           {tabs.map((t) => (
             <button key={t.key} type="button" onClick={() => setActiveSection(t.key)}
               className={`py-2.5 px-3 text-xs font-semibold border-b-2 -mb-px transition-all ${
@@ -180,9 +175,10 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
             {activeSection === "basic" && (
               <>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">CR Title *</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">CR Title *</Label>
                   <Input value={form.title} onChange={(e) => set("title", e.target.value)}
-                    placeholder="Describe the change request..." className="bg-[var(--background)] border-[var(--border)]" />
+                    placeholder="Describe the change request..."
+                    className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <SelectField label="CR Type" field="crType" options={CR_TYPES} />
@@ -190,19 +186,22 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                   <SelectField label="Status" field="status" options={CR_STATUSES} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Requested By</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Requested By</Label>
                   <Input value={form.requestedBy} onChange={(e) => set("requestedBy", e.target.value)}
-                    placeholder="Client contact name" className="bg-[var(--background)] border-[var(--border)]" />
+                    placeholder="Client contact name"
+                    className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
                   <Textarea value={form.description} onChange={(e) => set("description", e.target.value)}
-                    placeholder="Describe the change in detail..." className="bg-[var(--background)] border-[var(--border)] min-h-[100px] resize-none" />
+                    placeholder="Describe the change in detail..."
+                    className="bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] min-h-[100px] resize-none text-sm font-medium" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Business Justification</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Business Justification</Label>
                   <Textarea value={form.businessJustification} onChange={(e) => set("businessJustification", e.target.value)}
-                    placeholder="Why is this change needed?" className="bg-[var(--background)] border-[var(--border)] min-h-[80px] resize-none" />
+                    placeholder="Why is this change needed?"
+                    className="bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] min-h-[80px] resize-none text-sm font-medium" />
                 </div>
               </>
             )}
@@ -211,29 +210,34 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Requested Date</Label>
-                    <Input type="date" value={form.requestedDate} onChange={(e) => set("requestedDate", e.target.value)} className="bg-[var(--background)] border-[var(--border)]" />
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Requested Date</Label>
+                    <Input type="date" value={form.requestedDate} onChange={(e) => set("requestedDate", e.target.value)}
+                      className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Target Release Date</Label>
-                    <Input type="date" value={form.targetReleaseDate} onChange={(e) => set("targetReleaseDate", e.target.value)} className="bg-[var(--background)] border-[var(--border)]" />
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Target Release Date</Label>
+                    <Input type="date" value={form.targetReleaseDate} onChange={(e) => set("targetReleaseDate", e.target.value)}
+                      className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Estimated Hours</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Estimated Hours</Label>
                     <Input type="number" min="0" step="0.5" value={form.estimatedHours} onChange={(e) => set("estimatedHours", e.target.value)}
-                      placeholder="0" className="bg-[var(--background)] border-[var(--border)]" />
+                      placeholder="0"
+                      className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Estimated Cost ($)</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Estimated Cost (LKR)</Label>
                     <Input type="number" min="0" step="0.01" value={form.estimatedCost} onChange={(e) => set("estimatedCost", e.target.value)}
-                      placeholder="0.00" className="bg-[var(--background)] border-[var(--border)]" />
+                      placeholder="0.00"
+                      className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium" />
                   </div>
                 </div>
+
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Project Manager</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Project Manager</Label>
                   <div className="relative">
                     <select value={form.assignedProjectManager} onChange={(e) => set("assignedProjectManager", e.target.value)}
-                      className="w-full h-9 appearance-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 pr-7 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]">
+                      className="w-full h-10 appearance-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 pr-7 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]">
                       <option value="">— Unassigned —</option>
                       {availableMembers.filter((m) => ["super_admin", "manager", "senior_engineer"].includes(m.role)).map((m) => (
                         <option key={m._id} value={m._id}>{m.name}</option>
@@ -242,8 +246,9 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                     <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-xs">▾</span>
                   </div>
                 </div>
+
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Assigned Developers</Label>
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Assigned Developers</Label>
                   <div className="flex flex-wrap gap-1.5">
                     {availableMembers.filter((m) => m.role !== "intern").map((m) => {
                       const sel = assignedDevs.includes(m._id);
@@ -265,9 +270,10 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                     <p className="text-[10px] text-[var(--text-secondary)]">{assignedDevs.length} developer{assignedDevs.length !== 1 ? "s" : ""} selected</p>
                   )}
                 </div>
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
                     <button type="button" onClick={() => setLinks((p) => [...p, { label: "", url: "" }])}
                       className="text-xs text-[var(--primary)] font-semibold hover:underline flex items-center gap-1">
                       <Plus className="h-3 w-3" /> Add Link
@@ -277,10 +283,12 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                     <div key={i} className="flex gap-2">
                       <Input value={l.label}
                         onChange={(e) => setLinks((p) => p.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
-                        placeholder="Label" className="bg-[var(--background)] border-[var(--border)] text-sm w-28 shrink-0" />
+                        placeholder="Label"
+                        className="bg-[var(--background)] border-[var(--border)] text-sm w-28 shrink-0 h-10" />
                       <Input value={l.url}
                         onChange={(e) => setLinks((p) => p.map((x, j) => j === i ? { ...x, url: e.target.value } : x))}
-                        placeholder="https://..." className="bg-[var(--background)] border-[var(--border)] text-sm flex-1" />
+                        placeholder="https://..."
+                        className="bg-[var(--background)] border-[var(--border)] text-sm flex-1 h-10" />
                       <button type="button" onClick={() => setLinks((p) => p.filter((_, j) => j !== i))}
                         className="text-[var(--text-tertiary)] hover:text-red-500 shrink-0">
                         <Trash2 className="h-4 w-4" />
@@ -302,9 +310,10 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                   ] as { label: string; field: keyof typeof form; placeholder: string }[]
                 ).map(({ label, field, placeholder }) => (
                   <div key={field} className="space-y-1.5">
-                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
+                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
                     <Textarea value={form[field]} onChange={(e) => set(field, e.target.value)}
-                      placeholder={placeholder} className="bg-[var(--background)] border-[var(--border)] min-h-[80px] resize-none" />
+                      placeholder={placeholder}
+                      className="bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] min-h-[80px] resize-none text-sm font-medium" />
                   </div>
                 ))}
               </>
@@ -312,27 +321,32 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[var(--border)] bg-[var(--background)] shrink-0">
+          <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-[var(--border)] bg-[var(--surface)] shrink-0">
             <div className="flex gap-1.5">
               {tabs.map((t) => (
                 <span key={t.key} className={`h-1.5 w-6 rounded-full transition-all ${activeSection === t.key ? "bg-[var(--primary)]" : "bg-[var(--border)]"}`} />
               ))}
             </div>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-9">Cancel</Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={isPending}
+                className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]">
+                Cancel
+              </Button>
               {activeSection !== "details" && (
-                <Button type="button" size="sm" variant="outline"
+                <Button type="button" size="sm" variant="outline" disabled={isPending}
                   onClick={() => setActiveSection(activeSection === "basic" ? "team" : "details")}
-                  className="h-9">Next →</Button>
+                  className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]">
+                  Next →
+                </Button>
               )}
               <Button type="submit" size="sm" disabled={isPending}
-                className="h-9 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white gap-1.5">
+                className="h-10 text-sm font-semibold bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow hover:opacity-90 transition-opacity">
                 {isPending ? "Saving..." : isEdit ? "Save Changes" : "Create CR"}
               </Button>
             </div>
           </div>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
