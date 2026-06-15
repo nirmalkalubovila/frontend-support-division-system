@@ -7,4 +7,7 @@ export { ProjectFormModal } from "./projectFormModal/project-form-modal";
 export { ProjectViewModal } from "./projectViewModal/project-view-modal";
 export { TaskFormModal } from "./taskFormModal/task-form-modal";
 export { KanbanBoard } from "./kanbanBoard/kanban-board";
+export { ManagementDashboard } from "./dashboard/ManagementDashboard";
+export { SeniorLeadDashboard } from "./dashboard/SeniorLeadDashboard";
+export { EngineerDashboard } from "./dashboard/EngineerDashboard";
 

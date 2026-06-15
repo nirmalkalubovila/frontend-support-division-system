@@ -388,7 +388,7 @@ export default function SystemPage() {
         <TabsContent value="priorities" className="mt-4 space-y-4">
           <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
             <CardHeader>
-              <CardTitle className="text-base text-[var(--text-primary)]">SLA Configuration</CardTitle>
+              <CardTitle className="text-base text-[var(--text-primary)]">Service Level Agreements (SLA) Configuration</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingPriorities ? (

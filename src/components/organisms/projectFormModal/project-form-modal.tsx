@@ -16,6 +16,8 @@ import {
   useCreateProject, useUpdateProject,
   type Project, type CreateProjectPayload, type MainContact,
 } from "@/api/services/project-management/project-service";
+import { useGetAllClients } from "@/api/services/project-management/client-service";
+import { useGetAllUsers } from "@/api/services/user-management/user-service";
 
 const PROJECT_TYPES = ["New Development", "CR", "Support"] as const;
 
@@ -42,6 +44,10 @@ const makeEmptyForm = () => ({
   projectType: [] as string[],
   techStack: [] as string[],
   mainContact: { name: "", email: "", phone: "" } as MainContact,
+  client: "",
+  contractType: "" as any,
+  allocatedHours: 0,
+  members: [] as string[],
 });
 
 export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormModalProps) {
@@ -49,6 +55,9 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
   const isPending = createMutation.isPending || updateMutation.isPending;
+
+  const { data: clients } = useGetAllClients();
+  const { data: users } = useGetAllUsers();
 
   const [form, setForm] = useState(makeEmptyForm());
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -75,6 +84,10 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
           email: project.mainContact?.email || "",
           phone: project.mainContact?.phone || "",
         },
+        client: typeof project.client === "object" && project.client ? project.client._id : (project.client || ""),
+        contractType: project.contractType || "",
+        allocatedHours: project.allocatedHours || 0,
+        members: project.members ? project.members.map((m: any) => typeof m === "object" ? m._id : m) : [],
       });
       setPhotoPreview(project.photo ? `http://localhost:5001${project.photo}` : null);
     } else {
@@ -149,6 +162,10 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
         phone: form.mainContact.phone || null,
       },
       photo: photoFile,
+      client: form.client || null,
+      contractType: form.contractType || null,
+      allocatedHours: Number(form.allocatedHours) || 0,
+      members: form.members,
     };
 
     try {
@@ -326,6 +343,98 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                     {type}
                   </button>
                 ))}
+              </div>
+            </div>
+          </section>
+
+          {/* ── Retainer & Contract Configuration ─────────── */}
+          <section className="space-y-4 pt-2 border-t border-[var(--border)]">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Retainer & Contract Details
+            </h3>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Client Dropdown */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Client
+                </Label>
+                <select
+                  value={form.client}
+                  onChange={(e) => setForm((p) => ({ ...p, client: e.target.value }))}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium"
+                >
+                  <option value="">Select Client</option>
+                  {clients?.data?.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name} ({c.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Contract Type Dropdown */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Contract Type
+                </Label>
+                <select
+                  value={form.contractType}
+                  onChange={(e) => setForm((p) => ({ ...p, contractType: e.target.value as any }))}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--text-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] font-medium"
+                >
+                  <option value="">Select Contract Type</option>
+                  <option value="Monthly Retainer">Monthly Retainer</option>
+                  <option value="Per-Incident">Per-Incident</option>
+                  <option value="Time & Material">Time & Material</option>
+                  <option value="Fixed">Fixed Price</option>
+                </select>
+              </div>
+
+              {/* Allocated Hours */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Allocated Hours
+                </Label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 50"
+                  value={form.allocatedHours}
+                  onChange={(e) => setForm((p) => ({ ...p, allocatedHours: Number(e.target.value) }))}
+                  className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
+                  min={0}
+                />
+              </div>
+            </div>
+
+            {/* Team Members Allocation */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
+                Assigned Team Members
+              </Label>
+              <div className="grid grid-cols-2 gap-2 p-3 rounded-xl border border-[var(--border)] bg-[var(--background)] max-h-36 overflow-y-auto">
+                {users?.map((u) => {
+                  const isChecked = form.members.includes(u._id);
+                  return (
+                    <label key={u._id} className="flex items-center gap-2 text-xs font-medium cursor-pointer text-[var(--text-primary)] select-none">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm((prev) => ({
+                            ...prev,
+                            members: checked
+                              ? [...prev.members, u._id]
+                              : prev.members.filter((id) => id !== u._id),
+                          }));
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] h-4 w-4"
+                      />
+                      <span>{u.name} ({u.designation || u.role})</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           </section>
