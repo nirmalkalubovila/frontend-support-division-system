@@ -30,6 +30,7 @@ import { useCreateIssue, useUploadAttachments } from "@/api/services/issue-manag
 import { useGetAllClients, type Client } from "@/api/services/project-management/client-service";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
+import { useGetCategories } from "@/api/services/system/settings-service";
 
 interface CreateIssueModalProps {
   open: boolean;
@@ -86,8 +87,11 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
   const { data: clientsData } = useGetAllClients();
   const { data: projectsData } = useGetAllProjects();
   const { data: usersData } = useGetAllUsers();
+  const { data: categories = [] } = useGetCategories();
 
-  // Reset form when dialog closes
+  const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
+
+  // Reset form when dialog closes or initialize type when categories load
   useEffect(() => {
     if (!open) {
       setForm(initialForm);
@@ -96,9 +100,12 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
       // Revoke preview URLs
       filePreviews.forEach((url) => URL.revokeObjectURL(url));
       setFilePreviews([]);
+    } else {
+      const defaultType = categories.length > 0 ? categories[0] : "Bug";
+      setForm((prev) => ({ ...prev, type: prev.type === "Bug" ? defaultType : prev.type }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, categories]);
 
   const clients: Client[] = clientsData?.data ?? [];
   const projects: Project[] = projectsData?.data ?? [];
@@ -223,13 +230,7 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
         client: form.client,
         project: form.project,
         priority: form.priority as "Critical" | "High" | "Medium" | "Low",
-        type: form.type as
-          | "Bug"
-          | "Feature Request"
-          | "Access Issue"
-          | "Data Correction"
-          | "Performance"
-          | "Consultation",
+        type: form.type,
         assignedTo: form.assignedTo || null,
         estimatedHours: form.estimatedHours ? Number(form.estimatedHours) : null,
       });
@@ -362,7 +363,7 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
                 id="issue-type"
                 value={form.type}
                 onChange={(v) => handleChange("type", v)}
-                options={ISSUE_TYPES.map((t) => ({ label: t, value: t }))}
+                options={issueTypes.map((t) => ({ label: t, value: t }))}
                 className="h-11 text-sm"
               />
             </div>

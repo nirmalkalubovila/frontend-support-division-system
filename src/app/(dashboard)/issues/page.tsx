@@ -28,6 +28,7 @@ import { CreateIssueModal, IssueDetailsModal } from "@/components";
 import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES } from "@/lib/constants";
 import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
+import { useGetCategories } from "@/api/services/system/settings-service";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
@@ -562,6 +563,9 @@ export default function IssuesPage() {
   const [mounted, setMounted] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
+  const { data: categories = [] } = useGetCategories();
+  const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -762,7 +766,7 @@ export default function IssuesPage() {
             onChange={(v) => setFilterType(v)}
             options={[
               { label: "All Types", value: "" },
-              ...ISSUE_TYPES.map((t) => ({ label: t, value: t })),
+              ...issueTypes.map((t) => ({ label: t, value: t })),
             ]}
             className="w-48 h-9.5 bg-[var(--background)]"
           />

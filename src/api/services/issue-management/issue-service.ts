@@ -9,13 +9,7 @@ import type { Project } from "../project-management/project-service";
 // ──────────────────────────────────────────────────────────────
 
 export type IssuePriority = "Critical" | "High" | "Medium" | "Low";
-export type IssueType =
-  | "Bug"
-  | "Feature Request"
-  | "Access Issue"
-  | "Data Correction"
-  | "Performance"
-  | "Consultation";
+export type IssueType = string;
 
 export interface IssueAssignee {
   _id: string;
