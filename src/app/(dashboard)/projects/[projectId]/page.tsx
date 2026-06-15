@@ -6,7 +6,7 @@ import {
   ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare, Plus,
   Calendar, Mail, Phone, Tag, Users, BarChart3, GitBranch,
   Kanban, Pencil, Trash2, ChevronRight, ChevronDown,
-  AlertCircle, Clock, CheckCircle2, GitPullRequest, List,
+  AlertCircle, Clock, CheckCircle2, GitPullRequest, List, Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -192,7 +192,7 @@ function HierarchyRow({
 // ─────────────────────────────────────────────────────────────
 // Tasks Tab
 // ─────────────────────────────────────────────────────────────
-function TasksTab({ projectId, members }: { projectId: string; members: User[] }) {
+export function TasksTab({ projectId, members }: { projectId: string; members: User[] }) {
   const [taskView, setTaskView] = useState<"hierarchy" | "kanban">("kanban");
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -310,7 +310,7 @@ function TasksTab({ projectId, members }: { projectId: string; members: User[] }
 // ─────────────────────────────────────────────────────────────
 // CR Tab
 // ─────────────────────────────────────────────────────────────
-function CRTab({ projectId, members }: { projectId: string; members: User[] }) {
+export function CRTab({ projectId, members }: { projectId: string; members: User[] }) {
   const [crView, setCRView] = useState<"list" | "kanban">("kanban");
   const [showForm, setShowForm] = useState(false);
   const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
@@ -747,7 +747,15 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabbed Layout */}
-      <Tabs defaultValue="dashboard" className="space-y-4">
+      <Tabs 
+        defaultValue="dashboard" 
+        className="space-y-4"
+        onValueChange={(value) => {
+          if (value === "issues") {
+            router.push(`/issues?project=${projectId}`);
+          }
+        }}
+      >
         <TabsList className="bg-[var(--background)] border border-[var(--border)] h-10">
           <TabsTrigger value="dashboard" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <LayoutDashboard className="h-4 w-4" /> Dashboard
@@ -757,6 +765,9 @@ export default function ProjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="crs" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <GitPullRequest className="h-4 w-4" /> CR
+          </TabsTrigger>
+          <TabsTrigger value="issues" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <Ticket className="h-4 w-4" /> Issues
           </TabsTrigger>
         </TabsList>
 

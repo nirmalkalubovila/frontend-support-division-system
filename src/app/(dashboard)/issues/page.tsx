@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Ticket,
   Plus,
@@ -549,9 +550,9 @@ function ProjectCard({
 }
 
 // ──────────────────────────────────────────────────────────────
-// Main Issues Page
+// Main Issues Page Content
 // ──────────────────────────────────────────────────────────────
-export default function IssuesPage() {
+function IssuesPageContent() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -565,6 +566,14 @@ export default function IssuesPage() {
 
   const { data: categories = [] } = useGetCategories();
   const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
+  const searchParams = useSearchParams();
+  const projectQuery = searchParams.get("project") || searchParams.get("projectId");
+
+  useEffect(() => {
+    if (projectQuery) {
+      setActiveProjectId(projectQuery);
+    }
+  }, [projectQuery]);
 
   useEffect(() => {
     setMounted(true);
@@ -853,5 +862,17 @@ export default function IssuesPage() {
         onOpenChange={setShowDetailsModal}
       />
     </div>
+  );
+}
+
+export default function IssuesPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-[50vh]">
+        <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+      </div>
+    }>
+      <IssuesPageContent />
+    </Suspense>
   );
 }
