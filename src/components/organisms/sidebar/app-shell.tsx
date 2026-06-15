@@ -20,6 +20,8 @@ import {
   Ticket,
   User,
   Users,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import {
   Avatar,
@@ -38,6 +40,19 @@ import {
 import useSessionStore from "@/store/session-store";
 import useThemeStore from "@/store/theme-store";
 import { useHasPermission } from "@/hooks/use-permissions";
+import { useQueryClient } from "@tanstack/react-query";
+import { io } from "socket.io-client";
+import { toast } from "sonner";
+import {
+  useGetNotifications,
+  useMarkRead,
+  useMarkAllRead,
+} from "@/api/services/system/notification-service";
+
+const SOCKET_URL = (() => {
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api/v1";
+  return base.replace(/\/api\/v1\/?$/, "");
+})();
 
 const SIDEBAR_OPEN = 220;
 const SIDEBAR_CLOSED = 56;
@@ -115,9 +130,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(true);
   const pathname = usePathname();
   const userInfo = useSessionStore((s) => s.userInfo);
+  const accessToken = useSessionStore((s) => s.accessToken);
   const clearSession = useSessionStore((s) => s.clearSession);
   const { theme, setTheme, companyName, slogan, logoUrl } = useThemeStore();
   const [mounted, setMounted] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Fetch notifications
+  const { data: notificationsData } = useGetNotifications({ limit: 5 });
+  const unreadCount = notificationsData?.unreadCount ?? 0;
+  const notificationsList = notificationsData?.results ?? [];
+
+  const markReadMutation = useMarkRead();
+  const markAllReadMutation = useMarkAllRead();
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const socket = io(SOCKET_URL, {
+      auth: { token: accessToken },
+      transports: ["websocket", "polling"],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1500,
+    });
+
+    socket.on("connect", () => {
+      console.log("Notification socket connected");
+    });
+
+    socket.on("new_notification", (notification: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/notifications"] });
+
+      // Display premium browser toast
+      toast(notification.title || "New Alert", {
+        description: notification.message,
+        action: notification.relatedLink ? {
+          label: "View",
+          onClick: () => {
+            window.location.href = notification.relatedLink;
+          }
+        } : undefined,
+      });
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [accessToken, queryClient]);
+
+  const handleNotificationClick = (notification: any) => {
+    if (!notification.readStatus) {
+      markReadMutation.mutate(notification._id);
+    }
+  };
+
+  const getNotificationIcon = (module: string, type: string) => {
+    switch (module) {
+      case "issues":
+        return <Ticket className="h-4 w-4 text-orange-500" />;
+      case "tasks":
+        return <CheckSquare className="h-4 w-4 text-blue-500" />;
+      case "crs":
+        return <GitPullRequest className="h-4 w-4 text-purple-500" />;
+      default:
+        if (type === "error") return <AlertCircle className="h-4 w-4 text-red-500" />;
+        if (type === "success") return <CheckCircle2 className="h-4 w-4 text-green-500" />;
+        return <Bell className="h-4 w-4 text-slate-500" />;
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -246,10 +326,81 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Button>
 
             {/* Notification Bell */}
-            <Button variant="ghost" size="icon" className="relative h-9 w-9">
-              <Bell className="h-4 w-4" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[var(--destructive)] animate-pulse-soft" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative h-9 w-9">
+                  <Bell className="h-4 w-4 text-[var(--text-secondary)]" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-1 min-w-[16px] h-4 rounded-full bg-[var(--destructive)] text-white text-[9px] font-bold flex items-center justify-center px-1 animate-pulse-soft border border-[var(--surface)]">
+                      {unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+
+              <DropdownMenuContent align="end" className="w-80 mt-2 max-h-[450px] overflow-y-auto flex flex-col p-1">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)] shrink-0">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">Notifications</span>
+                  {unreadCount > 0 && (
+                    <Button 
+                      variant="ghost" 
+                      className="h-auto p-0 text-[10px] text-[var(--primary)] hover:text-[var(--primary-hover)] font-medium"
+                      onClick={() => markAllReadMutation.mutate()}
+                      disabled={markAllReadMutation.isPending}
+                    >
+                      Mark all read
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex-1 divide-y divide-[var(--border)]">
+                  {notificationsList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
+                      <Bell className="h-8 w-8 text-[var(--text-tertiary)] mb-2 stroke-[1.5]" />
+                      <p className="text-xs text-[var(--text-secondary)] font-medium">All caught up!</p>
+                      <p className="text-[10px] text-[var(--text-tertiary)] mt-0.5">No new notifications.</p>
+                    </div>
+                  ) : (
+                    notificationsList.map((notification) => (
+                      <DropdownMenuItem 
+                        key={notification._id}
+                        className={`flex gap-3 px-3 py-2.5 cursor-pointer outline-none transition-colors duration-150 relative ${
+                          !notification.readStatus 
+                            ? "bg-[rgba(99,102,241,0.04)] hover:bg-[rgba(99,102,241,0.08)]" 
+                            : "hover:bg-[var(--background)]"
+                        }`}
+                        asChild
+                      >
+                        <Link 
+                          href={notification.relatedLink || "#"}
+                          onClick={() => handleNotificationClick(notification)}
+                        >
+                          <div className="flex shrink-0 items-center justify-center h-8 w-8 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+                            {getNotificationIcon(notification.module, notification.type)}
+                          </div>
+                          <div className="flex-1 min-w-0 space-y-0.5 font-sans">
+                            <div className="flex items-center justify-between gap-1">
+                              <p className={`text-xs truncate ${!notification.readStatus ? "font-semibold text-[var(--text-primary)]" : "text-[var(--text-secondary)]"}`}>
+                                {notification.title}
+                              </p>
+                              {!notification.readStatus && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)] shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-[10px] text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+                              {notification.message}
+                            </p>
+                            <p className="text-[9px] text-[var(--text-tertiary)]">
+                              {new Date(notification.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Separator orientation="vertical" className="h-6 mx-1" />
 

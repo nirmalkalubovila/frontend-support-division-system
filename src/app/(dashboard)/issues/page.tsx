@@ -54,6 +54,15 @@ const PRIORITY_BORDER_CLASSES: Record<string, string> = {
   Low: "border-l-4 border-l-[var(--priority-low)] bg-gradient-to-r from-gray-500/[0.03] to-transparent",
 };
 
+const COL_CONFIG: Record<string, { dot: string; header: string; addBtn: string; card: string; badge: string }> = {
+  "Backlog":          { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",     addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
+  "Assigned":         { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
+  "Planned Solution": { dot: "bg-amber-400",  header: "bg-amber-50 dark:bg-amber-900/20",    addBtn: "hover:bg-amber-100",  card: "border-amber-200 hover:border-amber-400",  badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  "In Progress":      { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  "Testing":          { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
+  "Resolved":         { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
+};
+
 // ──────────────────────────────────────────────────────────────
 // Issue Type Pill Styling
 // ──────────────────────────────────────────────────────────────
@@ -186,6 +195,7 @@ function ProjectCard({
   onToggle,
   onIssueClick,
   onBack,
+  onAddIssue,
 }: {
   group: ProjectGroup;
   viewMode: "board" | "list";
@@ -193,6 +203,7 @@ function ProjectCard({
   onToggle: () => void;
   onIssueClick: (issue: Issue) => void;
   onBack?: () => void;
+  onAddIssue: () => void;
 }) {
   const issues = group.issues;
 
@@ -426,31 +437,47 @@ function ProjectCard({
             <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 w-full min-h-[550px]">
               {KANBAN_COLUMNS.map((column) => {
                 const columnIssues = projectIssuesByStatus[column] ?? [];
+                const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
                 return (
                   <div
                     key={column}
-                    className="bg-[var(--surface)]/30 dark:bg-[var(--surface)]/5 backdrop-blur-sm rounded-xl border border-[var(--border)] p-3.5 flex flex-col min-h-[550px] shadow-sm"
+                    className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden"
                   >
                     {/* Column Header */}
-                    <div className="flex items-center justify-between mb-3.5 pb-2 border-b border-[var(--border)] shrink-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="h-2.5 w-2.5 rounded-full shadow-sm"
-                          style={{
-                            backgroundColor: `var(--status-${column.toLowerCase().replace(/ /g, "-")})`,
-                            boxShadow: `0 0 8px var(--status-${column.toLowerCase().replace(/ /g, "-")})80`,
-                          }}
-                        />
-                        <h4 className="text-xs font-bold text-[var(--text-primary)] tracking-wide">{column}</h4>
+                    <div className={`px-3 pt-3 pb-2 border-b border-[var(--border)] ${cfg.header}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
+                          <span className="text-xs font-bold text-[var(--text-primary)]">{column}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+                            {columnIssues.length}
+                          </span>
+                          <button
+                            onClick={onAddIssue}
+                            className={`h-6 w-6 rounded-lg flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--primary)] ${cfg.addBtn} transition-colors`}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <span className="text-[9px] font-bold bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-secondary)] px-1.5 py-0.2 rounded-full">
-                        {columnIssues.length}
-                      </span>
                     </div>
 
                     {/* Column Issues Cards */}
-                    <div className="space-y-3 overflow-y-auto flex-1 pr-1 -mr-1">
-                      {columnIssues.length > 0 ? (
+                    <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
+                      {columnIssues.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
+                          <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
+                          <p className="text-[10px] text-[var(--text-tertiary)] font-medium">No issues</p>
+                          <button
+                            onClick={onAddIssue}
+                            className="mt-2 text-[10px] text-[var(--primary)] font-semibold hover:underline flex items-center gap-1"
+                          >
+                            <Plus className="h-3 w-3" /> Add Issue
+                          </button>
+                        </div>
+                      ) : (
                         columnIssues.map((issue) => (
                           <IssueCard
                             key={issue._id}
@@ -458,12 +485,17 @@ function ProjectCard({
                             onClick={() => onIssueClick(issue)}
                           />
                         ))
-                      ) : (
-                        <div className="flex flex-col items-center justify-center h-24 rounded-lg border border-dashed border-[var(--border)] text-[10px] text-[var(--text-tertiary)] bg-[var(--surface)]/10 p-3 select-none">
-                          No issues
-                        </div>
                       )}
                     </div>
+
+                    {columnIssues.length > 0 && (
+                      <button
+                        onClick={onAddIssue}
+                        className={`mx-3 mb-3 mt-1 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--primary)] hover:border-[var(--primary)] ${cfg.addBtn} transition-all`}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Issue
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -822,6 +854,7 @@ function IssuesPageContent() {
             onToggle={() => setActiveProjectId(null)}
             onIssueClick={handleIssueClick}
             onBack={() => setActiveProjectId(null)}
+            onAddIssue={() => setShowCreateModal(true)}
           />
         ) : groupedByProject.length > 0 ? (
           groupedByProject.map((group) => (
@@ -832,6 +865,7 @@ function IssuesPageContent() {
               isExpanded={false}
               onToggle={() => setActiveProjectId(group.id)}
               onIssueClick={handleIssueClick}
+              onAddIssue={() => setShowCreateModal(true)}
             />
           ))
         ) : (
