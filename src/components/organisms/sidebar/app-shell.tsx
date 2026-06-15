@@ -6,7 +6,9 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bell,
+  CheckSquare,
   FolderKanban,
+  GitPullRequest,
   Headset,
   LayoutDashboard,
   LogOut,
@@ -44,6 +46,8 @@ const SIDEBAR_CLOSED = 56;
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
   { href: "/issues", label: "Issues", icon: Ticket, permission: "issues.issue.read" },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.project.read" },
+  { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.project.read" },
   { href: "/projects", label: "Projects", icon: FolderKanban, permission: "projects.project.read" },
   { href: "/reports", label: "Reports", icon: BarChart3, permission: "reports.daily_report.read" },
   { href: "/users", label: "Users", icon: Users, permission: "user_management.user.read" },
