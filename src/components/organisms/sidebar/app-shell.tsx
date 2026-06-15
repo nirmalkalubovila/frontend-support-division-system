@@ -20,6 +20,7 @@ import {
   Ticket,
   User,
   Users,
+  Wallet,
 } from "lucide-react";
 import {
   Avatar,
@@ -49,6 +50,7 @@ const NAV_LINKS = [
   { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.project.read" },
   { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.project.read" },
   { href: "/projects", label: "Projects", icon: FolderKanban, permission: "projects.project.read" },
+  { href: "/finance", label: "Finance", icon: Wallet, permission: "finance.payment.read" },
   { href: "/reports", label: "Reports", icon: BarChart3, permission: "reports.daily_report.read" },
   { href: "/users", label: "Users", icon: Users, permission: "user_management.user.read" },
   { href: "/system", label: "System", icon: Settings, permission: "system.settings.read" },
