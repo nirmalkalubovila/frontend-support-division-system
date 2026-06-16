@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   BarChart3,
   Bell,
@@ -61,10 +61,10 @@ const SIDEBAR_CLOSED = 56;
 // ── Navigation Links (with permission gating) ──────────────────
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
-  { href: "/issues", label: "Issues", icon: Ticket, permission: "issues.issue.read" },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.project.read" },
-  { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.project.read" },
   { href: "/projects", label: "Projects", icon: FolderKanban, permission: "projects.project.read" },
+  { href: "/issues", label: "Issues", icon: Ticket, permission: "issues.issue.read", isChildOfProjects: true },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.project.read", isChildOfProjects: true },
+  { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.project.read", isChildOfProjects: true, isLastChild: true },
   { href: "/finance", label: "Finance", icon: Wallet, permission: "finance.payment.read" },
   { href: "/reports", label: "Reports", icon: BarChart3, permission: "reports.daily_report.read" },
   { href: "/users", label: "Users", icon: Users, permission: "user_management.user.read" },
@@ -92,6 +92,8 @@ function NavItem({
   permission,
   active,
   collapsed,
+  isChildOfProjects,
+  isLastChild,
 }: {
   href: string;
   label: string;
@@ -99,6 +101,8 @@ function NavItem({
   permission: string | null;
   active: boolean;
   collapsed: boolean;
+  isChildOfProjects?: boolean;
+  isLastChild?: boolean;
 }) {
   const hasPermission = useHasPermission(permission ?? "");
   const userRole = useSessionStore((s) => s.userInfo?.role);
@@ -114,12 +118,29 @@ function NavItem({
         variant={active ? "default" : "ghost"}
         size="sm"
         asChild
-        className={`w-full transition-none ${collapsed ? "justify-center px-0" : "justify-start"}`}
+        className={`w-full transition-none ${
+          collapsed
+            ? "justify-center px-0"
+            : isChildOfProjects
+            ? "justify-start pl-7 relative ml-3 w-[calc(100%-12px)] text-[var(--text-secondary)]"
+            : "justify-start"
+        }`}
       >
         <Link href={href} className="flex items-center gap-3">
-          <Icon className="h-4 w-4 shrink-0" />
+          {isChildOfProjects && !collapsed && (
+            <>
+              {/* Vertical line connecting children */}
+              <span
+                className="absolute left-[9px] top-0 w-[1px] bg-[var(--border)]"
+                style={{ height: isLastChild ? "50%" : "100%" }}
+              />
+              {/* L-connector horizontal tick */}
+              <span className="absolute left-[9px] top-1/2 -translate-y-1/2 w-2.5 h-[1px] bg-[var(--border)]" />
+            </>
+          )}
+          <Icon className={`${isChildOfProjects ? "h-3.5 w-3.5" : "h-4 w-4"} shrink-0`} />
           {!collapsed && (
-            <span className="whitespace-nowrap">{label}</span>
+            <span className={`${isChildOfProjects ? "text-xs" : ""} whitespace-nowrap`}>{label}</span>
           )}
         </Link>
       </Button>
@@ -127,8 +148,27 @@ function NavItem({
   );
 }
 
+// A small client component wrapped in Suspense that calls onSearchParamChange
+// to avoid deoptimizing the layout structure.
+function SearchParamsTracker({ onSearchParamChange }: { onSearchParamChange: (param: string | null) => void }) {
+  const searchParams = useSearchParams();
+  const projectParam = searchParams.get("project") || searchParams.get("projectId");
+  const callbackRef = React.useRef(onSearchParamChange);
+
+  useEffect(() => {
+    callbackRef.current = onSearchParamChange;
+  });
+
+  useEffect(() => {
+    callbackRef.current(projectParam);
+  }, [projectParam]);
+
+  return null;
+}
+
 // ── AppShell ────────────────────────────────────────────────────
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const [projectParam, setProjectParam] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
   const pathname = usePathname();
   const userInfo = useSessionStore((s) => s.userInfo);
@@ -211,11 +251,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Most-specific-match-wins active detection
   const activeHref = useMemo(() => {
+    if (pathname === "/issues" && projectParam) {
+      return "/projects";
+    }
     const sorted = [...NAV_LINKS].sort((a, b) => b.href.length - a.href.length);
     return sorted.find(
       (l) => pathname === l.href || pathname.startsWith(l.href + "/"),
     )?.href;
-  }, [pathname]);
+  }, [pathname, projectParam]);
 
   const sidebarW = collapsed ? SIDEBAR_CLOSED : SIDEBAR_OPEN;
 
@@ -230,6 +273,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-[var(--background)]">
+      <Suspense fallback={null}>
+        <SearchParamsTracker onSearchParamChange={setProjectParam} />
+      </Suspense>
       {/* ── Sidebar ──────────────────────────────────────────── */}
       <aside
         style={{ width: sidebarW }}
@@ -255,15 +301,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Nav links */}
         <nav className="flex-1 px-2 py-4 overflow-y-auto overflow-x-hidden">
           <ul className="space-y-1">
-            {NAV_LINKS.map(({ href, label, icon, permission }) => (
+            {NAV_LINKS.map((link) => (
               <NavItem
-                key={href}
-                href={href}
-                label={label}
-                icon={icon}
-                permission={permission}
-                active={activeHref === href}
+                key={link.href}
+                href={link.href}
+                label={link.label}
+                icon={link.icon}
+                permission={link.permission}
+                active={activeHref === link.href}
                 collapsed={collapsed}
+                isChildOfProjects={"isChildOfProjects" in link ? link.isChildOfProjects : undefined}
+                isLastChild={"isLastChild" in link ? link.isLastChild : undefined}
               />
             ))}
           </ul>
