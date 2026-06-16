@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import {
   Plus, Search, X, Pencil, Trash2, Eye, Clock,
@@ -208,12 +209,12 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
 
   const overdue = isOverdue(task.endDate, task.status);
 
-  return (
+  const drawer = (
     <>
-      <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+      <div className="fixed inset-0 top-14 z-[9999] flex justify-end pointer-events-none">
+        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] cursor-pointer pointer-events-auto" onClick={onClose} aria-hidden="true" />
         <div
-          className="relative z-50 w-full max-w-md h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300"
+          className="relative w-full max-w-md h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -444,6 +445,8 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
       />
     </>
   );
+
+  return typeof document !== "undefined" ? createPortal(drawer, document.body) : null;
 }
 
 // ──────────────────────────────────────────────────────────────
