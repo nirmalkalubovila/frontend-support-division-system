@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
-import { Plus, Search, X, RefreshCw, Eye, Pencil, Trash2, Clock, Paperclip, AlertCircle } from "lucide-react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { Plus, Search, X, RefreshCw, Eye, Pencil, Trash2, Clock, Paperclip, AlertCircle, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useGetProjectCRs, useUpdateCR, type ChangeRequest, type CRStatus } from "@/api/services/project-management/cr-service";
 import type { User } from "@/api/services/user-management/user-service";
 import useSessionStore from "@/store/session-store";
+import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 
 // ── Config ──────────────────────────────────────────────────────
 export const CR_KANBAN_STATUSES: CRStatus[] = [
@@ -113,6 +114,25 @@ function CRKanbanCard({ cr, isDragging, onDragStart, onDragEnd, onClick, onEdit,
             );
           })}
           {devCount > 3 && <span className="text-[10px] text-[var(--text-tertiary)]">+{devCount - 3}</span>}
+        </div>
+      )}
+
+      {/* Task progress indicator */}
+      {(cr.taskProgress?.total ?? 0) > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-0.5">
+              <CheckSquare className="h-2.5 w-2.5" />
+              {cr.taskProgress.done}/{cr.taskProgress.total} tasks
+            </span>
+            <span className="text-[10px] font-semibold text-[var(--primary)]">{cr.taskProgress.completionPercentage}%</span>
+          </div>
+          <div className="h-1 w-full rounded-full bg-[var(--surface-hover)] overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[var(--primary)] to-emerald-500 rounded-full transition-all duration-500"
+              style={{ width: `${cr.taskProgress.completionPercentage}%` }}
+            />
+          </div>
         </div>
       )}
 
@@ -239,6 +259,9 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
   const updateMutation = useUpdateCR(projectId);
   const userInfo = useSessionStore((s) => s.userInfo);
   const canEdit = userInfo ? ["super_admin", "manager", "senior_engineer", "engineer"].includes(userInfo.role) : false;
+
+  // ── Real-time socket ──────────────────────────────────────────
+  const { connected } = useKanbanSocket(projectId);
 
   const [draggingCR, setDraggingCR] = useState<ChangeRequest | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<CRStatus | null>(null);

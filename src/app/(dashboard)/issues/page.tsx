@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, Suspense } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   Ticket,
   Plus,
@@ -27,9 +28,10 @@ import { Button, Badge, Input, Select, Card, CardContent } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { CreateIssueModal, IssueDetailsModal } from "@/components";
 import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES } from "@/lib/constants";
-import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetIssues, useUpdateIssue, type Issue } from "@/api/services/issue-management/issue-service";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetCategories } from "@/api/services/system/settings-service";
+import { useIssuesSocket } from "@/hooks/use-issues-socket";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
@@ -89,7 +91,19 @@ const getIssueTypeStyle = (type: string) => {
 // ──────────────────────────────────────────────────────────────
 // Issue Card Component
 // ──────────────────────────────────────────────────────────────
-function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
+function IssueCard({
+  issue,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  onClick,
+}: {
+  issue: Issue;
+  isDragging: boolean;
+  onDragStart: (e: React.DragEvent, issue: Issue) => void;
+  onDragEnd: () => void;
+  onClick?: () => void;
+}) {
   const client = typeof issue.client === "object" ? issue.client : null;
   const project = typeof issue.project === "object" ? issue.project : null;
   const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
@@ -100,10 +114,13 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
 
   return (
     <div
+      draggable
+      onDragStart={(e) => onDragStart(e, issue)}
+      onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative rounded-xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer ${
+      className={`group relative rounded-xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-lg transition-all duration-300 cursor-grab active:cursor-grabbing select-none ${
         PRIORITY_BORDER_CLASSES[issue.priority] || "bg-[var(--surface)]"
-      }`}
+      } ${isDragging ? "opacity-40 scale-95 rotate-1 shadow-2xl" : "hover:-translate-y-1"}`}
       style={{ backgroundColor: "var(--surface)" }}
     >
       {/* Issue ID & Priority */}
@@ -206,6 +223,39 @@ function ProjectCard({
   onBack?: () => void;
   onAddIssue: () => void;
 }) {
+  const updateMutation = useUpdateIssue();
+  const [draggingIssue, setDraggingIssue] = useState<Issue | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, issue: Issue) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("issueId", issue._id);
+    setDraggingIssue(issue);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingIssue(null);
+    setDragOverColumn(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, column: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumn(column);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    if (!draggingIssue || draggingIssue.status === targetStatus) { setDraggingIssue(null); return; }
+    try {
+      await updateMutation.mutateAsync({ id: draggingIssue._id, data: { status: targetStatus } });
+      toast.success(`Moved to ${targetStatus}`);
+    } catch {
+      toast.error("Failed to update issue status");
+    }
+    setDraggingIssue(null);
+  }, [draggingIssue, updateMutation]);
   const issues = group.issues;
 
   // Calculate project specific stats
@@ -439,10 +489,18 @@ function ProjectCard({
               {KANBAN_COLUMNS.map((column) => {
                 const columnIssues = projectIssuesByStatus[column] ?? [];
                 const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
+                const isOver = dragOverColumn === column;
                 return (
                   <div
                     key={column}
-                    className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden"
+                    onDragOver={(e) => handleDragOver(e, column)}
+                    onDrop={(e) => handleDrop(e, column)}
+                    onDragLeave={() => setDragOverColumn(null)}
+                    className={`flex flex-col rounded-xl border bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden transition-all duration-200 ${
+                      isOver
+                        ? "border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]"
+                        : "border-[var(--border)]"
+                    }`}
                   >
                     {/* Column Header */}
                     <div className={`px-3 pt-3 pb-2 border-b border-[var(--border)] ${cfg.header}`}>
@@ -465,9 +523,14 @@ function ProjectCard({
                       </div>
                     </div>
 
+                    {/* Drop indicator */}
+                    {isOver && draggingIssue && (
+                      <div className="mx-3 mt-2 h-1.5 rounded-full animate-pulse bg-[var(--primary)] opacity-60" />
+                    )}
+
                     {/* Column Issues Cards */}
                     <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
-                      {columnIssues.length === 0 ? (
+                      {columnIssues.length === 0 && !isOver ? (
                         <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
                           <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
                           <p className="text-[10px] text-[var(--text-tertiary)] font-medium">No issues</p>
@@ -483,9 +546,17 @@ function ProjectCard({
                           <IssueCard
                             key={issue._id}
                             issue={issue}
+                            isDragging={draggingIssue?._id === issue._id}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
                             onClick={() => onIssueClick(issue)}
                           />
                         ))
+                      )}
+                      {isOver && draggingIssue && (
+                        <div className="h-16 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[rgba(99,102,241,0.05)] flex items-center justify-center">
+                          <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
+                        </div>
                       )}
                     </div>
 
@@ -627,6 +698,14 @@ function IssuesPageContent() {
   const projects: Project[] = projectsData?.data ?? [];
 
   const isLoading = isLoadingIssues || isLoadingProjects;
+
+  // ── Real-time socket ──
+  const projectIdsForSocket = useMemo(
+    () => projects.map((p) => p._id).filter(Boolean),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projects.map((p) => p._id).join(",")]
+  );
+  useIssuesSocket(projectIdsForSocket);
 
   // Group issues by project for project cards representation
   const groupedByProject = useMemo(() => {
