@@ -1,13 +1,11 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare, Plus,
-  Calendar, Mail, Phone, Tag, Users, BarChart3, GitBranch,
-  Kanban, Pencil, Trash2, ChevronRight, ChevronDown,
-  AlertCircle, Clock, CheckCircle2, GitPullRequest, List, Ticket,
-  LayoutGrid, Eye, AlertTriangle, User as UserIcon, ChevronUp, SlidersHorizontal, Search, X as XIcon,
+  Calendar, Mail, Phone, Tag, Users, BarChart3,
+  AlertCircle, CheckCircle2, GitPullRequest, Ticket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,476 +14,22 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { StatCard } from "@/components/atoms/statCard";
-import { ConfirmDialog } from "@/components/molecules/confirmDialog";
-import { TaskFormModal } from "@/components/organisms/taskFormModal/task-form-modal";
-import { KanbanBoard } from "@/components/organisms/kanbanBoard/kanban-board";
-import { CRFormModal } from "@/components/organisms/crFormModal/cr-form-modal";
-import { CRDetailDrawer } from "@/components/organisms/crDetailDrawer/cr-detail-drawer";
-import { CRKanbanBoard } from "@/components/organisms/crKanbanBoard/cr-kanban-board";
 import { useGetProjectById } from "@/api/services/project-management/project-service";
 import { useGetIssues } from "@/api/services/issue-management/issue-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
-import {
-  useGetProjectTasks, useDeleteTask,
-  type Task, type TaskStatus,
-} from "@/api/services/project-management/task-service";
-import {
-  useGetProjectCRs, useGetCRStats, useDeleteCR,
-  type ChangeRequest, type CRStatus,
-} from "@/api/services/project-management/cr-service";
+import { useGetProjectTasks } from "@/api/services/project-management/task-service";
 import type { User } from "@/api/services/user-management/user-service";
-import { toast } from "sonner";
+import { TasksTab, CRTab, IssuesTab } from "./tabs";
 
 // ─────────────────────────────────────────────────────────────
 // Constants & helpers
 // ─────────────────────────────────────────────────────────────
-
-const TASK_STATUSES: TaskStatus[] = ["To Do", "In Progress", "Review", "Done"];
-
-const STATUS_STYLES: Record<TaskStatus, { card: string; dot: string; badge: string }> = {
-  "To Do":       { card: "border-[var(--border)]",           dot: "bg-[var(--text-tertiary)]",  badge: "bg-[var(--background)] text-[var(--text-secondary)] border border-[var(--border)]" },
-  "In Progress": { card: "border-yellow-300",                dot: "bg-yellow-400",               badge: "bg-yellow-50 text-yellow-700 border border-yellow-200" },
-  "Review":      { card: "border-[rgba(99,102,241,0.4)]",   dot: "bg-[var(--primary)]",         badge: "bg-[rgba(99,102,241,0.08)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]" },
-  "Done":        { card: "border-green-300",                 dot: "bg-green-500",                badge: "bg-green-50 text-green-700 border border-green-200" },
-};
-
-const PRIORITY_DOT: Record<string, string> = {
-  Critical: "bg-red-500", High: "bg-orange-500", Medium: "bg-yellow-400", Low: "bg-green-500",
-};
-
-const CR_STATUS_BADGE: Record<string, string> = {
-  "Draft": "bg-slate-100 text-slate-600 border-slate-200",
-  "Submitted": "bg-blue-50 text-blue-700 border-blue-200",
-  "Under Review": "bg-yellow-50 text-yellow-700 border-yellow-200",
-  "Approved": "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Rejected": "bg-red-50 text-red-600 border-red-200",
-  "In Development": "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Testing": "bg-purple-50 text-purple-700 border-purple-200",
-  "Completed": "bg-green-50 text-green-700 border-green-200",
-  "Closed": "bg-gray-100 text-gray-500 border-gray-200",
-};
 
 function fmtDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function getInitials(name: string) {
-  return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
-}
-
-function getParentId(t: Task): string | null {
-  if (!t.parent) return null;
-  return typeof t.parent === "object" ? (t.parent as { _id: string })._id : t.parent;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Task Kanban Card
-// ─────────────────────────────────────────────────────────────
-function KanbanTaskCard({
-  task, onEdit, onDelete, onAddChild,
-}: { task: Task; onEdit: () => void; onDelete: () => void; onAddChild: () => void }) {
-  return (
-    <div className={`bg-[var(--surface)] rounded-xl border ${STATUS_STYLES[task.status].card} p-3 space-y-2.5 hover:shadow-md transition-all group`}>
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-sm font-medium text-[var(--text-primary)] leading-snug">{task.name}</span>
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={onAddChild} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-tertiary)] hover:text-[var(--primary)]" title="Add sub-task"><Plus className="h-3 w-3" /></button>
-          <button onClick={onEdit} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-tertiary)] hover:text-[var(--primary)]"><Pencil className="h-3 w-3" /></button>
-          <button onClick={onDelete} className="p-1 rounded hover:bg-[var(--surface-hover)] text-[var(--text-tertiary)] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex items-center gap-1 ${PRIORITY_DOT[task.priority] ? "" : ""}`}>
-          <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[task.priority]}`} />
-          <span className="text-[var(--text-secondary)]">{task.priority}</span>
-        </span>
-        {task.endDate && (
-          <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-0.5">
-            <Clock className="h-2.5 w-2.5" />{fmtDate(task.endDate)}
-          </span>
-        )}
-      </div>
-
-      {task.assignees.length > 0 && (
-        <div className="flex -space-x-1.5">
-          {task.assignees.slice(0, 4).map((a) => (
-            <div key={a._id} title={a.name}
-              className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border-2 border-[var(--surface)] flex items-center justify-center text-white text-[9px] font-bold">
-              {a.name.charAt(0).toUpperCase()}
-            </div>
-          ))}
-          {task.assignees.length > 4 && (
-            <div className="h-6 w-6 rounded-full bg-[var(--background)] border-2 border-[var(--surface)] flex items-center justify-center text-[9px] font-semibold text-[var(--text-tertiary)]">
-              +{task.assignees.length - 4}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Task Hierarchy Row
-// ─────────────────────────────────────────────────────────────
-function HierarchyRow({
-  task, depth, children, allTasks, onEdit, onDelete, onAddChild,
-}: {
-  task: Task; depth: number; children: Task[]; allTasks: Task[];
-  onEdit: (t: Task) => void; onDelete: (t: Task) => void; onAddChild: (t: Task) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  const hasChildren = children.length > 0;
-
-  return (
-    <div>
-      <div
-        className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-[var(--surface-hover)] transition-colors group"
-        style={{ paddingLeft: `${12 + depth * 24}px` }}
-      >
-        <button onClick={() => setExpanded((v) => !v)} className={`shrink-0 text-[var(--text-tertiary)] transition-transform ${!hasChildren ? "invisible" : ""}`}>
-          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </button>
-
-        <span className={`h-2 w-2 rounded-full shrink-0 ${STATUS_STYLES[task.status].dot}`} />
-
-        <span className="flex-1 text-sm font-medium text-[var(--text-primary)] truncate">{task.name}</span>
-
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[task.status].badge}`}>{task.status}</span>
-
-        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0 flex items-center gap-1">
-          <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[task.priority]}`} />{task.priority}
-        </span>
-
-        {task.assignees.length > 0 && (
-          <div className="flex -space-x-1 shrink-0">
-            {task.assignees.slice(0, 3).map((a) => (
-              <div key={a._id} title={a.name}
-                className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold">
-                {a.name.charAt(0).toUpperCase()}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0 hidden sm:block">{fmtDate(task.endDate)}</span>
-
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-          <button onClick={() => onAddChild(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-[var(--primary)]" title="Add sub-task"><Plus className="h-3 w-3" /></button>
-          <button onClick={() => onEdit(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-[var(--primary)]"><Pencil className="h-3 w-3" /></button>
-          <button onClick={() => onDelete(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
-        </div>
-      </div>
-
-      {expanded && hasChildren && children.map((child) => (
-        <HierarchyRow
-          key={child._id} task={child} depth={depth + 1}
-          children={allTasks.filter((t) => getParentId(t) === child._id)}
-          allTasks={allTasks} onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Tasks Tab
-// ─────────────────────────────────────────────────────────────
-export function TasksTab({ projectId, members }: { projectId: string; members: User[] }) {
-  const [taskView, setTaskView] = useState<"hierarchy" | "kanban">("kanban");
-  const [showForm, setShowForm] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [parentTask, setParentTask] = useState<Task | null>(null);
-  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
-
-  const { data: tasks = [], isLoading } = useGetProjectTasks(projectId);
-  const deleteMutation = useDeleteTask(projectId);
-
-  const rootTasks = useMemo(() => tasks.filter((t) => !getParentId(t)), [tasks]);
-
-  const handleEdit = (t: Task) => { setEditingTask(t); setParentTask(null); setShowForm(true); };
-  const handleAddChild = (t: Task) => { setEditingTask(null); setParentTask(t); setShowForm(true); };
-  const handleDeleteConfirm = async () => {
-    if (!taskToDelete) return;
-    try {
-      await deleteMutation.mutateAsync(taskToDelete._id);
-      toast.success("Task deleted.");
-      setTaskToDelete(null);
-    } catch { toast.error("Failed to delete task."); }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-          <button onClick={() => setTaskView("hierarchy")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              taskView === "hierarchy" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-            }`}>
-            <GitBranch className="h-3.5 w-3.5" /> Hierarchy
-          </button>
-          <button onClick={() => setTaskView("kanban")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              taskView === "kanban" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-            }`}>
-            <Kanban className="h-3.5 w-3.5" /> Kanban
-          </button>
-        </div>
-
-        {taskView === "hierarchy" && (
-          <Button size="sm" onClick={() => { setEditingTask(null); setParentTask(null); setShowForm(true); }}
-            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-8">
-            <Plus className="h-3.5 w-3.5" /> New Task
-          </Button>
-        )}
-      </div>
-
-      {taskView === "kanban" ? (
-        <KanbanBoard projectId={projectId} members={members} />
-      ) : isLoading ? (
-        <div className="space-y-2">{[1,2,3,4].map((i) => <div key={i} className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />)}</div>
-      ) : tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <CheckSquare className="h-10 w-10 text-[var(--text-tertiary)] mb-3" />
-          <p className="text-sm font-semibold text-[var(--text-primary)]">No tasks yet</p>
-          <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">Create your first task to get started.</p>
-          <Button size="sm" onClick={() => { setEditingTask(null); setParentTask(null); setShowForm(true); }}
-            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
-            <Plus className="h-3.5 w-3.5" /> New Task
-          </Button>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex-1 pl-10">Task Name</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-24 shrink-0">Status</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-20 shrink-0">Priority</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-16 shrink-0 hidden sm:block">Assignees</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-24 shrink-0 hidden sm:block">Due Date</span>
-            <span className="w-20 shrink-0" />
-          </div>
-          <div className="divide-y divide-[var(--border)]">
-            {rootTasks.map((t) => (
-              <HierarchyRow key={t._id} task={t} depth={0}
-                children={tasks.filter((c) => getParentId(c) === t._id)}
-                allTasks={tasks}
-                onEdit={handleEdit}
-                onDelete={(t) => setTaskToDelete(t)}
-                onAddChild={handleAddChild}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {taskView === "hierarchy" && (
-        <>
-          {showForm && (
-            <TaskFormModal
-              open={showForm}
-              onOpenChange={(v) => { setShowForm(v); if (!v) { setEditingTask(null); setParentTask(null); } }}
-              projectId={projectId}
-              task={editingTask}
-              parentTask={parentTask}
-              availableMembers={members}
-            />
-          )}
-          <ConfirmDialog
-            open={!!taskToDelete}
-            onOpenChange={(v) => { if (!v) setTaskToDelete(null); }}
-            title="Delete Task"
-            description={`Delete "${taskToDelete?.name}"? Sub-tasks will also be removed.`}
-            confirmLabel="Delete"
-            variant="destructive"
-            onConfirm={handleDeleteConfirm}
-            loading={deleteMutation.isPending}
-          />
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// CR Tab
-// ─────────────────────────────────────────────────────────────
-export function CRTab({ projectId, members }: { projectId: string; members: User[] }) {
-  const [crView, setCRView] = useState<"list" | "kanban">("kanban");
-  const [showForm, setShowForm] = useState(false);
-  const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
-  const [drawerCR, setDrawerCR] = useState<ChangeRequest | null>(null);
-  const [crToDelete, setCRToDelete] = useState<ChangeRequest | null>(null);
-  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("Draft");
-
-  const { data: crsData, isLoading: crsLoading } = useGetProjectCRs(projectId);
-  const { data: stats } = useGetCRStats(projectId);
-  const deleteMutation = useDeleteCR(projectId);
-
-  const crs = crsData?.data ?? [];
-
-  // Keep drawer CR in sync with latest data
-  const currentDrawerCR = useMemo(
-    () => drawerCR ? crs.find((c) => c._id === drawerCR._id) ?? drawerCR : null,
-    [drawerCR, crs]
-  );
-
-  const handleDeleteConfirm = async () => {
-    if (!crToDelete) return;
-    try {
-      await deleteMutation.mutateAsync(crToDelete._id);
-      toast.success("Change request deleted.");
-      setCRToDelete(null);
-      if (drawerCR?._id === crToDelete._id) setDrawerCR(null);
-    } catch { toast.error("Failed to delete CR."); }
-  };
-
-  const statItems = [
-    { label: "Total CRs", value: stats?.total ?? 0, color: "text-[var(--primary)]" },
-    { label: "Open", value: stats?.open ?? 0, color: "text-blue-600" },
-    { label: "Approved", value: stats?.approved ?? 0, color: "text-emerald-600" },
-    { label: "In Dev", value: stats?.inDevelopment ?? 0, color: "text-indigo-600" },
-    { label: "Completed", value: stats?.completed ?? 0, color: "text-green-600" },
-    { label: "Rejected", value: stats?.rejected ?? 0, color: "text-red-500" },
-    { label: "Est. Hours", value: `${stats?.totalEstimatedHours ?? 0}h`, color: "text-[var(--text-primary)]" },
-  ];
-
-  return (
-    <div className="space-y-5">
-      {/* Stats row */}
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
-        {statItems.map(({ label, value, color }) => (
-          <div key={label} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
-            <p className={`text-lg font-bold ${color}`}>{value}</p>
-            <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 font-medium">{label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-          <button onClick={() => setCRView("list")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              crView === "list" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-            }`}>
-            <List className="h-3.5 w-3.5" /> List
-          </button>
-          <button onClick={() => setCRView("kanban")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-              crView === "kanban" ? "bg-[var(--surface)] text-[var(--primary)] shadow-sm" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
-            }`}>
-            <Kanban className="h-3.5 w-3.5" /> Kanban
-          </button>
-        </div>
-
-        {crView === "list" && (
-          <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
-            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9">
-            <Plus className="h-3.5 w-3.5" /> New Change Request
-          </Button>
-        )}
-      </div>
-
-      {/* Kanban View */}
-      {crView === "kanban" && (
-        <CRKanbanBoard
-          projectId={projectId}
-          members={members}
-          onCRClick={(cr) => setDrawerCR(cr)}
-          onEdit={(cr) => { setEditingCR(cr); setShowForm(true); }}
-          onDelete={(cr) => setCRToDelete(cr)}
-          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "Draft"); setShowForm(true); }}
-        />
-      )}
-
-      {/* List View */}
-      {crView === "list" && (
-        crsLoading ? (
-          <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />)}</div>
-        ) : crs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <GitPullRequest className="h-10 w-10 text-[var(--text-tertiary)] mb-3" />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">No change requests yet</p>
-            <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">Create your first CR to start tracking changes.</p>
-            <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
-              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
-              <Plus className="h-3.5 w-3.5" /> New Change Request
-            </Button>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-            {/* Table header */}
-            <div className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-2.5 border-b border-[var(--border)] bg-[var(--background)]">
-              {["CR #", "Title", "Type", "Priority", "Status", "Requested By", "Est. Hrs", "Target Date"].map((h) => (
-                <span key={h} className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{h}</span>
-              ))}
-            </div>
-            <div className="divide-y divide-[var(--border)]">
-              {crs.map((cr) => {
-                const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
-                return (
-                  <div
-                    key={cr._id}
-                    onClick={() => setDrawerCR(cr)}
-                    className="grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr_1fr_1fr] gap-2 px-4 py-3 hover:bg-[var(--surface-hover)] transition-colors cursor-pointer items-center group"
-                  >
-                    <span className="text-[10px] font-mono text-[var(--text-tertiary)] truncate">{cr.crNumber}</span>
-                    <span className="text-sm font-medium text-[var(--text-primary)] truncate group-hover:text-[var(--primary)] transition-colors">{cr.title}</span>
-                    <span className="text-xs text-[var(--text-secondary)] truncate">{cr.crType}</span>
-                    <span className="flex items-center gap-1 text-xs text-[var(--text-secondary)]">
-                      <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[cr.priority]}`} />{cr.priority}
-                    </span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border w-fit ${CR_STATUS_BADGE[cr.status] ?? ""}`}>{cr.status}</span>
-                    <span className="text-xs text-[var(--text-secondary)] truncate">{cr.requestedBy || "—"}</span>
-                    <span className="text-xs text-[var(--text-secondary)]">{cr.estimatedHours != null ? `${cr.estimatedHours}h` : "—"}</span>
-                    <span className="text-xs text-[var(--text-secondary)]">{fmtDate(cr.targetReleaseDate)}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )
-      )}
-
-      {/* CR Form Modal */}
-      {showForm && (
-        <CRFormModal
-          open={showForm}
-          onOpenChange={(v) => { setShowForm(v); if (!v) setEditingCR(null); }}
-          projectId={projectId}
-          cr={editingCR}
-          availableMembers={members}
-        />
-      )}
-
-      {/* CR Detail Drawer */}
-      {currentDrawerCR && (
-        <CRDetailDrawer
-          cr={currentDrawerCR}
-          projectId={projectId}
-          members={members}
-          onClose={() => setDrawerCR(null)}
-          onEdit={(cr) => { setDrawerCR(null); setEditingCR(cr); setShowForm(true); }}
-          onDelete={(cr) => { setDrawerCR(null); setCRToDelete(cr); }}
-        />
-      )}
-
-      {/* Delete Confirm */}
-      <ConfirmDialog
-        open={!!crToDelete}
-        onOpenChange={(v) => { if (!v) setCRToDelete(null); }}
-        title="Delete Change Request"
-        description={`Delete "${crToDelete?.title}"? This action cannot be undone.`}
-        confirmLabel="Delete CR"
-        variant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleteMutation.isPending}
-      />
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Dashboard Tab
@@ -748,15 +292,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabbed Layout */}
-      <Tabs 
-        defaultValue="dashboard" 
-        className="space-y-4"
-        onValueChange={(value) => {
-          if (value === "issues") {
-            router.push(`/issues?project=${projectId}`);
-          }
-        }}
-      >
+      <Tabs defaultValue="dashboard" className="space-y-4">
         <TabsList className="bg-[var(--background)] border border-[var(--border)] h-10">
           <TabsTrigger value="dashboard" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <LayoutDashboard className="h-4 w-4" /> Dashboard
@@ -782,6 +318,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="crs">
           <CRTab projectId={projectId} members={members} />
+        </TabsContent>
+
+        <TabsContent value="issues">
+          <IssuesTab projectId={projectId} members={members} />
         </TabsContent>
       </Tabs>
     </div>
