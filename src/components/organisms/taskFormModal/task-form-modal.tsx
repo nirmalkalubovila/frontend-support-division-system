@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, AlertCircle, CheckSquare, Plus, X, Link as LinkIcon } from "lucide-react";
+import { Loader2, AlertCircle, CheckSquare, Plus, X, Link as LinkIcon, GitPullRequest } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +39,8 @@ interface TaskFormModalProps {
   parentTask?: Task | null;
   availableMembers?: User[];
   defaultStatus?: TaskStatus;
+  crId?: string | null;
+  crNumber?: string | null;
 }
 
 const makeEmpty = (defaultStatus: TaskStatus = "To Do"): CreateTaskPayload => ({
@@ -51,9 +53,10 @@ const makeEmpty = (defaultStatus: TaskStatus = "To Do"): CreateTaskPayload => ({
   assignees: [],
   relatedLinks: [],
   parent: null,
+  cr: null,
 });
 
-export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask, availableMembers = [], defaultStatus = "To Do" }: TaskFormModalProps) {
+export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask, availableMembers = [], defaultStatus = "To Do", crId, crNumber }: TaskFormModalProps) {
   const isEdit = !!task;
   const createMutation = useCreateTask(projectId);
   const updateMutation = useUpdateTask(projectId);
@@ -79,7 +82,7 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
         parent: typeof task.parent === "string" ? task.parent : null,
       });
     } else {
-      setForm({ ...makeEmpty(defaultStatus), parent: parentTask?._id || null });
+      setForm({ ...makeEmpty(defaultStatus), parent: parentTask?._id || null, cr: crId || null });
     }
     setValidationError(null);
     setLinkLabel("");
@@ -141,6 +144,14 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
           <DialogDescription className="text-sm text-[var(--text-secondary)]">
             {isEdit ? "Update task details below." : "Fill in the details to create a task."}
           </DialogDescription>
+          {(crId || task?.cr) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <GitPullRequest className="h-3.5 w-3.5 text-indigo-500" />
+              <span className="text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                {crNumber || (typeof task?.cr === "object" && task?.cr?.crNumber) || "Linked to CR"}
+              </span>
+            </div>
+          )}
         </DialogHeader>
 
         {validationError && (

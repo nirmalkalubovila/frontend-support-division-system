@@ -69,6 +69,11 @@ export interface ChangeRequest extends GlobalRecords {
   timeline: CRTimelineEvent[];
   createdBy: CRAssignee | string;
   order: number;
+  taskProgress: {
+    total: number;
+    done: number;
+    completionPercentage: number;
+  };
 }
 
 export interface CRStats {
@@ -213,5 +218,45 @@ export const useDeleteCRAttachment = (projectId: string) => {
       await axiosInstance.delete(`/projects/${projectId}/crs/${crId}/attachments/${attachmentId}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: CR_QUERY_KEY(projectId) }),
+  });
+};
+
+export const useGetCRTasks = (projectId: string, crId: string) =>
+  useQuery({
+    queryKey: ["/cr-tasks", projectId, crId],
+    queryFn: async () => {
+      const res = await axiosInstance.get(`/projects/${projectId}/crs/${crId}/tasks`);
+      return res.data as import("./task-service").Task[];
+    },
+    enabled: !!crId && !!projectId,
+  });
+
+export const useLinkTaskToCR = (projectId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ crId, taskId }: { crId: string; taskId: string }) => {
+      const res = await axiosInstance.post(`/projects/${projectId}/crs/${crId}/tasks`, { taskId });
+      return res.data as ChangeRequest;
+    },
+    onSuccess: (_, { crId }) => {
+      qc.invalidateQueries({ queryKey: CR_QUERY_KEY(projectId) });
+      qc.invalidateQueries({ queryKey: ["/cr-tasks", projectId, crId] });
+      qc.invalidateQueries({ queryKey: ["/tasks", projectId] });
+    },
+  });
+};
+
+export const useUnlinkTaskFromCR = (projectId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ crId, taskId }: { crId: string; taskId: string }) => {
+      const res = await axiosInstance.delete(`/projects/${projectId}/crs/${crId}/tasks/${taskId}`);
+      return res.data as ChangeRequest;
+    },
+    onSuccess: (_, { crId }) => {
+      qc.invalidateQueries({ queryKey: CR_QUERY_KEY(projectId) });
+      qc.invalidateQueries({ queryKey: ["/cr-tasks", projectId, crId] });
+      qc.invalidateQueries({ queryKey: ["/tasks", projectId] });
+    },
   });
 };
