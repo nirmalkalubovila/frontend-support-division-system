@@ -580,6 +580,21 @@ export default function GuidePage() {
                   </li>
                 </ul>
               </div>
+
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">D. Sidebar Navigation Structure</h3>
+                <p>
+                  To make project-level operations easier to navigate, the sub-sections for **Issues**, **Tasks**, and **Change Requests (CRs)** are grouped and nested directly under the **Projects** section in the main sidebar.
+                </p>
+                <ul className="space-y-2 pl-4 list-disc">
+                  <li>
+                    <strong>Projects (Parent Menu):</strong> Clicking this displays the main project listing and global support retainer contract lists.
+                  </li>
+                  <li>
+                    <strong>Nested Sub-Menus (Issues, Tasks, CRs):</strong> Indented to visually show their child relationship to projects. These menus provide quick, direct access to the ticket queues, project tasks checklists, and CR boards.
+                  </li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

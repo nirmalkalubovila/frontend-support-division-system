@@ -35,6 +35,7 @@ import { useGetCategories } from "@/api/services/system/settings-service";
 interface CreateIssueModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  defaultProjectId?: string;
 }
 
 const initialForm = {
@@ -75,7 +76,7 @@ function isImageType(mimetype: string): boolean {
   return mimetype.startsWith("image/");
 }
 
-export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) {
+export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: CreateIssueModalProps) {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -110,6 +111,22 @@ export function CreateIssueModal({ open, onOpenChange }: CreateIssueModalProps) 
   const clients: Client[] = clientsData?.data ?? [];
   const projects: Project[] = projectsData?.data ?? [];
   const users: User[] = usersData ?? [];
+
+  // Prefill defaultProjectId when open or when projects load
+  useEffect(() => {
+    if (open && defaultProjectId && projects.length > 0) {
+      const proj = projects.find((p) => p._id === defaultProjectId);
+      if (proj) {
+        setForm((prev) => {
+          const next = { ...prev, project: defaultProjectId };
+          if (proj.client) {
+            next.client = typeof proj.client === "object" ? proj.client._id : proj.client;
+          }
+          return next;
+        });
+      }
+    }
+  }, [open, defaultProjectId, projects]);
 
   const handleChange = (field: string, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));

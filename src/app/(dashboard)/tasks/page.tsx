@@ -14,7 +14,7 @@ import { Button, Input, Select } from "@/components";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { useGetProjectTasks } from "@/api/services/project-management/task-service";
-import { TasksTab } from "../projects/[projectId]/page";
+import { TasksTab } from "../projects/[projectId]/tabs";
 
 interface ProjectGroup {
   id: string;
