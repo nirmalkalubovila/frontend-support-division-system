@@ -271,6 +271,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
+  const [typeFilter, setTypeFilter] = useState<"All" | "New Development" | "CR" | "Support">("All");
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -283,7 +284,10 @@ export default function ProjectsPage() {
     page, limit: 12, search: search || undefined, sortBy: "createdAt:desc",
   });
 
-  const projects: Project[] = data?.data ?? [];
+  const allProjects: Project[] = data?.data ?? [];
+  const projects = typeFilter === "All"
+    ? allProjects
+    : allProjects.filter((p) => p.projectType?.includes(typeFilter));
   const totalPages = data?.totalPages ?? 1;
   const totalResults = data?.totalResults ?? 0;
 
@@ -327,8 +331,8 @@ export default function ProjectsPage() {
         </ValidatePermission>
       </div>
 
-      {/* Search + View Toggle */}
-      <div className="flex items-center gap-3">
+      {/* Search + Filter + View Toggle */}
+      <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
           <Input placeholder="Search projects..." value={search}
@@ -341,6 +345,24 @@ export default function ProjectsPage() {
             </button>
           )}
         </div>
+
+        {/* Type Filter Pills */}
+        <div className="flex items-center gap-1.5">
+          {(["All", "New Development", "CR", "Support"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => { setTypeFilter(t); setPage(1); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                typeFilter === t
+                  ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                  : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
           <button onClick={() => setViewMode("grid")}
             className={`p-1.5 rounded-md transition-all ${viewMode === "grid" ? "bg-[var(--primary)] text-white" : "text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"}`}>

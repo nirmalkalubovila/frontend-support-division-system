@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, Suspense } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import {
   Ticket,
   Plus,
@@ -27,9 +28,10 @@ import { Button, Badge, Input, Select, Card, CardContent } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { CreateIssueModal, IssueDetailsModal } from "@/components";
 import { KANBAN_COLUMNS, PRIORITIES, ISSUE_TYPES } from "@/lib/constants";
-import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetIssues, useUpdateIssue, type Issue } from "@/api/services/issue-management/issue-service";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetCategories } from "@/api/services/system/settings-service";
+import { useIssuesSocket } from "@/hooks/use-issues-socket";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
@@ -56,12 +58,12 @@ const PRIORITY_BORDER_CLASSES: Record<string, string> = {
 };
 
 const COL_CONFIG: Record<string, { dot: string; header: string; addBtn: string; card: string; badge: string }> = {
-  "Backlog":          { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",     addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
-  "Assigned":         { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
-  "Planned Solution": { dot: "bg-amber-400",  header: "bg-amber-50 dark:bg-amber-900/20",    addBtn: "hover:bg-amber-100",  card: "border-amber-200 hover:border-amber-400",  badge: "bg-amber-50 text-amber-700 border-amber-200" },
-  "In Progress":      { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  "Testing":          { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
-  "Resolved":         { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
+  "Backlog": { dot: "bg-slate-400", header: "bg-slate-50 dark:bg-slate-900/30", addBtn: "hover:bg-slate-100", card: "border-slate-200 hover:border-slate-300", badge: "bg-slate-100 text-slate-600 border-slate-200" },
+  "Assigned": { dot: "bg-blue-400", header: "bg-blue-50 dark:bg-blue-900/20", addBtn: "hover:bg-blue-100", card: "border-blue-200 hover:border-blue-400", badge: "bg-blue-50 text-blue-700 border-blue-200" },
+  "Planned Solution": { dot: "bg-amber-400", header: "bg-amber-50 dark:bg-amber-900/20", addBtn: "hover:bg-amber-100", card: "border-amber-200 hover:border-amber-400", badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  "In Progress": { dot: "bg-indigo-400", header: "bg-indigo-50 dark:bg-indigo-900/20", addBtn: "hover:bg-indigo-100", card: "border-indigo-200 hover:border-indigo-400", badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  "Testing": { dot: "bg-purple-400", header: "bg-purple-50 dark:bg-purple-900/20", addBtn: "hover:bg-purple-100", card: "border-purple-200 hover:border-purple-400", badge: "bg-purple-50 text-purple-700 border-purple-200" },
+  "Resolved": { dot: "bg-green-400", header: "bg-green-50 dark:bg-green-900/20", addBtn: "hover:bg-green-100", card: "border-green-200 hover:border-green-400", badge: "bg-green-50 text-green-700 border-green-200" },
 };
 
 // ──────────────────────────────────────────────────────────────
@@ -89,7 +91,19 @@ const getIssueTypeStyle = (type: string) => {
 // ──────────────────────────────────────────────────────────────
 // Issue Card Component
 // ──────────────────────────────────────────────────────────────
-function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
+function IssueCard({
+  issue,
+  isDragging,
+  onDragStart,
+  onDragEnd,
+  onClick,
+}: {
+  issue: Issue;
+  isDragging: boolean;
+  onDragStart: (e: React.DragEvent, issue: Issue) => void;
+  onDragEnd: () => void;
+  onClick?: () => void;
+}) {
   const client = typeof issue.client === "object" ? issue.client : null;
   const project = typeof issue.project === "object" ? issue.project : null;
   const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
@@ -100,10 +114,12 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
 
   return (
     <div
+      draggable
+      onDragStart={(e) => onDragStart(e, issue)}
+      onDragEnd={onDragEnd}
       onClick={onClick}
-      className={`group relative rounded-xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer ${
-        PRIORITY_BORDER_CLASSES[issue.priority] || "bg-[var(--surface)]"
-      }`}
+      className={`group relative rounded-xl border border-[var(--border)] p-4 hover:border-[var(--primary)] hover:shadow-lg transition-all duration-300 cursor-grab active:cursor-grabbing select-none ${PRIORITY_BORDER_CLASSES[issue.priority] || "bg-[var(--surface)]"
+        } ${isDragging ? "opacity-40 scale-95 rotate-1 shadow-2xl" : "hover:-translate-y-1"}`}
       style={{ backgroundColor: "var(--surface)" }}
     >
       {/* Issue ID & Priority */}
@@ -150,9 +166,8 @@ function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
         <div className="flex items-center gap-2">
           {/* Due Date */}
           <span
-            className={`flex items-center gap-0.5 font-medium px-1.5 py-0.5 rounded-md bg-[var(--background)] ${
-              isOverdue ? "text-[var(--destructive)] bg-[var(--destructive-light)] font-semibold animate-pulse-soft" : ""
-            }`}
+            className={`flex items-center gap-0.5 font-medium px-1.5 py-0.5 rounded-md bg-[var(--background)] ${isOverdue ? "text-[var(--destructive)] bg-[var(--destructive-light)] font-semibold animate-pulse-soft" : ""
+              }`}
           >
             {isOverdue && <AlertTriangle className="h-2.5 w-2.5" />}
             <Clock className="h-2.5 w-2.5" />
@@ -206,6 +221,39 @@ function ProjectCard({
   onBack?: () => void;
   onAddIssue: () => void;
 }) {
+  const updateMutation = useUpdateIssue();
+  const [draggingIssue, setDraggingIssue] = useState<Issue | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((e: React.DragEvent, issue: Issue) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("issueId", issue._id);
+    setDraggingIssue(issue);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingIssue(null);
+    setDragOverColumn(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, column: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverColumn(column);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetStatus: string) => {
+    e.preventDefault();
+    setDragOverColumn(null);
+    if (!draggingIssue || draggingIssue.status === targetStatus) { setDraggingIssue(null); return; }
+    try {
+      await updateMutation.mutateAsync({ id: draggingIssue._id, data: { status: targetStatus } });
+      toast.success(`Moved to ${targetStatus}`);
+    } catch {
+      toast.error("Failed to update issue status");
+    }
+    setDraggingIssue(null);
+  }, [draggingIssue, updateMutation]);
   const issues = group.issues;
 
   // Calculate project specific stats
@@ -409,9 +457,8 @@ function ProjectCard({
                         </td>
                         <td className="py-3 px-4 whitespace-nowrap">
                           <span
-                            className={`flex items-center gap-1 font-medium ${
-                              isOverdue ? "text-[var(--destructive)] font-semibold animate-pulse-soft" : "text-[var(--text-secondary)]"
-                            }`}
+                            className={`flex items-center gap-1 font-medium ${isOverdue ? "text-[var(--destructive)] font-semibold animate-pulse-soft" : "text-[var(--text-secondary)]"
+                              }`}
                           >
                             <Calendar className="h-3.5 w-3.5" />
                             {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
@@ -439,10 +486,17 @@ function ProjectCard({
               {KANBAN_COLUMNS.map((column) => {
                 const columnIssues = projectIssuesByStatus[column] ?? [];
                 const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
+                const isOver = dragOverColumn === column;
                 return (
                   <div
                     key={column}
-                    className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden"
+                    onDragOver={(e) => handleDragOver(e, column)}
+                    onDrop={(e) => handleDrop(e, column)}
+                    onDragLeave={() => setDragOverColumn(null)}
+                    className={`flex flex-col rounded-xl border bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden transition-all duration-200 ${isOver
+                        ? "border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]"
+                        : "border-[var(--border)]"
+                      }`}
                   >
                     {/* Column Header */}
                     <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
@@ -465,10 +519,15 @@ function ProjectCard({
                       </div>
                     </div>
 
+                    {/* Drop indicator */}
+                    {isOver && draggingIssue && (
+                      <div className="mx-3 mt-2 h-1.5 rounded-full animate-pulse bg-[var(--primary)] opacity-60" />
+                    )}
+
                     {/* Column Issues Cards */}
                     <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
                       {columnIssues.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl">
+                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
                           <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
                           <p className="text-xs text-[var(--text-tertiary)] font-medium">No issues</p>
                           <button
@@ -483,9 +542,17 @@ function ProjectCard({
                           <IssueCard
                             key={issue._id}
                             issue={issue}
+                            isDragging={draggingIssue?._id === issue._id}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
                             onClick={() => onIssueClick(issue)}
                           />
                         ))
+                      )}
+                      {isOver && draggingIssue && (
+                        <div className="h-16 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[rgba(99,102,241,0.05)] flex items-center justify-center">
+                          <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
+                        </div>
                       )}
                     </div>
 
@@ -628,6 +695,14 @@ function IssuesPageContent() {
 
   const isLoading = isLoadingIssues || isLoadingProjects;
 
+  // ── Real-time socket ──
+  const projectIdsForSocket = useMemo(
+    () => projects.map((p) => p._id).filter(Boolean),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [projects.map((p) => p._id).join(",")]
+  );
+  useIssuesSocket(projectIdsForSocket);
+
   // Group issues by project for project cards representation
   const groupedByProject = useMemo(() => {
     const groups: Record<string, ProjectGroup> = {};
@@ -725,11 +800,10 @@ function IssuesPageContent() {
           <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
             <button
               onClick={() => setViewMode("board")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-                viewMode === "board"
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "board"
                   ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
                   : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-              }`}
+                }`}
               title="Board View"
             >
               <LayoutGrid className="h-3.5 w-3.5" />
@@ -737,11 +811,10 @@ function IssuesPageContent() {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-                viewMode === "list"
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "list"
                   ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
                   : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-              }`}
+                }`}
               title="List View"
             >
               <List className="h-3.5 w-3.5" />
@@ -752,9 +825,8 @@ function IssuesPageContent() {
           <Button
             variant="outline"
             size="sm"
-            className={`gap-1.5 font-medium shadow-sm transition-all ${
-              hasActiveFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
-            }`}
+            className={`gap-1.5 font-medium shadow-sm transition-all ${hasActiveFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
+              }`}
             onClick={() => setShowFilters(!showFilters)}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />

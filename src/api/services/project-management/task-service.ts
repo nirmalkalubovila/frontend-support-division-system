@@ -42,6 +42,7 @@ export interface TaskComment {
 export interface Task extends GlobalRecords {
   project: string;
   parent: string | null;
+  cr: { _id: string; crNumber: string; title: string } | null;
   name: string;
   description: string | null;
   status: TaskStatus;
@@ -65,6 +66,7 @@ export interface CreateTaskPayload {
   assignees?: string[];
   relatedLinks?: RelatedLink[];
   parent?: string | null;
+  cr?: string | null;
 }
 
 export type UpdateTaskPayload = Partial<CreateTaskPayload>;

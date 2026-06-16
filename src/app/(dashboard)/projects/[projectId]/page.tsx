@@ -3,7 +3,7 @@
 import React, { useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare, Plus,
+  ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare,
   Calendar, Mail, Phone, Tag, Users, BarChart3,
   AlertCircle, CheckCircle2, GitPullRequest, Ticket,
 } from "lucide-react";
@@ -22,14 +22,13 @@ import type { User } from "@/api/services/user-management/user-service";
 import { TasksTab, CRTab, IssuesTab } from "./tabs";
 
 // ─────────────────────────────────────────────────────────────
-// Constants & helpers
+// Helpers
 // ─────────────────────────────────────────────────────────────
 
 function fmtDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
-
 
 // ─────────────────────────────────────────────────────────────
 // Dashboard Tab

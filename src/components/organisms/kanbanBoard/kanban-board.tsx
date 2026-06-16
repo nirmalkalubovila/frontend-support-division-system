@@ -6,7 +6,7 @@ import {
   Plus, Search, X, Pencil, Trash2, Eye, Clock,
   ChevronDown, Link as LinkIcon, Paperclip, MessageSquare,
   CheckSquare, AlertCircle, CheckCircle2,
-  FileText, Image as ImageIcon, ExternalLink, RefreshCw, Wifi, WifiOff, ShieldAlert,
+  FileText, Image as ImageIcon, ExternalLink, RefreshCw, Wifi, WifiOff, ShieldAlert, GitPullRequest,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -225,6 +225,11 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
                   <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[task.priority].dot}`} />{task.priority}
                 </span>
                 {overdue && <span className="text-xs font-bold text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Overdue</span>}
+                {task.cr && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center gap-1">
+                    <GitPullRequest className="h-3 w-3" />{task.cr.crNumber}
+                  </span>
+                )}
               </div>
               <h2 className="text-base font-bold text-[var(--text-primary)] leading-tight">{task.name}</h2>
             </div>
@@ -497,6 +502,11 @@ function KanbanCard({ task, isDragging, isValidDropTarget, onDragStart, onDragEn
         )}
         {task.attachments?.length > 0 && <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-0.5"><Paperclip className="h-2.5 w-2.5" />{task.attachments.length}</span>}
         {task.relatedLinks?.length > 0 && <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-0.5"><LinkIcon className="h-2.5 w-2.5" />{task.relatedLinks.length}</span>}
+        {task.cr && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-200 flex items-center gap-0.5">
+            <GitPullRequest className="h-2.5 w-2.5" />{task.cr.crNumber}
+          </span>
+        )}
       </div>
 
       {task.assignees.length > 0 && (
