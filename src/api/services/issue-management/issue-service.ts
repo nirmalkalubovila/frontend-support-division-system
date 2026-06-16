@@ -45,6 +45,11 @@ export interface Issue extends GlobalRecords {
   estimatedHours: number | null;
   dueDate: string;
   attachments: IssueAttachment[];
+  timeRequest?: {
+    hours: number;
+    reason: string;
+    requestedBy: IssueAssignee | null;
+  } | null;
 }
 
 export interface CreateIssue {
@@ -67,6 +72,11 @@ export interface UpdateIssue {
   assignedTo?: string | null;
   estimatedHours?: number | null;
   technicalApproach?: string | null;
+  expandReason?: string | null;
+  timeRequest?: {
+    hours: number;
+    reason: string;
+  } | null;
 }
 
 export interface IssueQueryParams {
