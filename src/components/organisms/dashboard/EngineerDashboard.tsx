@@ -19,6 +19,7 @@ import {
 import { Badge, Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { StatCard } from "@/components/atoms/statCard";
 import { Progress } from "@/components/ui/progress";
+import { cn } from "@/lib/utils";
 import {
   useGetTimeLogs,
   useStartTimer,
@@ -31,6 +32,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+
+const STATUS_COLOR_CLASSES: Record<string, string> = {
+  Backlog: "text-[var(--status-backlog)]",
+  Assigned: "text-[var(--status-assigned)]",
+  "Planned Solution": "text-[var(--status-planned)]",
+  "In Progress": "text-[var(--status-in-progress)]",
+  Testing: "text-[var(--status-testing)]",
+  "On Hold": "text-[var(--status-on-hold)]",
+  "Pending Client": "text-[var(--status-pending-client)]",
+  Resolved: "text-[var(--status-resolved)]",
+  Closed: "text-[var(--status-closed)]",
+  Reopened: "text-[var(--status-reopened)]",
+};
 
 interface EngineerDashboardProps {
   issues: Issue[];
@@ -327,6 +341,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           label="My Open Issues"
           value={kpis.openCount}
           trend="Currently active"
+          trendClassName="text-[var(--flat-peter-river)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -334,6 +349,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           label="Hours Logged Today"
           value={kpis.hoursToday}
           trend="Target: 8.0h"
+          trendClassName="text-[var(--flat-emerald)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -341,6 +357,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           label="Resolved (7d)"
           value={kpis.resolvedThisWeek}
           trend="Resolved tickets"
+          trendClassName="text-[var(--flat-emerald)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -348,6 +365,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           label="Next SLA Deadline"
           value={kpis.nextDeadlineStr}
           trend="Earliest due task"
+          trendClassName={kpis.nextDeadlineStr.includes("Overdue") ? "text-[var(--flat-alizarin)]" : "text-[var(--flat-carrot)]"}
           className="hover:scale-[1.01] transition-transform duration-200"
         />
       </div>
@@ -410,7 +428,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           </p>
                           <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
                             Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
+                            <span className={cn("font-bold", STATUS_COLOR_CLASSES[issue.status] || "text-[var(--text-primary)]")}>
+                              {issue.status}
+                            </span>
                           </p>
                         </div>
                         {/* Quick Action transitions */}
@@ -470,7 +490,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               </p>
               {selectedIssueObj ? (
                 <p className="text-xs text-[var(--text-secondary)] font-semibold mt-1.5 truncate max-w-full px-2" title={selectedIssueObj.title}>
-                  Tracking: <span className="font-mono text-[var(--primary-text)]">{selectedIssueObj.issueId}</span>
+                  Tracking: <span className="font-mono text-[var(--flat-wisteria)]">{selectedIssueObj.issueId}</span>
                 </p>
               ) : (
                 <p className="text-xs text-[var(--text-secondary)] mt-1.5 font-medium">
@@ -657,7 +677,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-[var(--text-secondary)]">Tracked Time</Label>
-              <p className="text-sm font-mono font-bold text-[var(--primary-text)]">
+              <p className="text-sm font-mono font-bold text-[var(--flat-wisteria)]">
                 {formatStopwatchTime(time)} ({parseFloat((time / 3600).toFixed(2))} hrs)
               </p>
             </div>

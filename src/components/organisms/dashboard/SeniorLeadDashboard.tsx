@@ -160,6 +160,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
           label="Unassigned Issues"
           value={metrics.unassigned}
           trend={metrics.unassigned > 0 ? "Requires triage" : "Clear queue"}
+          trendClassName={metrics.unassigned > 0 ? "text-[var(--flat-carrot)]" : "text-[var(--flat-emerald)]"}
           className={`hover:scale-[1.01] transition-transform duration-200 ${
             metrics.unassigned > 0 ? "border-amber-500 bg-[rgba(245,158,11,0.02)]" : ""
           }`}
@@ -169,6 +170,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
           label="Active Escalations"
           value={metrics.escalations}
           trend={metrics.escalations > 0 ? `${metrics.escalations} critical` : "No active escalations"}
+          trendClassName={metrics.escalations > 0 ? "text-[var(--flat-alizarin)]" : "text-[var(--flat-emerald)]"}
           className={`hover:scale-[1.01] transition-transform duration-200 ${
             metrics.escalations > 0 ? "border-[var(--destructive)] bg-[rgba(239,68,68,0.02)]" : ""
           }`}
@@ -178,6 +180,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
           label="Verification Queue"
           value={metrics.testingQueue}
           trend="Tickets awaiting review"
+          trendClassName="text-[var(--flat-peter-river)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -185,6 +188,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
           label="My Assigned Issues"
           value={metrics.myAssigned}
           trend="Active issues"
+          trendClassName="text-[var(--flat-peter-river)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
       </div>

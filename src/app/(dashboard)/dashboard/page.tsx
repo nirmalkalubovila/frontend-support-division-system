@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui";
+import { cn } from "@/lib/utils";
 import useSessionStore from "@/store/session-store";
 import { ROLE_LABELS } from "@/lib/constants";
 import { useGetIssues } from "@/api/services/issue-management/issue-service";
@@ -14,6 +15,14 @@ import {
   SeniorLeadDashboard,
   EngineerDashboard,
 } from "@/components/organisms";
+
+const ROLE_COLOR_CLASSES: Record<string, string> = {
+  super_admin: "text-[var(--flat-wisteria)]",
+  manager: "text-[var(--flat-belize-hole)]",
+  senior_engineer: "text-[var(--flat-nephritis)]",
+  engineer: "text-[var(--flat-turquoise)]",
+  intern: "text-[var(--flat-concrete)]",
+};
 
 export default function DashboardPage() {
   const userInfo = useSessionStore((s) => s.userInfo);
@@ -102,7 +111,7 @@ export default function DashboardPage() {
           </h1>
           <p className="text-xs text-[var(--text-secondary)] mt-1">
             Welcome back, <span className="font-semibold text-[var(--text-primary)]">{userInfo.name}</span> •{" "}
-            <span className="text-[var(--primary-text)] font-semibold">
+            <span className={cn("font-semibold", ROLE_COLOR_CLASSES[userInfo.role] || "text-[var(--flat-concrete)]")}>
               {ROLE_LABELS[userInfo.role] || "Staff Engineer"}
             </span>
           </p>

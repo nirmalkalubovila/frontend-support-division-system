@@ -7,9 +7,10 @@ interface StatCardProps {
   value: string | number;
   trend?: string;
   className?: string;
+  trendClassName?: string;
 }
 
-export function StatCard({ icon: Icon, label, value, trend, className }: StatCardProps) {
+export function StatCard({ icon: Icon, label, value, trend, className, trendClassName }: StatCardProps) {
   return (
     <div
       className={cn(
@@ -25,7 +26,9 @@ export function StatCard({ icon: Icon, label, value, trend, className }: StatCar
         <div className="flex items-baseline gap-2">
           <p className="text-xl font-semibold text-[var(--text-primary)]">{value}</p>
           {trend && (
-            <span className="text-xs text-[var(--secondary)]">{trend}</span>
+            <span className={cn("text-xs font-semibold", trendClassName || "text-[var(--secondary)]")}>
+              {trend}
+            </span>
           )}
         </div>
       </div>

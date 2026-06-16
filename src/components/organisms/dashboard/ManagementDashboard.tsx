@@ -189,6 +189,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
           label="Open Issues"
           value={metrics.totalOpen}
           trend="Requires attention"
+          trendClassName="text-[var(--flat-orange)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -196,6 +197,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
           label="SLA Compliance"
           value={`${metrics.slaComplianceRate}%`}
           trend="Target: 95%+"
+          trendClassName="text-[var(--flat-peter-river)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -203,6 +205,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
           label="SLA At Risk"
           value={metrics.slaAtRisk}
           trend={metrics.slaAtRisk > 0 ? `${metrics.slaAtRisk} overdue` : "Compliant"}
+          trendClassName={metrics.slaAtRisk > 0 ? "text-[var(--flat-alizarin)]" : "text-[var(--flat-emerald)]"}
           className={`hover:scale-[1.01] transition-transform duration-200 ${
             metrics.slaAtRisk > 0 ? "border-[var(--destructive)] bg-[rgba(239,68,68,0.02)]" : ""
           }`}
@@ -212,6 +215,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
           label="Active Staff Members"
           value={metrics.activeUsers}
           trend={`${users.length} total users`}
+          trendClassName="text-[var(--flat-peter-river)]"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
       </div>
