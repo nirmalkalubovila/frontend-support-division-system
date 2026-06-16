@@ -1,6 +1,5 @@
 "use client";
 
-import React, { useMemo } from "react";
 import React, { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -984,7 +983,6 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         <TabsContent value="issues">
-          <IssuesTab projectId={projectId} members={members} />
           <IssuesTab projectId={projectId} />
         </TabsContent>
       </Tabs>
