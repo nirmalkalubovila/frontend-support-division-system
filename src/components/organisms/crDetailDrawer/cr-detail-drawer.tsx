@@ -3,7 +3,7 @@
 import React, { useRef, useState } from "react";
 import {
   X, Pencil, Trash2, Paperclip, MessageSquare, Clock, Calendar,
-  FileText, Image as ImageIcon, ExternalLink, Link as LinkIcon, CheckCircle2, AlertCircle,
+  FileText, Image as ImageIcon, ExternalLink, Link as LinkIcon, CheckCircle2, AlertCircle, CheckSquare,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import {
 } from "@/api/services/project-management/cr-service";
 import type { User } from "@/api/services/user-management/user-service";
 import useSessionStore from "@/store/session-store";
+import { CRTasksPanel } from "@/components/organisms/crTasksPanel/cr-tasks-panel";
 
 // ── Config ──────────────────────────────────────────────────────
 const CR_STATUSES: CRStatus[] = ["Draft", "Submitted", "Under Review", "Approved", "Rejected", "In Development", "Testing", "Completed", "Closed"];
@@ -69,7 +70,7 @@ interface Props {
   onDelete: (cr: ChangeRequest) => void;
 }
 
-type DrawerTab = "overview" | "timeline" | "attachments" | "comments";
+type DrawerTab = "overview" | "tasks" | "timeline" | "attachments" | "comments";
 
 export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDelete }: Props) {
   const canEdit = useCanEditCR(cr);
@@ -127,6 +128,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
 
   const tabs: { key: DrawerTab; label: string }[] = [
     { key: "overview", label: "Overview" },
+    { key: "tasks", label: `Tasks${cr.taskProgress?.total ? ` (${cr.taskProgress.total})` : ""}` },
     { key: "timeline", label: "Timeline" },
     { key: "attachments", label: `Attachments${cr.attachments?.length ? ` (${cr.attachments.length})` : ""}` },
     { key: "comments", label: `Comments${comments.length ? ` (${comments.length})` : ""}` },
@@ -224,6 +226,32 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
 
               <Separator className="bg-[var(--border)]" />
 
+              {/* Task progress quick view */}
+              {(cr.taskProgress?.total ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                      <CheckSquare className="h-3.5 w-3.5" /> Task Progress
+                    </Label>
+                    <button onClick={() => setActiveTab("tasks")}
+                      className="text-[10px] text-[var(--primary)] font-semibold hover:underline">
+                      View Tasks →
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 rounded-full bg-[var(--surface-hover)] overflow-hidden border border-[var(--border)]/30">
+                      <div
+                        className="h-full bg-gradient-to-r from-[var(--primary)] to-emerald-500 transition-all duration-500 rounded-full"
+                        style={{ width: `${cr.taskProgress?.completionPercentage ?? 0}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-[var(--primary)] shrink-0">
+                      {cr.taskProgress?.done}/{cr.taskProgress?.total} done
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Key info grid */}
               <div className="grid grid-cols-2 gap-3">
                 {[
@@ -298,6 +326,11 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
                 </div>
               )}
             </>
+          )}
+
+          {/* ── Tasks ── */}
+          {activeTab === "tasks" && (
+            <CRTasksPanel cr={cr} projectId={projectId} members={members} />
           )}
 
           {/* ── Timeline ── */}
