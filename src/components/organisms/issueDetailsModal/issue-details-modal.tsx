@@ -77,6 +77,8 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   // Modals and custom dialog prompts state
   const [showExpandDialog, setShowExpandDialog] = useState(false);
   const [expandHoursInput, setExpandHoursInput] = useState("1");
+  const [expandReasonInput, setExpandReasonInput] = useState("");
+  const [pendingExpandReason, setPendingExpandReason] = useState("");
   
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   const [requestHoursInput, setRequestHoursInput] = useState("1");
@@ -207,8 +209,10 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           assignedTo: assignedTo || null,
           estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
           technicalApproach: technicalApproach || null,
+          expandReason: pendingExpandReason || null,
         },
       });
+      setPendingExpandReason("");
       toast.success("Issue updated successfully!");
       onOpenChange(false);
     } catch (err: any) {
@@ -236,22 +240,106 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
       toast.error("Please enter a valid number of hours.");
       return;
     }
-    const newHours = (Number(estimatedHours || 0) + Number(expandHoursInput)).toFixed(2);
+    const reason = expandReasonInput.trim();
+    if (!reason) {
+      toast.error("Please enter a reason for expansion.");
+      return;
+    }
+    const hoursNum = Number(expandHoursInput);
+    const newHours = (Number(estimatedHours || 0) + hoursNum).toFixed(2);
     setEstimatedHours(String(Number(newHours)));
+    setPendingExpandReason(reason);
+    
+    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Expanded] Added +${hoursNum} hours: ${reason} (Expanded by ${userInfo?.name})`;
+    setTechnicalApproach(structNote);
     setShowExpandDialog(false);
     toast.success(`Estimate expanded by ${expandHoursInput} hours! Remember to save changes.`);
   };
 
-  const handleRequestSubmit = () => {
+  const handleRequestSubmit = async () => {
+    if (!issue) return;
     if (!requestHoursInput || isNaN(Number(requestHoursInput)) || Number(requestHoursInput) <= 0) {
       toast.error("Please enter a valid number of hours.");
       return;
     }
-    const reason = requestReasonInput.trim() || "Time extension needed to complete task";
-    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Request] Requested +${requestHoursInput} hours: ${reason} (Requested by ${userInfo?.name})`;
-    setTechnicalApproach(structNote);
-    setShowRequestDialog(false);
-    toast.success(`Time request for +${requestHoursInput} hours added to notes! Click Save Changes to submit.`);
+    const reason = requestReasonInput.trim();
+    if (!reason) {
+      toast.error("Please enter a reason for the request.");
+      return;
+    }
+    const hoursNum = Number(requestHoursInput);
+    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Request] Requested +${hoursNum} hours: ${reason} (Requested by ${userInfo?.name})`;
+    
+    try {
+      await updateIssueMutation.mutateAsync({
+        id: issue._id,
+        data: {
+          technicalApproach: structNote,
+          timeRequest: {
+            hours: hoursNum,
+            reason: reason,
+          },
+        },
+      });
+      setTechnicalApproach(structNote);
+      setShowRequestDialog(false);
+      toast.success(`Time request for +${hoursNum} hours submitted successfully!`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to submit time request.");
+    }
+  };
+
+  const handleApproveTimeRequest = async () => {
+    if (!issue || !issue.timeRequest) return;
+    const hoursToAdd = issue.timeRequest.hours;
+    const requesterName = typeof issue.timeRequest.requestedBy === "object" && issue.timeRequest.requestedBy
+      ? issue.timeRequest.requestedBy.name
+      : "Engineer";
+    const reason = issue.timeRequest.reason;
+
+    const newEstimatedHours = Number(estimatedHours || 0) + hoursToAdd;
+    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Request Approved] Approved +${hoursToAdd} hours requested by ${requesterName}. Reason: ${reason} (Approved by ${userInfo?.name})`;
+
+    try {
+      await updateIssueMutation.mutateAsync({
+        id: issue._id,
+        data: {
+          estimatedHours: newEstimatedHours,
+          technicalApproach: structNote,
+          timeRequest: null,
+        },
+      });
+      setEstimatedHours(String(newEstimatedHours));
+      setTechnicalApproach(structNote);
+      toast.success("Time request approved successfully!");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to approve time request.");
+    }
+  };
+
+  const handleDeclineTimeRequest = async () => {
+    if (!issue || !issue.timeRequest) return;
+    const hoursRequested = issue.timeRequest.hours;
+    const requesterName = typeof issue.timeRequest.requestedBy === "object" && issue.timeRequest.requestedBy
+      ? issue.timeRequest.requestedBy.name
+      : "Engineer";
+    const reason = issue.timeRequest.reason;
+
+    const structNote = `${technicalApproach ? technicalApproach + "\n\n" : ""}[Time Request Declined] Declined +${hoursRequested} hours requested by ${requesterName}. Reason: ${reason} (Declined by ${userInfo?.name})`;
+
+    try {
+      await updateIssueMutation.mutateAsync({
+        id: issue._id,
+        data: {
+          technicalApproach: structNote,
+          timeRequest: null,
+        },
+      });
+      setTechnicalApproach(structNote);
+      toast.success("Time request declined successfully.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to decline time request.");
+    }
   };
 
   const handleHandoverSubmit = () => {
@@ -317,7 +405,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+      <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
         <DialogHeader className="space-y-2.5 border-b border-[var(--border)] pb-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-mono font-bold text-[var(--primary-text)] tracking-wider">
@@ -364,9 +452,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 py-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
           {/* Main Details Panel (Left / Col-Span-2) */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-7 space-y-6">
             {/* Description */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -479,7 +567,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           </div>
 
           {/* Quick Settings Panel (Right / Col-Span-1) */}
-          <div className="space-y-6">
+          <div className="lg:col-span-5 space-y-6 flex flex-col justify-start">
             
             {/* Time & Status Panel Card */}
             <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden">
@@ -671,35 +759,87 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     type="number"
                     placeholder="e.g. 4.5"
                     value={estimatedHours}
+                    disabled={!isManager}
                     onChange={(e) => setEstimatedHours(e.target.value)}
-                    className="h-8.5 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-xs font-bold"
+                    className="h-8.5 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-xs font-bold disabled:opacity-75 disabled:cursor-not-allowed"
                   />
                 </div>
+
+                {/* Pending Time Request Card */}
+                {issue.timeRequest && issue.timeRequest.hours && (
+                  <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-3 mt-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 w-full">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                            Pending Time Request
+                          </p>
+                          <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse-soft" />
+                        </div>
+                        <p className="text-xs text-[var(--text-primary)] font-semibold">
+                          Requested <span className="text-[var(--primary)] font-bold">+{issue.timeRequest.hours} hrs</span> by{" "}
+                          <span className="text-[var(--text-primary)] font-bold">
+                            {typeof issue.timeRequest.requestedBy === "object" && issue.timeRequest.requestedBy
+                              ? issue.timeRequest.requestedBy.name
+                              : "Engineer"}
+                          </span>
+                        </p>
+                        {issue.timeRequest.reason && (
+                          <div className="mt-1 p-2 bg-[var(--surface)] border border-[var(--border)]/30 rounded-lg">
+                            <p className="text-[11px] text-[var(--text-secondary)] italic break-words">
+                              "{issue.timeRequest.reason}"
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {isManager && (
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleApproveTimeRequest}
+                          className="flex-1 h-8 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow"
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={handleDeclineTimeRequest}
+                          className="flex-1 h-8 text-[11px] font-bold border-red-200 dark:border-red-900/50 hover:bg-red-500/10 text-red-600 dark:text-red-400 bg-transparent"
+                        >
+                          Decline
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Adjust / Expand Time Actions */}
                 <div className="flex gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => {
                       setExpandHoursInput("1");
+                      setExpandReasonInput("");
                       setShowExpandDialog(true);
                     }}
-                    className="flex-1 h-7.5 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)]"
+                    className="flex-1 h-10 text-xs font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)]"
                   >
                     + Expand Time
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     onClick={() => {
                       setRequestHoursInput("1");
                       setRequestReasonInput("");
                       setShowRequestDialog(true);
                     }}
-                    className="flex-1 h-7.5 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)]"
+                    className="flex-1 h-10 text-xs font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)]"
                   >
                     ✉ Request Time
                   </Button>
@@ -826,23 +966,36 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               Directly adjust the estimate by adding additional hours.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-2">
-            <Label htmlFor="expandHours" className="text-xs font-semibold">Additional Hours</Label>
-            <Input
-              id="expandHours"
-              type="number"
-              min="0.1"
-              step="0.1"
-              value={expandHoursInput}
-              onChange={(e) => setExpandHoursInput(e.target.value)}
-              className="h-10 text-sm"
-              placeholder="e.g. 1 or 0.5"
-            />
-            {expandHoursInput && !isNaN(Number(expandHoursInput)) && (
-              <p className="text-xs text-[var(--text-tertiary)] mt-1">
-                Equivalent to {Number(expandHoursInput) * 60} minutes
-              </p>
-            )}
+          <div className="py-4 space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="expandHours" className="text-xs font-semibold">Additional Hours</Label>
+              <Input
+                id="expandHours"
+                type="number"
+                min="0.1"
+                step="0.1"
+                value={expandHoursInput}
+                onChange={(e) => setExpandHoursInput(e.target.value)}
+                className="h-10 text-sm"
+                placeholder="e.g. 1 or 0.5"
+              />
+              {expandHoursInput && !isNaN(Number(expandHoursInput)) && (
+                <p className="text-xs text-[var(--text-tertiary)] mt-1">
+                  Equivalent to {Number(expandHoursInput) * 60} minutes
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="expandReason" className="text-xs font-semibold">Reason for Expansion</Label>
+              <Textarea
+                id="expandReason"
+                rows={3}
+                value={expandReasonInput}
+                onChange={(e) => setExpandReasonInput(e.target.value)}
+                className="text-sm bg-[var(--background)] border-[var(--border)]"
+                placeholder="Brief explanation for expanding the time..."
+              />
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowExpandDialog(false)} className="h-9 text-xs">
