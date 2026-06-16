@@ -122,7 +122,7 @@ function NavItem({
           collapsed
             ? "justify-center px-0"
             : isChildOfProjects
-            ? "justify-start pl-7 relative ml-3 w-[calc(100%-12px)] text-[var(--text-secondary)]"
+            ? `justify-start pl-7 relative ml-3 w-[calc(100%-12px)] ${active ? "" : "text-[var(--text-secondary)]"}`
             : "justify-start"
         }`}
       >

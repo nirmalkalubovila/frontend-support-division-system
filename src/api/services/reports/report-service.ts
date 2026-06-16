@@ -22,6 +22,58 @@ export interface ReportRecord extends GlobalRecords {
   metadata: Record<string, unknown>;
 }
 
+// ── Shared CR, Task, Finance metrics structures ────────────────
+export interface ProjectCrSummary {
+  project: string;
+  new: number;
+  completed: number;
+  total: number;
+}
+
+export interface CrSummaryData {
+  totalNew: number;
+  totalCompleted: number;
+  totalCount: number;
+  totalEstimatedHours: number;
+  totalActualHours: number;
+  totalEstimatedCost: number;
+  statusBreakdown: Record<string, number>;
+  priorityBreakdown: Record<string, number>;
+  byProject: ProjectCrSummary[];
+}
+
+export interface ProjectTaskSummary {
+  project: string;
+  new: number;
+  completed: number;
+  total: number;
+}
+
+export interface TaskSummaryData {
+  totalNew: number;
+  totalCompleted: number;
+  totalCount: number;
+  statusBreakdown: Record<string, number>;
+  priorityBreakdown: Record<string, number>;
+  byProject: ProjectTaskSummary[];
+}
+
+export interface ProjectFinanceSummary {
+  project: string;
+  billed: number;
+  received: number;
+  outstanding: number;
+}
+
+export interface FinanceSummaryData {
+  totalBilled: number;
+  totalReceived: number;
+  totalOutstanding: number;
+  totalPartiallyPaid: number;
+  statusBreakdown: Record<string, number>;
+  byProject: ProjectFinanceSummary[];
+}
+
 // ── Daily Report ───────────────────────────────────────────────
 
 export interface IssuesSummary {
@@ -71,6 +123,9 @@ export interface DailyReportData {
   memberActivity: MemberActivityRow[];
   criticalUnassigned: CriticalUnassignedRow[];
   pendingClient: PendingClientRow[];
+  changeRequests?: CrSummaryData;
+  tasks?: TaskSummaryData;
+  finance?: FinanceSummaryData;
 }
 
 // ── Weekly Report ──────────────────────────────────────────────
@@ -156,6 +211,9 @@ export interface WeeklyReportData {
     total: number;
     byType: EscalationByType[];
   };
+  changeRequests?: CrSummaryData;
+  tasks?: TaskSummaryData;
+  finance?: FinanceSummaryData;
 }
 
 // ── Monthly Report ─────────────────────────────────────────────
@@ -234,6 +292,9 @@ export interface MonthlyReportData {
     utilizationForecast: number;
     recommendation: string;
   };
+  changeRequests?: CrSummaryData;
+  tasks?: TaskSummaryData;
+  finance?: FinanceSummaryData;
 }
 
 // ── Executive Report ───────────────────────────────────────────
@@ -263,6 +324,9 @@ export interface ExecutiveReportData {
     priority: string;
     resolvedIn: string;
   }[];
+  changeRequests?: CrSummaryData;
+  tasks?: TaskSummaryData;
+  finance?: FinanceSummaryData;
 }
 
 // ── KPI Analytics ──────────────────────────────────────────────
@@ -274,6 +338,12 @@ export interface KpiDataPoint {
   issuesNew: number;
   issuesResolved: number;
   velocityAvg: number;
+  crsNew: number;
+  crsCompleted: number;
+  tasksNew: number;
+  tasksCompleted: number;
+  revenueBilled: number;
+  revenueReceived: number;
 }
 
 export interface KpiAnalyticsData {
@@ -286,6 +356,12 @@ export interface KpiAnalyticsData {
     avgSlaRate: number;
     totalNewIssues: number;
     totalResolvedIssues: number;
+    totalNewCrs: number;
+    totalCompletedCrs: number;
+    totalNewTasks: number;
+    totalCompletedTasks: number;
+    totalBilledRevenue: number;
+    totalReceivedRevenue: number;
   };
 }
 
@@ -312,11 +388,34 @@ export interface ProjectUtilizationRow {
   utilization: number;
 }
 
+export interface DeveloperWorkloadCompareRow {
+  name: string;
+  activeIssues: number;
+  activeTasks: number;
+}
+
+export interface CrHoursBreakdownRow {
+  project: string;
+  estimatedHours: number;
+  actualHours: number;
+}
+
+export interface FinancialEfficiencyRow {
+  project: string;
+  totalBilled: number;
+  totalReceived: number;
+  totalUsedHours: number;
+  hourlyRate: number;
+}
+
 export interface UtilizationData {
   period: { startDate: string; endDate: string };
   projectFilter: string;
   memberBreakdown: MemberUtilizationRow[];
   projectSummary: ProjectUtilizationRow[];
+  developerWorkloadCompare?: DeveloperWorkloadCompareRow[];
+  crHoursBreakdown?: CrHoursBreakdownRow[];
+  financialEfficiency?: FinancialEfficiencyRow[];
 }
 
 // ── Report Schedule Settings ───────────────────────────────────

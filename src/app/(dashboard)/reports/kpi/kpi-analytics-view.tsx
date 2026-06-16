@@ -9,6 +9,10 @@ import {
   TrendingUp,
   Activity,
   ChevronDown,
+  GitPullRequest,
+  CheckSquare,
+  Wallet,
+  AlertCircle
 } from "lucide-react";
 import {
   Card,
@@ -16,7 +20,10 @@ import {
   CardHeader,
   CardTitle,
   Input,
-  Label,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent
 } from "@/components";
 import { useGetKpiAnalytics } from "@/api/services/reports/report-service";
 import type { KpiGranularity } from "@/api/services/reports/report-service";
@@ -121,83 +128,242 @@ export function KpiAnalyticsView() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          {/* Aggregate Stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              label="Avg SLA Success"
-              value={`${analytics.aggregates.avgSlaRate}%`}
-              variant={analytics.aggregates.avgSlaRate >= 90 ? "success" : analytics.aggregates.avgSlaRate >= 75 ? "warning" : "danger"}
-              icon={<ShieldAlert className="h-4 w-4" />}
-            />
-            <StatCard
-              label="Avg Resolution Speed"
-              value={`${analytics.aggregates.avgResolutionTime} hrs`}
-              icon={<Clock className="h-4 w-4 text-[var(--primary-text)]" />}
-            />
-            <StatCard
-              label="Total New Issues"
-              value={analytics.aggregates.totalNewIssues}
-              icon={<Activity className="h-4 w-4 text-blue-500" />}
-            />
-            <StatCard
-              label="Total Resolved"
-              value={analytics.aggregates.totalResolvedIssues}
-              variant="success"
-              icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />}
-            />
-          </div>
+        <Tabs defaultValue="summary" className="w-full space-y-6">
+          <TabsList className="bg-[var(--background)] border border-[var(--border)] w-full sm:w-auto flex flex-wrap h-auto p-1 gap-1">
+            <TabsTrigger value="summary" className="text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5" />
+              Summary
+            </TabsTrigger>
+            <TabsTrigger value="issues" className="text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Issues
+            </TabsTrigger>
+            <TabsTrigger value="crs" className="text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <GitPullRequest className="h-3.5 w-3.5" />
+              CRs
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <CheckSquare className="h-3.5 w-3.5" />
+              Tasks
+            </TabsTrigger>
+            <TabsTrigger value="finance" className="text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <Wallet className="h-3.5 w-3.5" />
+              Finance
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Charts Matrix */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* SLA Compliance Trend */}
+          {/* 1. Summary Tab */}
+          <TabsContent value="summary" className="space-y-6 outline-none">
+            {/* Overview Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <StatCard
+                label="New Issues"
+                value={analytics.aggregates.totalNewIssues}
+                icon={<Activity className="h-4 w-4 text-amber-500" />}
+              />
+              <StatCard
+                label="Resolved Issues"
+                value={analytics.aggregates.totalResolvedIssues}
+                variant="success"
+                icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />}
+              />
+              <StatCard
+                label="New CRs"
+                value={analytics.aggregates.totalNewCrs || 0}
+                icon={<GitPullRequest className="h-4 w-4 text-purple-500" />}
+              />
+              <StatCard
+                label="Completed CRs"
+                value={analytics.aggregates.totalCompletedCrs || 0}
+                variant="success"
+                icon={<GitPullRequest className="h-4 w-4 text-emerald-500" />}
+              />
+              <StatCard
+                label="New Tasks"
+                value={analytics.aggregates.totalNewTasks || 0}
+                icon={<CheckSquare className="h-4 w-4 text-blue-500" />}
+              />
+              <StatCard
+                label="Completed Tasks"
+                value={analytics.aggregates.totalCompletedTasks || 0}
+                variant="success"
+                icon={<CheckSquare className="h-4 w-4 text-emerald-500" />}
+              />
+            </div>
+
+            {/* Combined Delivery Volume Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Completed/Resolved Volumes Trend</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <Bar dataKey="issuesResolved" name="Resolved Issues" fill="#3498db" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="crsCompleted" name="Completed CRs" fill="#9b59b6" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="tasksCompleted" name="Completed Tasks" fill="#2ecc71" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">New Logged items Trend</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <Bar dataKey="issuesNew" name="New Issues" fill="#e67e22" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="crsNew" name="New CRs" fill="#8e44ad" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="tasksNew" name="New Tasks" fill="#1abc9c" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* 2. Issues Tab */}
+          <TabsContent value="issues" className="space-y-6 outline-none">
+            {/* Aggregate Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard
+                label="Avg SLA Success"
+                value={`${analytics.aggregates.avgSlaRate}%`}
+                variant={analytics.aggregates.avgSlaRate >= 90 ? "success" : analytics.aggregates.avgSlaRate >= 75 ? "warning" : "danger"}
+                icon={<ShieldAlert className="h-4 w-4" />}
+              />
+              <StatCard
+                label="Avg Resolution Speed"
+                value={`${analytics.aggregates.avgResolutionTime} hrs`}
+                icon={<Clock className="h-4 w-4 text-[var(--primary-text)]" />}
+              />
+              <StatCard
+                label="Total New Issues"
+                value={analytics.aggregates.totalNewIssues}
+                icon={<Activity className="h-4 w-4 text-blue-500" />}
+              />
+              <StatCard
+                label="Total Resolved Issues"
+                value={analytics.aggregates.totalResolvedIssues}
+                variant="success"
+                icon={<ArrowUpRight className="h-4 w-4 text-emerald-500" />}
+              />
+            </div>
+
+            {/* Matrix of Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* SLA Compliance Trend */}
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">SLA Compliance Rate Trend (%)</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis domain={[50, 100]} tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Area type="monotone" dataKey="slaComplianceRate" name="SLA Rate" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.15} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Resolution Time Trend */}
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Average Resolution Speed (Hours)</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Line type="monotone" dataKey="resolutionTimeAvg" name="Avg Hours" stroke="#3498db" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Issues Volumes */}
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Support Volume Comparison</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                      <Bar dataKey="issuesNew" name="New Issues" fill="#e67e22" radius={[2, 2, 0, 0]} />
+                      <Bar dataKey="issuesResolved" name="Resolved Issues" fill="#3498db" radius={[2, 2, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Developer velocity over time */}
+              <Card className="bg-[var(--surface)] border-[var(--border)]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold">Active Developer Velocity (Avg Hours)</CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                      <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                      <Line type="monotone" dataKey="velocityAvg" name="Velocity Hours" stroke="#9b59b6" strokeWidth={2} dot={{ r: 3 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          {/* 3. CRs Tab */}
+          <TabsContent value="crs" className="space-y-6 outline-none">
+            {/* CR stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-fit">
+              <StatCard
+                label="New CRs"
+                value={analytics.aggregates.totalNewCrs || 0}
+                icon={<GitPullRequest className="h-4 w-4 text-purple-500" />}
+              />
+              <StatCard
+                label="Completed CRs"
+                value={analytics.aggregates.totalCompletedCrs || 0}
+                variant="success"
+                icon={<GitPullRequest className="h-4 w-4 text-emerald-500" />}
+              />
+            </div>
+
+            {/* CR trends */}
             <Card className="bg-[var(--surface)] border-[var(--border)]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">SLA Compliance Rate Trend (%)</CardTitle>
+                <CardTitle className="text-sm font-semibold">Change Requests Activity Trend</CardTitle>
               </CardHeader>
-              <CardContent className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorSla" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
-                    <YAxis domain={[50, 100]} tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
-                    <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
-                    <Area type="monotone" dataKey="slaComplianceRate" name="SLA Rate" stroke="var(--primary)" fillOpacity={1} fill="url(#colorSla)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Resolution Time Trend */}
-            <Card className="bg-[var(--surface)] border-[var(--border)]">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Average Resolution Speed (Hours)</CardTitle>
-              </CardHeader>
-              <CardContent className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
-                    <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
-                    <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
-                    <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
-                    <Line type="monotone" dataKey="resolutionTimeAvg" name="Avg Hours" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Issues Volumes */}
-            <Card className="bg-[var(--surface)] border-[var(--border)]">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Support Volume Comparison</CardTitle>
-              </CardHeader>
-              <CardContent className="h-[250px]">
+              <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
@@ -205,32 +371,90 @@ export function KpiAnalyticsView() {
                     <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
                     <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
                     <Legend wrapperStyle={{ fontSize: 10 }} />
-                    <Bar dataKey="issuesNew" name="New Issues" fill="var(--primary)" radius={[2, 2, 0, 0]} />
-                    <Bar dataKey="issuesResolved" name="Resolved Issues" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="crsNew" name="New CRs" fill="#8e44ad" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="crsCompleted" name="Completed CRs" fill="#2ecc71" radius={[2, 2, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
+          </TabsContent>
 
-            {/* Developer velocity over time */}
+          {/* 4. Tasks Tab */}
+          <TabsContent value="tasks" className="space-y-6 outline-none">
+            {/* Task stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-fit">
+              <StatCard
+                label="New Tasks"
+                value={analytics.aggregates.totalNewTasks || 0}
+                icon={<CheckSquare className="h-4 w-4 text-blue-500" />}
+              />
+              <StatCard
+                label="Completed Tasks"
+                value={analytics.aggregates.totalCompletedTasks || 0}
+                variant="success"
+                icon={<CheckSquare className="h-4 w-4 text-emerald-500" />}
+              />
+            </div>
+
+            {/* Task trends */}
             <Card className="bg-[var(--surface)] border-[var(--border)]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Active Developer Velocity (Avg Hours)</CardTitle>
+                <CardTitle className="text-sm font-semibold">Tasks Activity Trend</CardTitle>
               </CardHeader>
-              <CardContent className="h-[250px]">
+              <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                  <BarChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
                     <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
                     <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
-                    <Line type="monotone" dataKey="velocityAvg" name="Velocity Hours" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
-                  </LineChart>
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Bar dataKey="tasksNew" name="New Tasks" fill="#3498db" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="tasksCompleted" name="Completed Tasks" fill="#2ecc71" radius={[2, 2, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </div>
-        </>
+          </TabsContent>
+
+          {/* 5. Finance Tab */}
+          <TabsContent value="finance" className="space-y-6 outline-none">
+            {/* Financial Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 w-fit">
+              <StatCard
+                label="Billed Revenue"
+                value={`Rs. ${(analytics.aggregates.totalBilledRevenue || 0).toLocaleString()}`}
+                icon={<Wallet className="h-4 w-4 text-amber-500" />}
+              />
+              <StatCard
+                label="Received Revenue"
+                value={`Rs. ${(analytics.aggregates.totalReceivedRevenue || 0).toLocaleString()}`}
+                variant="success"
+                icon={<Wallet className="h-4 w-4 text-emerald-500" />}
+              />
+            </div>
+
+            {/* Financial Revenue Trend */}
+            <Card className="bg-[var(--surface)] border-[var(--border)]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-semibold">Financial Invoicing & Billing Trends (Rs.)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={analytics.dataPoints} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                    <XAxis dataKey="date" tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                    <YAxis tick={{ fill: "var(--text-secondary)", fontSize: 9 }} />
+                    <Tooltip contentStyle={{ backgroundColor: "var(--surface)", borderColor: "var(--border)", borderRadius: "8px" }} />
+                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                    <Area type="monotone" dataKey="revenueBilled" name="Billed Amount" stroke="#e67e22" fill="#e67e22" fillOpacity={0.15} strokeWidth={2} />
+                    <Area type="monotone" dataKey="revenueReceived" name="Received Amount" stroke="#2ecc71" fill="#2ecc71" fillOpacity={0.15} strokeWidth={2} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   );

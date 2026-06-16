@@ -145,16 +145,16 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
 
   // Status colors matching application CSS tokens
   const STATUS_COLORS: Record<string, string> = {
-    Backlog: "#9ca3af",
-    Assigned: "#3b82f6",
-    "Planned Solution": "#8b5cf6",
-    "In Progress": "#f59e0b",
-    Testing: "#06b6d4",
-    "On Hold": "#ef4444",
-    "Pending Client": "#f97316",
-    Resolved: "#22c55e",
-    Closed: "#6b7280",
-    Reopened: "#ec4899",
+    Backlog: "var(--status-backlog)",
+    Assigned: "var(--status-assigned)",
+    "Planned Solution": "var(--status-planned)",
+    "In Progress": "var(--status-in-progress)",
+    Testing: "var(--status-testing)",
+    "On Hold": "var(--status-on-hold)",
+    "Pending Client": "var(--status-pending-client)",
+    Resolved: "var(--status-resolved)",
+    Closed: "var(--status-closed)",
+    Reopened: "var(--status-reopened)",
   };
 
   // ──────────────────────────────────────────────────────────────
