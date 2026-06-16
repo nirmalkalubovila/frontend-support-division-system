@@ -18,6 +18,7 @@ import {
   Calendar,
   Folder,
   UserCheck,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -27,7 +28,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Button, Badge, Textarea, Input, Label, Card, CardHeader, CardTitle, CardContent } from "@/components";
+import { Button, Badge, Textarea, Input, Label, Card, CardHeader, CardTitle, CardContent, Separator } from "@/components";
 import {
   useUpdateIssue,
   useUploadAttachments,
@@ -38,6 +39,16 @@ import {
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
 import useSessionStore from "@/store/session-store";
+
+const STATUS_SELECT_COLORS: Record<string, string> = {
+  "Backlog":          "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
+  "Assigned":         "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 focus:border-blue-400 focus:ring-blue-400/20",
+  "Planned Solution": "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 focus:border-amber-400 focus:ring-amber-400/20",
+  "In Progress":      "border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-300 focus:border-indigo-400 focus:ring-indigo-400/20",
+  "Testing":          "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
+  "Resolved":         "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
+  "Closed":           "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 focus:border-rose-400 focus:ring-rose-400/20",
+};
 
 interface IssueDetailsModalProps {
   issue: Issue | null;
@@ -469,180 +480,291 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
           {/* Quick Settings Panel (Right / Col-Span-1) */}
           <div className="space-y-6">
-            {/* Status Manager */}
-            <div className="space-y-2">
-              <Label htmlFor="status" className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                Issue Status
-              </Label>
-              <select
-                id="status"
-                value={status}
-                disabled={issue.status === "Closed" && userInfo?.role !== "super_admin"}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full h-10 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-75 disabled:cursor-not-allowed"
-              >
-                {ISSUE_STATUSES.map((col) => {
-                  // Only super_admin can change status to "Closed"
-                  if (col === "Closed" && userInfo?.role !== "super_admin" && issue.status !== "Closed") {
-                    return null;
-                  }
-                  return (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-
-            {/* Stopwatch Timer Widget */}
-            <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-[var(--primary)]" />
-                  Stopwatch Tracker
+            
+            {/* Time & Status Panel Card */}
+            <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-[var(--primary)]" />
+                    Status & Time Tracker
+                  </span>
+                  {isTicking && (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold capitalize">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      Ticking
+                    </span>
+                  )}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-center py-1">
+              
+              <CardContent className="p-4 space-y-4">
+                {/* Status Selector */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="status" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Issue Status
+                  </Label>
+                  <div className="relative">
+                    <select
+                      id="status"
+                      value={status}
+                      disabled={issue.status === "Closed" && userInfo?.role !== "super_admin"}
+                      onChange={(e) => setStatus(e.target.value)}
+                      className={`w-full h-9 appearance-none rounded-lg border px-3 pr-10 text-xs font-bold focus:outline-none transition-all duration-200 disabled:opacity-75 disabled:cursor-not-allowed ${
+                        STATUS_SELECT_COLORS[status] || "border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {ISSUE_STATUSES.map((col) => {
+                        if (col === "Closed" && userInfo?.role !== "super_admin" && issue.status !== "Closed") {
+                          return null;
+                        }
+                        return (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none" />
+                  </div>
+                </div>
+
+                <Separator className="bg-[var(--border)]/50" />
+
+                {/* Digital Clock */}
+                <div className="bg-[var(--surface-hover)]/30 dark:bg-black/10 rounded-xl p-3 text-center border border-[var(--border)]/30">
                   <p className="text-3xl font-mono font-bold text-[var(--text-primary)] tracking-wider">
                     {formatStopwatchTime(time)}
                   </p>
+                  <p className="text-[9px] text-[var(--text-tertiary)] font-medium mt-1 uppercase tracking-wider">Tracked Duration</p>
                 </div>
+
+                {/* Timer Controls */}
                 <div className="flex gap-2">
                   {!isTicking ? (
                     <button
                       onClick={handleStartTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 transition-all shadow-sm"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-bold hover:brightness-105 transition-all shadow-sm cursor-pointer"
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />
-                      Start
+                      Start Work
                     </button>
                   ) : (
                     <button
                       onClick={handlePauseTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold transition-all shadow-sm"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
                     >
                       <Pause className="h-3.5 w-3.5 fill-current" />
-                      Pause
+                      Pause Timer
                     </button>
                   )}
                   <button
                     onClick={handleStopTimer}
                     disabled={time === 0}
-                    className="flex items-center justify-center h-9 w-10 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    title="Reset timer"
+                    className="flex items-center justify-center h-9 w-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
                   >
                     <Square className="h-3.5 w-3.5 fill-current" />
                   </button>
                 </div>
+
+                {/* Estimate Progress Bar */}
+                {Number(estimatedHours || 0) > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="font-semibold text-[var(--text-secondary)]">Estimate Used</span>
+                      <span className={`font-bold ${time > Number(estimatedHours) * 3600 ? "text-red-500 animate-pulse-soft" : "text-[var(--primary)]"}`}>
+                        {Math.min(100, Math.round((time / (Number(estimatedHours) * 3600)) * 100))}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-[var(--surface-hover)] rounded-full overflow-hidden border border-[var(--border)]/20">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          time > Number(estimatedHours) * 3600
+                            ? "bg-red-500"
+                            : "bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)]"
+                        }`}
+                        style={{ width: `${Math.min(100, (time / (Number(estimatedHours) * 3600)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[9px] text-[var(--text-tertiary)] pt-0.5">
+                      <span>{Math.floor(time / 60)} mins logged</span>
+                      <span>{Number(estimatedHours) * 60} mins estimated</span>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            {/* Details Summary Info */}
-            <div className="space-y-3 p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs font-medium space-y-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[var(--text-secondary)] flex items-center gap-1.5">
-                  <Folder className="h-3.5 w-3.5" /> Client / Project
-                </span>
-                <span className="text-[var(--text-primary)] font-semibold truncate max-w-[150px]">
-                  {client?.code || "—"} / {project?.name || "—"}
-                </span>
-              </div>
+            {/* Details Summary Card */}
+            <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
+                <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                  Issue Metadata & SLA
+                </CardTitle>
+              </CardHeader>
               
-              <div className="flex items-center justify-between">
-                <span className="text-[var(--text-secondary)] flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" /> Due Date SLA
-                </span>
-                <span className="text-[var(--text-primary)] font-semibold">
-                  {new Date(issue.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </span>
-              </div>
-
-              {/* Estimated Hours */}
-              <div className="space-y-1.5 pt-2 border-t border-[var(--border)]">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="estimatedHours" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Est. Hours
-                  </Label>
-                  {estimatedHours && (
-                    <span className="text-[10px] font-semibold text-[var(--text-tertiary)]">
-                      ({Number(estimatedHours) * 60} mins)
-                    </span>
-                  )}
+              <CardContent className="p-4 space-y-4">
+                {/* Client & Project */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase tracking-wider block">Client & Project</span>
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      {client?.code ? (
+                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider">
+                          {client.code}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider">
+                          GEN
+                        </span>
+                      )}
+                      <span className="text-xs font-bold text-[var(--text-primary)]">
+                        {project?.name || "General"}
+                      </span>
+                    </div>
+                    {client?.name && (
+                      <p className="text-[10px] text-[var(--text-tertiary)]">{client.name}</p>
+                    )}
+                  </div>
                 </div>
-                <Input
-                  id="estimatedHours"
-                  type="number"
-                  placeholder="e.g. 4.5"
-                  value={estimatedHours}
-                  onChange={(e) => setEstimatedHours(e.target.value)}
-                  className="h-8 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-xs font-semibold"
-                />
-              </div>
 
-              {/* Adjust / Expand Time Actions */}
-              <div className="flex gap-2 pt-1.5">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setExpandHoursInput("1");
-                    setShowExpandDialog(true);
-                  }}
-                  className="flex-1 h-7 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)]"
-                >
-                  + Expand Time
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setRequestHoursInput("1");
-                    setRequestReasonInput("");
-                    setShowRequestDialog(true);
-                  }}
-                  className="flex-1 h-7 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)]"
-                >
-                  ✉ Request Time
-                </Button>
-              </div>
+                <Separator className="bg-[var(--border)]/50" />
 
-              {/* Assignment (Admins/Managers/Assigned Engineers Handover) */}
-              <div className="space-y-1.5 pt-1">
-                <Label htmlFor="assignedTo" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Assigned Engineer {canHandover && !isManager && "(Handover enabled)"}
-                </Label>
-                <select
-                  id="assignedTo"
-                  value={assignedTo}
-                  disabled={!canHandover}
-                  onChange={(e) => {
-                    const newAssigneeId = e.target.value;
-                    const oldAssigneeName = issue && typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo.name : "Unassigned";
-                    const newAssigneeName = users.find((u) => u._id === newAssigneeId)?.name || "Unassigned";
-                    
-                    if (newAssigneeId !== currentAssigneeId) {
-                      setPendingAssigneeId(newAssigneeId);
-                      setPendingAssigneeName(newAssigneeName);
-                      setHandoverReasonInput("");
-                      setShowHandoverDialog(true);
-                    } else {
-                      setAssignedTo(newAssigneeId);
-                    }
-                  }}
-                  className="w-full h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-xs font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-70"
-                >
-                  <option value="">Unassigned</option>
-                  {users.map((u) => (
-                    <option key={u._id} value={u._id}>
-                      {u.name} ({ROLE_LABELS[u.role] || u.role})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+                {/* Due Date SLA */}
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-[var(--text-tertiary)] uppercase tracking-wider flex items-center gap-1">
+                    <Calendar className="h-3.5 w-3.5 text-[var(--text-tertiary)]" /> Due Date SLA
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-xs font-bold ${
+                      new Date(issue.dueDate) < new Date() && !["Resolved", "Closed"].includes(issue.status)
+                        ? "text-red-500"
+                        : "text-[var(--text-primary)]"
+                    }`}>
+                      {new Date(issue.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                    </span>
+                    {new Date(issue.dueDate) < new Date() && !["Resolved", "Closed"].includes(issue.status) && (
+                      <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[9px] font-bold uppercase tracking-wider shrink-0 animate-pulse-soft">
+                        Overdue
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <Separator className="bg-[var(--border)]/50" />
+
+                {/* Estimated Hours Input */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="estimatedHours" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      Est. Hours
+                    </Label>
+                    {estimatedHours && (
+                      <span className="text-[10px] font-bold text-[var(--text-tertiary)]">
+                        ({Number(estimatedHours) * 60} mins)
+                      </span>
+                    )}
+                  </div>
+                  <Input
+                    id="estimatedHours"
+                    type="number"
+                    placeholder="e.g. 4.5"
+                    value={estimatedHours}
+                    onChange={(e) => setEstimatedHours(e.target.value)}
+                    className="h-8.5 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-xs font-bold"
+                  />
+                </div>
+
+                {/* Adjust / Expand Time Actions */}
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setExpandHoursInput("1");
+                      setShowExpandDialog(true);
+                    }}
+                    className="flex-1 h-7.5 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)]"
+                  >
+                    + Expand Time
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRequestHoursInput("1");
+                      setRequestReasonInput("");
+                      setShowRequestDialog(true);
+                    }}
+                    className="flex-1 h-7.5 text-[10px] font-bold py-0 border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)]"
+                  >
+                    ✉ Request Time
+                  </Button>
+                </div>
+
+                <Separator className="bg-[var(--border)]/50" />
+
+                {/* Assignment & Handover */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="assignedTo" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      Assigned Engineer
+                    </Label>
+                    {canHandover && !isManager && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-[8px] font-extrabold uppercase tracking-wide border border-emerald-200 dark:border-emerald-900/30">
+                        Handover Enabled
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {issue.assignedTo ? (
+                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[10px] font-bold shadow-sm shrink-0">
+                        {typeof issue.assignedTo === "object" ? issue.assignedTo.name.charAt(0).toUpperCase() : "E"}
+                      </div>
+                    ) : (
+                      <div className="h-7 w-7 rounded-full bg-[var(--surface-hover)] border border-[var(--border)] flex items-center justify-center shrink-0">
+                        <UserIcon className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+                      </div>
+                    )}
+                    <div className="relative flex-1">
+                      <select
+                        id="assignedTo"
+                        value={assignedTo}
+                        disabled={!canHandover}
+                        onChange={(e) => {
+                          const newAssigneeId = e.target.value;
+                          const oldAssigneeName = issue && typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo.name : "Unassigned";
+                          const newAssigneeName = users.find((u) => u._id === newAssigneeId)?.name || "Unassigned";
+                          
+                          if (newAssigneeId !== currentAssigneeId) {
+                            setPendingAssigneeId(newAssigneeId);
+                            setPendingAssigneeName(newAssigneeName);
+                            setHandoverReasonInput("");
+                            setShowHandoverDialog(true);
+                          } else {
+                            setAssignedTo(newAssigneeId);
+                          }
+                        }}
+                        className="w-full h-8.5 appearance-none rounded-lg border border-[var(--border)] bg-[var(--surface)] pl-2 pr-8 text-xs font-bold text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-70 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.name} ({ROLE_LABELS[u.role] || u.role})
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none" />
+                    </div>
+                  </div>
+                </div>
+
+              </CardContent>
+            </Card>
+
           </div>
         </div>
 

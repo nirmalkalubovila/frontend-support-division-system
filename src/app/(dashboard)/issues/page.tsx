@@ -445,7 +445,7 @@ function ProjectCard({
                     className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden"
                   >
                     {/* Column Header */}
-                    <div className={`px-3 pt-3 pb-2 border-b border-[var(--border)] ${cfg.header}`}>
+                    <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
@@ -468,12 +468,12 @@ function ProjectCard({
                     {/* Column Issues Cards */}
                     <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
                       {columnIssues.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
+                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl">
                           <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
-                          <p className="text-[10px] text-[var(--text-tertiary)] font-medium">No issues</p>
+                          <p className="text-xs text-[var(--text-tertiary)] font-medium">No issues</p>
                           <button
                             onClick={onAddIssue}
-                            className="mt-2 text-[10px] text-[var(--primary)] font-semibold hover:underline flex items-center gap-1"
+                            className="mt-2 text-xs text-[var(--primary)] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <Plus className="h-3 w-3" /> Add Issue
                           </button>
