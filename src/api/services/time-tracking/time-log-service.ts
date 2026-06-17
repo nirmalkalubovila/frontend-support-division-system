@@ -5,12 +5,16 @@ import type { Issue } from "../issue-management/issue-service";
 import type { Project } from "../project-management/project-service";
 
 export type WorkType =
-  | "Investigation"
-  | "Development"
+  | "Backlog"
+  | "Assigned"
+  | "Planned Solution"
+  | "In Progress"
   | "Testing"
-  | "Communication"
-  | "Documentation"
-  | "Deployment";
+  | "Resolved"
+  | "Closed"
+  | "Reopened"
+  | "On Hold"
+  | "Pending Client";
 
 export interface TimeLogRecord extends GlobalRecords {
   issue: Issue | string;

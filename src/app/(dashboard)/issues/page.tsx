@@ -622,6 +622,7 @@ function ProjectCard({
                     <th className="py-3 px-4 font-semibold">Priority</th>
                     <th className="py-3 px-4 font-semibold">Status</th>
                     <th className="py-3 px-4 font-semibold">Assignee</th>
+                    <th className="py-3 px-4 font-semibold">Time Spent</th>
                     <th className="py-3 px-4 font-semibold">Completed Date</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
@@ -629,7 +630,7 @@ function ProjectCard({
                 <tbody className="divide-y divide-[var(--border)] text-xs">
                   {historyIssues.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-[var(--text-tertiary)] font-medium bg-[var(--surface)]/10">
+                      <td colSpan={9} className="py-8 text-center text-[var(--text-tertiary)] font-medium bg-[var(--surface)]/10">
                         <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mx-auto mb-1.5" />
                         No completed tasks in history yet.
                       </td>
@@ -689,6 +690,10 @@ function ProjectCard({
                             ) : (
                               <span className="text-[var(--text-tertiary)] font-medium">Unassigned</span>
                             )}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
+                            <Clock className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
+                            {issue.totalTimeSpent !== undefined ? `${issue.totalTimeSpent.toFixed(2)}h` : "0.00h"}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
                             <Calendar className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />

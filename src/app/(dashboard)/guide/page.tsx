@@ -126,7 +126,7 @@ export default function GuidePage() {
                     </p>
                     <ul className="space-y-3 pl-4 list-disc">
                       <li>
-                        <strong className="text-[var(--text-primary)]">My Open Issues Card:</strong> This displays the exact number of active support tickets assigned to you. An issue is considered "open" if its status is not `Resolved` or `Closed`. 
+                        <strong className="text-[var(--text-primary)]">My Open Issues Card:</strong> This displays the exact number of active support tickets assigned to you. An issue is considered "open" if its status is not `Resolved` or `Closed`.
                         <div className="mt-1 bg-[var(--background)] p-2.5 rounded-lg border border-[var(--border)] italic">
                           Example: If your count is 3, it means you have exactly 3 tickets (e.g., bug fixes, consultation, access logs) awaiting your action. Prioritize these before picking up new work.
                         </div>
@@ -138,7 +138,7 @@ export default function GuidePage() {
                         </div>
                       </li>
                       <li>
-                        <strong className="text-[var(--text-primary)]">Resolved (7d) Card:</strong> Counts the number of tickets assigned to you that transitioned to a `Resolved` or `Closed` status over the last rolling 7 calendar days. 
+                        <strong className="text-[var(--text-primary)]">Resolved (7d) Card:</strong> Counts the number of tickets assigned to you that transitioned to a `Resolved` or `Closed` status over the last rolling 7 calendar days.
                         <div className="mt-1 bg-[var(--background)] p-2.5 rounded-lg border border-[var(--border)] italic">
                           Significance: This represents your weekly resolution velocity. Tracking this helps you and your Lead Engineer review code output trends during weekly standups.
                         </div>
@@ -162,7 +162,7 @@ export default function GuidePage() {
                     </p>
                     <ul className="space-y-3 pl-4 list-disc">
                       <li>
-                        <strong className="text-[var(--text-primary)]">Start Work Button:</strong> Clicking this updates the ticket status to `In Progress` in the database. Use this button when you are starting research, staging setups, or analyzing logs, but are not actively writing code yet. 
+                        <strong className="text-[var(--text-primary)]">Start Work Button:</strong> Clicking this updates the ticket status to `In Progress` in the database. Use this button when you are starting research, staging setups, or analyzing logs, but are not actively writing code yet.
                         <div className="mt-1 bg-[var(--background)] p-2 rounded-lg border border-[var(--border)]">
                           Note: This button updates the status, but does NOT start the stopwatch clock. Use this to notify the team that you have taken ownership of the issue.
                         </div>
@@ -186,7 +186,7 @@ export default function GuidePage() {
                     </p>
                     <ul className="space-y-3 pl-4 list-disc">
                       <li>
-                        <strong className="text-[var(--text-primary)]">Starting the Tracker:</strong> Before clicking Start, you must select the ticket from the dropdown and select the **Work Type** (Investigation, Development, Testing, Communication, Documentation, Deployment). Clicking **Start Tracker** sends a request to the server to open an active session. If the ticket status is not already `In Progress`, the backend automatically transitions it to `In Progress`.
+                        <strong className="text-[var(--text-primary)]">Starting the Tracker:</strong> Before clicking Start, you must select the ticket from the dropdown and select the **Ticket Status / Work Type** (e.g. Backlog, Assigned, Planned Solution, In Progress, Testing, etc.). Clicking **Start Tracker** sends a request to the server to open an active session. If the ticket status is not already `In Progress`, the backend automatically transitions it to `In Progress`.
                       </li>
                       <li>
                         <strong className="text-[var(--text-primary)]">LocalStorage Syncing (Reload Protection):</strong> If you reload the page, close your browser tab, or switch pages, the stopwatch's state (elapsed time, ticker status, and ticket ID) is saved in local browser storage. The stopwatch will continue ticking where it left off.
@@ -213,7 +213,7 @@ export default function GuidePage() {
                         <strong>Select Task:</strong> Open the dashboard, review the **Focus Queue**, and choose the most urgent assigned ticket.
                       </li>
                       <li>
-                        <strong>Start Work:</strong> Click the ticket select dropdown in the stopwatch widget, choose your current ticket, choose your **Work Type** (e.g., *Development*), and click **Start Tracker**. The ticket transitions to `In Progress` in the system, and your timer begins.
+                        <strong>Start Work:</strong> Click the ticket select dropdown in the stopwatch widget, choose your current ticket, choose your **Ticket Status / Work Type** (e.g., *In Progress*), and click **Start Tracker**. The ticket transitions to `In Progress` in the system, and your timer begins.
                       </li>
                       <li>
                         <strong>Develop & Resolve:</strong> Work on the issue. If you need to search documentation or run tests, the stopwatch safely syncs in local storage.
@@ -617,7 +617,7 @@ export default function GuidePage() {
               </p>
             </CardHeader>
             <CardContent className="space-y-8">
-              
+
               {/* SECTION A: DATE RANGE DYNAMIC BEHAVIOR */}
               <div className="space-y-3 p-4 rounded-xl border border-[var(--border)] bg-[rgba(99,102,241,0.02)]">
                 <h3 className="text-sm font-bold text-[var(--text-primary)] flex items-center gap-1.5">
@@ -747,282 +747,330 @@ export default function GuidePage() {
 
               </div>
 
-              {/* SECTION C: CHART COLOR TOKEN SYSTEM */}
+              {/* Utilization Formula Card */}
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2.5">
+                <h4 className="text-xs font-bold text-blue-500 uppercase tracking-wider">
+                  2. Resource Utilization Rate Formula
+                </h4>
+                <p className="text-[11px]">
+                  Measures active engineer efficiency. Computes billable work hours as a fraction of overall time logged:
+                </p>
+                <div className="bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border)] text-center font-mono text-[11px] font-bold text-[var(--text-primary)]">
+                  Utilization Rate = (Billable Hours / Total Logged Hours) &times; 100
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] italic">
+                  Where <strong>Billable Hours</strong> = sum of Development, Testing, and Investigation log categories. Target utilization rate is &gt;70%.
+                </div>
+              </div>
+
+              {/* Non-Billable Overhead Formula Card */}
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2.5">
+                <h4 className="text-xs font-bold text-purple-500 uppercase tracking-wider">
+                  3. Non-Billable Overhead Ratio
+                </h4>
+                <p className="text-[11px]">
+                  Measures operational administrative drag. Calculates time spent on non-invoicable overhead tasks:
+                </p>
+                <div className="bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border)] text-center font-mono text-[11px] font-bold text-[var(--text-primary)]">
+                  Overhead Ratio = (Non-Billable Hours / Total Logged Hours) &times; 100
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] italic">
+                  Where <strong>Non-Billable Hours</strong> = sum of Communication, Documentation, and Deployment. Warning triggers when this exceeds 30%.
+                </div>
+              </div>
+
+              {/* Project hour burn rate */}
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-2.5">
+                <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">
+                  4. Project Hour Retainer Burn Rate
+                </h4>
+                <p className="text-[11px]">
+                  Tracks monthly contract budget depletion. Calculates approved developer logs against allocated client hours:
+                </p>
+                <div className="bg-[var(--surface)] p-2.5 rounded-lg border border-[var(--border)] text-center font-mono text-[11px] font-bold text-[var(--text-primary)]">
+                  Retainer Burn Rate = (Approved Used Hours / Allocated Hours) &times; 100
+                </div>
+                <div className="text-[10px] text-[var(--text-tertiary)] italic">
+                  Example: 45 approved hours logged against a 50-hour monthly retainer = 90% burn rate. Remaining 5 hours carry over if enabled.
+                </div>
+              </div>
+
+              {/* SECTION C: EXPORT FORMATS AND AUDITS */}
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
                   Section 4.2 &mdash; Standardized Chart Color System
                 </h3>
                 <p>
                   To maintain consistent dark and light mode styling across all charts and visualizations, the system uses CSS custom property tokens instead of hardcoded hex values:
-                </p>
-                <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
-                  <table className="w-full text-left border-collapse text-[11px]">
-                    <thead>
-                      <tr className="bg-[var(--background)] border-b border-[var(--border)] text-[var(--text-primary)] font-bold">
-                        <th className="p-3">Purpose</th>
-                        <th className="p-3">CSS Token</th>
-                        <th className="p-3">Visual Presentation</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">Issues resolved / in-progress</td>
-                        <td className="p-3 font-mono text-[var(--info)]">--info</td>
-                        <td className="p-3">Blue</td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">Change Requests (CRs) completed</td>
-                        <td className="p-3 font-mono text-[var(--secondary)]">--secondary</td>
-                        <td className="p-3">Purple</td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">Tasks completed / Revenue collected</td>
-                        <td className="p-3 font-mono text-[var(--success)]">--success</td>
-                        <td className="p-3">Green</td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">New / created items / Backlog warnings</td>
-                        <td className="p-3 font-mono text-[var(--warning)]">--warning</td>
-                        <td className="p-3">Amber</td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">SLA breaches / budget overruns</td>
-                        <td className="p-3 font-mono text-[var(--destructive)]">--destructive</td>
-                        <td className="p-3">Red</td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-3 font-semibold">Closed / archived items</td>
-                        <td className="p-3 font-mono text-[var(--text-tertiary)]">--text-tertiary</td>
-                        <td className="p-3">Grey</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            </p>
+            <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
+              <table className="w-full text-left border-collapse text-[11px]">
+                <thead>
+                  <tr className="bg-[var(--background)] border-b border-[var(--border)] text-[var(--text-primary)] font-bold">
+                    <th className="p-3">Purpose</th>
+                    <th className="p-3">CSS Token</th>
+                    <th className="p-3">Visual Presentation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">Issues resolved / in-progress</td>
+                    <td className="p-3 font-mono text-[var(--info)]">--info</td>
+                    <td className="p-3">Blue</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">Change Requests (CRs) completed</td>
+                    <td className="p-3 font-mono text-[var(--secondary)]">--secondary</td>
+                    <td className="p-3">Purple</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">Tasks completed / Revenue collected</td>
+                    <td className="p-3 font-mono text-[var(--success)]">--success</td>
+                    <td className="p-3">Green</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">New / created items / Backlog warnings</td>
+                    <td className="p-3 font-mono text-[var(--warning)]">--warning</td>
+                    <td className="p-3">Amber</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">SLA breaches / budget overruns</td>
+                    <td className="p-3 font-mono text-[var(--destructive)]">--destructive</td>
+                    <td className="p-3">Red</td>
+                  </tr>
+                  <tr className="border-b border-[var(--border)]">
+                    <td className="p-3 font-semibold">Closed / archived items</td>
+                    <td className="p-3 font-mono text-[var(--text-tertiary)]">--text-tertiary</td>
+                    <td className="p-3">Grey</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            </CardContent>
-          </Card>
-        </TabsContent>
+        </CardContent>
+      </Card>
+    </TabsContent>
 
-        {/* ──────────────────────────────────────────────────────── */}
-        {/* TAB 5: USERS MANAGEMENT                                  */}
-        {/* ──────────────────────────────────────────────────────── */}
-        <TabsContent value="users" className="space-y-6 outline-none text-xs text-[var(--text-secondary)] leading-relaxed">
-          <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Users className="h-5 w-5 text-[var(--primary-text)]" />
-                Users Directory & Permission Gating Manual
-              </CardTitle>
-              <p className="text-xs text-[var(--text-secondary)]">
-                The Users module coordinates team membership, account statuses, and system routing gates. Administrative actions are governed by fine-grained permissions. Here is the operational manual for managing user records and role allocations.
+        {/* ──────────────────────────────────────────────────────── */ }
+  {/* TAB 5: USERS MANAGEMENT                                  */ }
+  {/* ──────────────────────────────────────────────────────── */ }
+  <TabsContent value="users" className="space-y-6 outline-none text-xs text-[var(--text-secondary)] leading-relaxed">
+    <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <Users className="h-5 w-5 text-[var(--primary-text)]" />
+          Users Directory & Permission Gating Manual
+        </CardTitle>
+        <p className="text-xs text-[var(--text-secondary)]">
+          The Users module coordinates team membership, account statuses, and system routing gates. Administrative actions are governed by fine-grained permissions. Here is the operational manual for managing user records and role allocations.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-8">
+        {/* SECTION A: DIRECTORY AND PROFILES */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 5.1 &mdash; User Profiles & Directory Management
+          </h3>
+          <p>
+            The Users view displays a detailed table of registered accounts in the system. The directory provides the following details:
+          </p>
+          <ul className="list-disc pl-4 space-y-2">
+            <li><strong>User Details:</strong> Displays the user's name, email address, and avatar block (auto-generated from initials).</li>
+            <li><strong>System Role Badge:</strong> Lists the user's assigned security clearance tier (e.g. Super Admin, Operations Manager, Senior Lead, Engineer, Client Representative).</li>
+            <li><strong>Account Status:</strong> Features a visual indicator dot. Active accounts are shown in green (with a pulsing effect); deactivated accounts are shown in grey.</li>
+            <li><strong>Designation:</strong> Displays the user's formal job title (e.g. Lead Dev, Junior Support Intern) for organizational clarity.</li>
+          </ul>
+        </div>
+
+        {/* SECTION B: ROLE ASSIGNMENTS & PERMISSIONS */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 5.2 &mdash; System Roles & Granular Permission Gating
+          </h3>
+          <p>
+            The system enforces strict permission gating. Every action in the app corresponds to a string permission key. If an account's role lacks the required key, the UI elements (buttons, links, or routes) are hidden:
+          </p>
+          <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
+            <table className="w-full text-left border-collapse text-[11px]">
+              <thead>
+                <tr className="bg-[var(--background)] border-b border-[var(--border)] text-[var(--text-primary)] font-bold">
+                  <th className="p-2.5">Role</th>
+                  <th className="p-2.5">Scope / Capabilities</th>
+                  <th className="p-2.5">Key Gated Permissions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-[var(--border)]">
+                  <td className="p-2.5 font-semibold">Super Admin</td>
+                  <td className="p-2.5">Full system control, global settings, and user deletions.</td>
+                  <td className="p-2.5"><code className="text-red-500 font-mono">user_management.*</code>, <code className="text-red-500 font-mono">system.*</code></td>
+                </tr>
+                <tr className="border-b border-[var(--border)]">
+                  <td className="p-2.5 font-semibold">Operations Manager</td>
+                  <td className="p-2.5">Approves timesheets, manages clients, and builds executive reports.</td>
+                  <td className="p-2.5"><code className="text-amber-500 font-mono">reports.executive_performance.read</code>, <code className="text-amber-500 font-mono">projects.project.update</code></td>
+                </tr>
+                <tr className="border-b border-[var(--border)]">
+                  <td className="p-2.5 font-semibold">Senior Lead</td>
+                  <td className="p-2.5">QA verification, ticket triaging, and workload overview.</td>
+                  <td className="p-2.5"><code className="text-blue-500 font-mono">issue.assign</code>, <code className="text-blue-500 font-mono">issue.testing.resolve</code></td>
+                </tr>
+                <tr className="border-b border-[var(--border)]">
+                  <td className="p-2.5 font-semibold">Engineer / Intern</td>
+                  <td className="p-2.5">Solves assigned tickets, tracks hours, and requests reviews.</td>
+                  <td className="p-2.5"><code className="text-green-500 font-mono">time_log.create</code>, <code className="text-green-500 font-mono">issue.testing.submit</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* SECTION C: ACTION WORKFLOWS */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 5.3 &mdash; Administrative Directory Action Flows
+          </h3>
+          <p>
+            Privileged users (e.g. Super Admin or Managers) can modify the directory through three core action loops:
+          </p>
+          <div className="p-4 rounded-xl border border-[var(--border)] bg-[rgba(99,102,241,0.02)] space-y-4">
+            <div>
+              <h5 className="font-bold text-[var(--text-primary)]">1. Add User Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.create</code>)</h5>
+              <p className="mt-1">
+                Click the <strong>Add User</strong> button in the header. In the dialog modal, enter Name, Email, Password, Designation, Select System Role, and Status (Active/Inactive). Click Submit to write the new user credential to the database.
               </p>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {/* SECTION A: DIRECTORY AND PROFILES */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 5.1 &mdash; User Profiles & Directory Management
-                </h3>
-                <p>
-                  The Users view displays a detailed table of registered accounts in the system. The directory provides the following details:
-                </p>
-                <ul className="list-disc pl-4 space-y-2">
-                  <li><strong>User Details:</strong> Displays the user's name, email address, and avatar block (auto-generated from initials).</li>
-                  <li><strong>System Role Badge:</strong> Lists the user's assigned security clearance tier (e.g. Super Admin, Operations Manager, Senior Lead, Engineer, Client Representative).</li>
-                  <li><strong>Account Status:</strong> Features a visual indicator dot. Active accounts are shown in green (with a pulsing effect); deactivated accounts are shown in grey.</li>
-                  <li><strong>Designation:</strong> Displays the user's formal job title (e.g. Lead Dev, Junior Support Intern) for organizational clarity.</li>
-                </ul>
-              </div>
-
-              {/* SECTION B: ROLE ASSIGNMENTS & PERMISSIONS */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 5.2 &mdash; System Roles & Granular Permission Gating
-                </h3>
-                <p>
-                  The system enforces strict permission gating. Every action in the app corresponds to a string permission key. If an account's role lacks the required key, the UI elements (buttons, links, or routes) are hidden:
-                </p>
-                <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
-                  <table className="w-full text-left border-collapse text-[11px]">
-                    <thead>
-                      <tr className="bg-[var(--background)] border-b border-[var(--border)] text-[var(--text-primary)] font-bold">
-                        <th className="p-2.5">Role</th>
-                        <th className="p-2.5">Scope / Capabilities</th>
-                        <th className="p-2.5">Key Gated Permissions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-2.5 font-semibold">Super Admin</td>
-                        <td className="p-2.5">Full system control, global settings, and user deletions.</td>
-                        <td className="p-2.5"><code className="text-red-500 font-mono">user_management.*</code>, <code className="text-red-500 font-mono">system.*</code></td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-2.5 font-semibold">Operations Manager</td>
-                        <td className="p-2.5">Approves timesheets, manages clients, and builds executive reports.</td>
-                        <td className="p-2.5"><code className="text-amber-500 font-mono">reports.executive_performance.read</code>, <code className="text-amber-500 font-mono">projects.project.update</code></td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-2.5 font-semibold">Senior Lead</td>
-                        <td className="p-2.5">QA verification, ticket triaging, and workload overview.</td>
-                        <td className="p-2.5"><code className="text-blue-500 font-mono">issue.assign</code>, <code className="text-blue-500 font-mono">issue.testing.resolve</code></td>
-                      </tr>
-                      <tr className="border-b border-[var(--border)]">
-                        <td className="p-2.5 font-semibold">Engineer / Intern</td>
-                        <td className="p-2.5">Solves assigned tickets, tracks hours, and requests reviews.</td>
-                        <td className="p-2.5"><code className="text-green-500 font-mono">time_log.create</code>, <code className="text-green-500 font-mono">issue.testing.submit</code></td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* SECTION C: ACTION WORKFLOWS */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 5.3 &mdash; Administrative Directory Action Flows
-                </h3>
-                <p>
-                  Privileged users (e.g. Super Admin or Managers) can modify the directory through three core action loops:
-                </p>
-                <div className="p-4 rounded-xl border border-[var(--border)] bg-[rgba(99,102,241,0.02)] space-y-4">
-                  <div>
-                    <h5 className="font-bold text-[var(--text-primary)]">1. Add User Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.create</code>)</h5>
-                    <p className="mt-1">
-                      Click the <strong>Add User</strong> button in the header. In the dialog modal, enter Name, Email, Password, Designation, Select System Role, and Status (Active/Inactive). Click Submit to write the new user credential to the database.
-                    </p>
-                  </div>
-                  <div>
-                    <h5 className="font-bold text-[var(--text-primary)]">2. Edit Profile Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.update</code>)</h5>
-                    <p className="mt-1">
-                      Locate the target user, click the three-dot <strong>Actions</strong> menu on the right side of the row, and choose <strong>Edit Profile</strong>. Modify their role, status, or job designation, and click Save to apply the changes instantly.
-                    </p>
-                  </div>
-                  <div>
-                    <h5 className="font-bold text-[var(--text-primary)]">3. Delete / Deactivate User Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.delete</code>)</h5>
-                    <p className="mt-1">
-                      Open the Actions menu and select <strong>Delete User</strong>. A premium red-accented validation modal will pop up. Confirming the deletion deactivates their active tokens, signs them out, and soft-deletes the profile from directory listings.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* OBSERVATIONS AND PREDICTIONS */}
-              <div className="p-3 rounded-lg bg-[rgba(168,85,247,0.04)] border border-purple-500/10 space-y-1.5">
-                <h5 className="font-bold text-[var(--text-primary)] flex items-center gap-1">
-                  <TrendingUp className="h-3.5 w-3.5 text-purple-500" />
-                  Observation & Access Control Analysis:
-                </h5>
-                <p>
-                  <strong>What to Observe:</strong> Regularly scan the users table for active staff designations and cross-reference with active contractors.
-                </p>
-                <p>
-                  <strong>What it Predicts:</strong> Inactive accounts left enabled or over-privileged roles predict data leaks, unauthorized timesheet modifications, or security breaches.
-                </p>
-                <p>
-                  <strong>Action Item:</strong> Soft-delete staff profiles immediately upon departure. Conduct monthly audits on high-privilege credentials to prevent security lapses.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ──────────────────────────────────────────────────────── */}
-        {/* TAB 6: SYSTEM CONFIGURATION                              */}
-        {/* ──────────────────────────────────────────────────────── */}
-        <TabsContent value="system" className="space-y-6 outline-none text-xs text-[var(--text-secondary)] leading-relaxed">
-          <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
-                <Settings className="h-5 w-5 text-[var(--primary-text)]" />
-                System Configurations & SLA Settings Manual
-              </CardTitle>
-              <p className="text-xs text-[var(--text-secondary)]">
-                The System Configurations tab allows managers to configure SLA priority metrics, ticket categories, notifications, branding themes, and report crons. Access to these configs is gated by permission keys.
+            </div>
+            <div>
+              <h5 className="font-bold text-[var(--text-primary)]">2. Edit Profile Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.update</code>)</h5>
+              <p className="mt-1">
+                Locate the target user, click the three-dot <strong>Actions</strong> menu on the right side of the row, and choose <strong>Edit Profile</strong>. Modify their role, status, or job designation, and click Save to apply the changes instantly.
               </p>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {/* SECTION A: SLA PRIORITIES */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 6.1 &mdash; SLA Priorities & Escalation Timeframes
-                </h3>
-                <p>
-                  Managers can customize response, resolution, and escalation limits for support tickets in the **Priorities** sub-tab:
-                </p>
-                <ul className="list-disc pl-4 space-y-2">
-                  <li><strong>First Response Time (min):</strong> The maximum minutes allowed to assign an engineer and reply to the client after ticket creation.</li>
-                  <li><strong>Resolution Time (min):</strong> The target minutes allowed to move the ticket to `Resolved` or `Closed` status.</li>
-                  <li><strong>Escalation Timer (min):</strong> The warning window before the ticket automatically raises alerts or breaches SLA.</li>
-                </ul>
-              </div>
+            </div>
+            <div>
+              <h5 className="font-bold text-[var(--text-primary)]">3. Delete / Deactivate User Loop (Permission: <code className="text-[var(--primary-text)] font-mono">user_management.user.delete</code>)</h5>
+              <p className="mt-1">
+                Open the Actions menu and select <strong>Delete User</strong>. A premium red-accented validation modal will pop up. Confirming the deletion deactivates their active tokens, signs them out, and soft-deletes the profile from directory listings.
+              </p>
+            </div>
+          </div>
+        </div>
 
-              {/* SECTION B: CATEGORIES & NOTIFICATIONS */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 6.2 &mdash; Ticket Categories & Global Notifications
-                </h3>
-                <p>
-                  Customize categorization taxonomy and global warning rules:
-                </p>
-                <ul className="list-disc pl-4 space-y-2">
-                  <li><strong>Dynamic Issue Categories:</strong> Manage active tags (e.g. Bug, Enhancement, Consultation). Adding a tag updates the category list in create-ticket forms instantly.</li>
-                  <li><strong>Notification Preferences:</strong> Toggle global warning rules including <em>Email for critical issues</em>, <em>In-app SLA breach alerts</em>, <em>Daily summary emails</em>, and <em>Project hour warnings (80%)</em>.</li>
-                </ul>
-              </div>
+        {/* OBSERVATIONS AND PREDICTIONS */}
+        <div className="p-3 rounded-lg bg-[rgba(168,85,247,0.04)] border border-purple-500/10 space-y-1.5">
+          <h5 className="font-bold text-[var(--text-primary)] flex items-center gap-1">
+            <TrendingUp className="h-3.5 w-3.5 text-purple-500" />
+            Observation & Access Control Analysis:
+          </h5>
+          <p>
+            <strong>What to Observe:</strong> Regularly scan the users table for active staff designations and cross-reference with active contractors.
+          </p>
+          <p>
+            <strong>What it Predicts:</strong> Inactive accounts left enabled or over-privileged roles predict data leaks, unauthorized timesheet modifications, or security breaches.
+          </p>
+          <p>
+            <strong>Action Item:</strong> Soft-delete staff profiles immediately upon departure. Conduct monthly audits on high-privilege credentials to prevent security lapses.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  </TabsContent>
 
-              {/* SECTION C: BRANDING */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 6.3 &mdash; Dynamic Branding & Corporate Themes
-                </h3>
-                <p>
-                  Branding options dynamically re-style the application UI in real-time:
-                </p>
-                <ul className="list-disc pl-4 space-y-2">
-                  <li><strong>Company Name & Slogan:</strong> Updates the sidebar headings and PDF report headers instantly.</li>
-                  <li><strong>Primary Brand Color Picker:</strong> Select a custom theme hex code. The system dynamically updates buttons, active links, highlights, and graphics.</li>
-                  <li><strong>Logo Uploader:</strong> Upload custom branding logos. If the backend is offline, the system converts the image to a Base64 string for local storage fallback.</li>
-                </ul>
-              </div>
+  {/* ──────────────────────────────────────────────────────── */ }
+  {/* TAB 6: SYSTEM CONFIGURATION                              */ }
+  {/* ──────────────────────────────────────────────────────── */ }
+  <TabsContent value="system" className="space-y-6 outline-none text-xs text-[var(--text-secondary)] leading-relaxed">
+    <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
+      <CardHeader>
+        <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <Settings className="h-5 w-5 text-[var(--primary-text)]" />
+          System Configurations & SLA Settings Manual
+        </CardTitle>
+        <p className="text-xs text-[var(--text-secondary)]">
+          The System Configurations tab allows managers to configure SLA priority metrics, ticket categories, notifications, branding themes, and report crons. Access to these configs is gated by permission keys.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-8">
+        {/* SECTION A: SLA PRIORITIES */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 6.1 &mdash; SLA Priorities & Escalation Timeframes
+          </h3>
+          <p>
+            Managers can customize response, resolution, and escalation limits for support tickets in the **Priorities** sub-tab:
+          </p>
+          <ul className="list-disc pl-4 space-y-2">
+            <li><strong>First Response Time (min):</strong> The maximum minutes allowed to assign an engineer and reply to the client after ticket creation.</li>
+            <li><strong>Resolution Time (min):</strong> The target minutes allowed to move the ticket to `Resolved` or `Closed` status.</li>
+            <li><strong>Escalation Timer (min):</strong> The warning window before the ticket automatically raises alerts or breaches SLA.</li>
+          </ul>
+        </div>
 
-              {/* SECTION D: REPORT SCHEDULE */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-                  Section 6.4 &mdash; Report Schedules & Cron Mappings
-                </h3>
-                <p>
-                  Automate report emails using cron scheduler inputs:
-                </p>
-                <ul className="list-disc pl-4 space-y-2">
-                  <li><strong>Daily Operations Cron:</strong> Triggers compilation of daily hours. Default weekday cron is <code className="text-[var(--primary-text)] font-mono">0 18 * * 1-5</code> (6:00 PM, Monday-Friday).</li>
-                  <li><strong>Weekly Performance Cron:</strong> Triggers weekly SLA logs. Default Friday cron is <code className="text-[var(--primary-text)] font-mono">0 17 * * 5</code> (5:00 PM, Friday).</li>
-                  <li><strong>Monthly SLA Cron:</strong> Triggers monthly invoices checklist. Default monthly cron is <code className="text-[var(--primary-text)] font-mono">0 18 L * *</code> (6:00 PM, Last day of month).</li>
-                </ul>
-              </div>
+        {/* SECTION B: CATEGORIES & NOTIFICATIONS */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 6.2 &mdash; Ticket Categories & Global Notifications
+          </h3>
+          <p>
+            Customize categorization taxonomy and global warning rules:
+          </p>
+          <ul className="list-disc pl-4 space-y-2">
+            <li><strong>Dynamic Issue Categories:</strong> Manage active tags (e.g. Bug, Enhancement, Consultation). Adding a tag updates the category list in create-ticket forms instantly.</li>
+            <li><strong>Notification Preferences:</strong> Toggle global warning rules including <em>Email for critical issues</em>, <em>In-app SLA breach alerts</em>, <em>Daily summary emails</em>, and <em>Project hour warnings (80%)</em>.</li>
+          </ul>
+        </div>
 
-              {/* OBSERVATIONS AND PREDICTIONS */}
-              <div className="p-3 rounded-lg bg-[rgba(6,182,212,0.04)] border border-cyan-500/10 space-y-1.5">
-                <h5 className="font-bold text-[var(--text-primary)] flex items-center gap-1">
-                  <TrendingUp className="h-3.5 w-3.5 text-cyan-500" />
-                  Observation & Configuration Integrity Analysis:
-                </h5>
-                <p>
-                  <strong>What to Observe:</strong> Compare configured SLA priorities with weekly resolution times to confirm SLA metrics are attainable.
-                </p>
-                <p>
-                  <strong>What it Predicts:</strong> Deficient SLA parameters predict artificial work stress, customer service defaults, or false breach warnings.
-                </p>
-                <p>
-                  <strong>Action Item:</strong> Audit SLA targets annually against historical capability metrics. Position report compilation crons outside team working hours to avoid peak DB loads.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+        {/* SECTION C: BRANDING */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 6.3 &mdash; Dynamic Branding & Corporate Themes
+          </h3>
+          <p>
+            Branding options dynamically re-style the application UI in real-time:
+          </p>
+          <ul className="list-disc pl-4 space-y-2">
+            <li><strong>Company Name & Slogan:</strong> Updates the sidebar headings and PDF report headers instantly.</li>
+            <li><strong>Primary Brand Color Picker:</strong> Select a custom theme hex code. The system dynamically updates buttons, active links, highlights, and graphics.</li>
+            <li><strong>Logo Uploader:</strong> Upload custom branding logos. If the backend is offline, the system converts the image to a Base64 string for local storage fallback.</li>
+          </ul>
+        </div>
+
+        {/* SECTION D: REPORT SCHEDULE */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+            Section 6.4 &mdash; Report Schedules & Cron Mappings
+          </h3>
+          <p>
+            Automate report emails using cron scheduler inputs:
+          </p>
+          <ul className="list-disc pl-4 space-y-2">
+            <li><strong>Daily Operations Cron:</strong> Triggers compilation of daily hours. Default weekday cron is <code className="text-[var(--primary-text)] font-mono">0 18 * * 1-5</code> (6:00 PM, Monday-Friday).</li>
+            <li><strong>Weekly Performance Cron:</strong> Triggers weekly SLA logs. Default Friday cron is <code className="text-[var(--primary-text)] font-mono">0 17 * * 5</code> (5:00 PM, Friday).</li>
+            <li><strong>Monthly SLA Cron:</strong> Triggers monthly invoices checklist. Default monthly cron is <code className="text-[var(--primary-text)] font-mono">0 18 L * *</code> (6:00 PM, Last day of month).</li>
+          </ul>
+        </div>
+
+        {/* OBSERVATIONS AND PREDICTIONS */}
+        <div className="p-3 rounded-lg bg-[rgba(6,182,212,0.04)] border border-cyan-500/10 space-y-1.5">
+          <h5 className="font-bold text-[var(--text-primary)] flex items-center gap-1">
+            <TrendingUp className="h-3.5 w-3.5 text-cyan-500" />
+            Observation & Configuration Integrity Analysis:
+          </h5>
+          <p>
+            <strong>What to Observe:</strong> Compare configured SLA priorities with weekly resolution times to confirm SLA metrics are attainable.
+          </p>
+          <p>
+            <strong>What it Predicts:</strong> Deficient SLA parameters predict artificial work stress, customer service defaults, or false breach warnings.
+          </p>
+          <p>
+            <strong>Action Item:</strong> Audit SLA targets annually against historical capability metrics. Position report compilation crons outside team working hours to avoid peak DB loads.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  </TabsContent>
+      </Tabs >
+    </div >
   );
 }
 

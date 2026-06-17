@@ -80,12 +80,16 @@ export const CARRY_OVER_POLICIES = [
 
 // Work types for time tracking
 export const WORK_TYPES = [
-  "Investigation",
-  "Development",
+  "Backlog",
+  "Assigned",
+  "Planned Solution",
+  "In Progress",
   "Testing",
-  "Communication",
-  "Documentation",
-  "Deployment",
+  "Resolved",
+  "Closed",
+  "Reopened",
+  "On Hold",
+  "Pending Client",
 ] as const;
 
 // User roles (5-tier hierarchy)
