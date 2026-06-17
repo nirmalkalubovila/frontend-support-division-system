@@ -84,11 +84,6 @@ function ProjectCRCard({
               </div>
               <div className="h-6 w-px bg-[var(--border)]" />
               <div className="flex flex-col items-center">
-                <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Open</span>
-                <span className="font-bold text-blue-600 mt-0.5">{open}</span>
-              </div>
-              <div className="h-6 w-px bg-[var(--border)]" />
-              <div className="flex flex-col items-center">
                 <span className="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Completed</span>
                 <span className="font-bold text-[var(--success)] mt-0.5">{completed}</span>
               </div>
@@ -130,14 +125,10 @@ function ProjectCRCard({
 
       <div className="border-t border-[var(--border)] my-3.5 opacity-50" />
 
-      <div className="grid grid-cols-4 gap-2 text-center text-xs text-[var(--text-tertiary)]">
+      <div className="grid grid-cols-3 gap-2 text-center text-xs text-[var(--text-tertiary)]">
         <div className="flex flex-col">
           <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Total</span>
           <span className="font-bold text-[var(--text-secondary)] mt-0.5">{total}</span>
-        </div>
-        <div className="flex flex-col">
-          <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Open</span>
-          <span className="font-bold text-blue-600 mt-0.5">{open}</span>
         </div>
         <div className="flex flex-col">
           <span className="text-[9px] font-medium uppercase tracking-wider opacity-70">Approved</span>
