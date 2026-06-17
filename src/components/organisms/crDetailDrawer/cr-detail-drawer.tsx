@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   X, Pencil, Trash2, Paperclip, MessageSquare, Clock, Calendar,
   FileText, Image as ImageIcon, ExternalLink, Link as LinkIcon, CheckCircle2, AlertCircle, CheckSquare,
@@ -23,22 +24,22 @@ const CR_STATUSES: CRStatus[] = ["Draft", "Submitted", "Under Review", "Approved
 const CR_PRIORITIES: CRPriority[] = ["Critical", "High", "Medium", "Low"];
 
 const STATUS_BADGE: Record<string, string> = {
-  "Draft": "bg-slate-100 text-slate-600 border-slate-200",
-  "Submitted": "bg-blue-50 text-blue-700 border-blue-200",
-  "Under Review": "bg-yellow-50 text-yellow-700 border-yellow-200",
-  "Approved": "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Rejected": "bg-red-50 text-red-600 border-red-200",
-  "In Development": "bg-indigo-50 text-indigo-700 border-indigo-200",
-  "Testing": "bg-purple-50 text-purple-700 border-purple-200",
-  "Completed": "bg-green-50 text-green-700 border-green-200",
-  "Closed": "bg-gray-100 text-gray-500 border-gray-200",
+  "Draft": "bg-slate-200 text-slate-700 border-slate-300",
+  "Submitted": "bg-blue-100 text-blue-700 border-blue-300",
+  "Under Review": "bg-yellow-100 text-yellow-800 border-yellow-300",
+  "Approved": "bg-emerald-100 text-emerald-800 border-emerald-300",
+  "Rejected": "bg-red-100 text-red-700 border-red-300",
+  "In Development": "bg-indigo-100 text-indigo-700 border-indigo-300",
+  "Testing": "bg-purple-100 text-purple-700 border-purple-300",
+  "Completed": "bg-green-100 text-green-700 border-green-300",
+  "Closed": "bg-gray-200 text-gray-600 border-gray-300",
 };
 
 const PRIORITY_CONFIG: Record<string, { dot: string; badge: string }> = {
-  Critical: { dot: "bg-red-500", badge: "bg-red-50 text-red-600 border-red-200" },
-  High:     { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-600 border-orange-200" },
-  Medium:   { dot: "bg-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  Low:      { dot: "bg-green-500", badge: "bg-green-50 text-green-700 border-green-200" },
+  Critical: { dot: "bg-red-500", badge: "bg-red-100 text-red-700 border-red-300" },
+  High:     { dot: "bg-orange-500", badge: "bg-orange-100 text-orange-700 border-orange-300" },
+  Medium:   { dot: "bg-yellow-400", badge: "bg-yellow-100 text-yellow-800 border-yellow-300" },
+  Low:      { dot: "bg-green-500", badge: "bg-green-100 text-green-700 border-green-300" },
 };
 
 function fmtDate(d?: string | null) {
@@ -137,11 +138,11 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
   const devNames = cr.assignedDevelopers?.map((d) => (typeof d === "object" ? d.name : d)) ?? [];
 
-  return (
-    <div className="fixed inset-0 z-40 flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+  const drawer = (
+    <div className="fixed inset-0 top-14 z-[9999] flex justify-end pointer-events-none">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] cursor-pointer pointer-events-auto" onClick={onClose} aria-hidden="true" />
       <div
-        className="relative z-50 w-full max-w-lg h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300"
+        className="relative w-full max-w-lg h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -196,7 +197,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
                           cr.status === s
                             ? (STATUS_BADGE[s] ?? "") + " ring-1 ring-current"
-                            : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                            : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
                         }`}>
                         {s}
                       </button>
@@ -215,7 +216,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-all ${
                           cr.priority === p
                             ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
-                            : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                            : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
                         }`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
                       </button>
@@ -454,4 +455,6 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(drawer, document.body) : null;
 }

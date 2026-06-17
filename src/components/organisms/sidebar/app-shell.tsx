@@ -321,7 +321,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ── Top Bar ──────────────────────────────────────────── */}
       <div
         style={{ marginLeft: sidebarW }}
-        className="flex-1 min-w-0 transition-[margin] duration-300 ease-in-out"
+        className="flex-1 min-w-0 min-h-screen transition-[margin] duration-300 ease-in-out"
       >
         <header className="sticky top-0 z-20 h-14 border-b border-[var(--border)] bg-[var(--surface)]/80 backdrop-blur-md flex items-center justify-between px-6 relative">
           {/* Left side: Page Title */}
