@@ -234,6 +234,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         return <CheckSquare className="h-4 w-4 text-blue-500" />;
       case "crs":
         return <GitPullRequest className="h-4 w-4 text-purple-500" />;
+      case "projects":
+        return <FolderKanban className="h-4 w-4 text-emerald-500" />;
+      case "time-tracking":
+        return <BarChart3 className="h-4 w-4 text-cyan-500" />;
+      case "system":
+        return <Settings className="h-4 w-4 text-slate-500" />;
       default:
         if (type === "error") return <AlertCircle className="h-4 w-4 text-red-500" />;
         if (type === "success") return <CheckCircle2 className="h-4 w-4 text-green-500" />;

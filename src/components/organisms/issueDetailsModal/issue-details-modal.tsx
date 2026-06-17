@@ -34,6 +34,7 @@ import {
   useUploadAttachments,
   useDeleteAttachment,
   useDeleteIssue,
+  useNotifyTimeExceeded,
   type Issue,
 } from "@/api/services/issue-management/issue-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
@@ -70,6 +71,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const uploadAttachmentsMutation = useUploadAttachments();
   const deleteAttachmentMutation = useDeleteAttachment();
   const deleteIssueMutation = useDeleteIssue();
+  const notifyTimeExceededMutation = useNotifyTimeExceeded();
   const { data: users = [] } = useGetAllUsers();
   
   const [isDeleting, setIsDeleting] = useState(false);
@@ -187,12 +189,24 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
         // Sync React state every 10 seconds for warning banner etc
         if (tickCount % 10 === 0) {
           setTime(newTime);
+          const estH = parseFloat(estimatedHours) || 0;
+          if (estH > 0 && newTime > estH * 3600) {
+            const notifiedKey = `issue_timer_exceeded_notified_${issue._id}`;
+            const alreadyNotified = localStorage.getItem(notifiedKey);
+            if (!alreadyNotified) {
+              localStorage.setItem(notifiedKey, "true");
+              notifyTimeExceededMutation.mutate({
+                issueId: issue._id,
+                activeDuration: newTime,
+              });
+            }
+          }
         }
       }, 1000);
     }
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTicking, issue?._id, formatStopwatchTime]);
+  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
 
   const handleStartTimer = useCallback(() => {
     if (!issue?._id) return;
@@ -221,6 +235,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     localStorage.removeItem(`issue_timer_${issue._id}`);
     localStorage.removeItem(`issue_timer_ticking_${issue._id}`);
     localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`issue_timer_exceeded_notified_${issue._id}`);
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
 
@@ -663,7 +678,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                   {!isTicking ? (
                     <button
                       onClick={handleStartTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-bold hover:brightness-105 transition-all shadow-sm cursor-pointer"
+                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
                     >
                       <Play className="h-3.5 w-3.5 fill-current" />
                       Start Work

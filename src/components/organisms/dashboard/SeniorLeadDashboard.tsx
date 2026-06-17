@@ -11,6 +11,8 @@ import {
   Users,
   CheckCircle2,
   HelpCircle,
+  History,
+  Clock,
 } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { StatCard } from "@/components/atoms/statCard";
@@ -91,6 +93,12 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     return issues.filter(
       (i) => i.status === "Testing"
     ).slice(0, 5);
+  }, [issues]);
+
+  const resolvedIssues = useMemo(() => {
+    return issues
+      .filter((i) => i.status === "Resolved" || i.status === "Closed")
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [issues]);
 
   // ──────────────────────────────────────────────────────────────
@@ -371,6 +379,92 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
                   </div>
                 );
               })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Row 4: Resolved Issues History */}
+      <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <History className="h-4.5 w-4.5 text-[var(--success)]" />
+            Resolved Issues History (Division-wide)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {resolvedIssues.length === 0 ? (
+            <div className="text-center py-8 text-sm text-[var(--text-tertiary)]">
+              No resolved issues in history.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3">Issue ID</th>
+                    <th className="py-2.5 px-3">Title</th>
+                    <th className="py-2.5 px-3">Project</th>
+                    <th className="py-2.5 px-3">Priority</th>
+                    <th className="py-2.5 px-3">Assignee</th>
+                    <th className="py-2.5 px-3">Time Spent</th>
+                    <th className="py-2.5 px-3">Resolved Date</th>
+                    <th className="py-2.5 px-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resolvedIssues.map((issue) => {
+                    const client = typeof issue.client === "object" ? issue.client : null;
+                    const project = typeof issue.project === "object" ? issue.project : null;
+                    const assignee = typeof issue.assignedTo === "object" ? issue.assignedTo : null;
+                    return (
+                      <tr key={issue._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 font-semibold text-[var(--text-primary)] font-mono">
+                          {issue.issueId}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-[var(--text-primary)] truncate max-w-[220px]" title={issue.title}>
+                          {issue.title}
+                        </td>
+                        <td className="py-3 px-3 text-[var(--text-secondary)]">
+                          {project?.name ?? "N/A"} {client?.code ? `(${client.code})` : ""}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Badge
+                            variant={
+                              issue.priority === "Critical"
+                                ? "destructive"
+                                : issue.priority === "High"
+                                ? "default"
+                                : "secondary"
+                            }
+                            className="text-[9px] uppercase tracking-wide scale-90"
+                          >
+                            {issue.priority}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 text-[var(--text-secondary)]">
+                          {assignee?.name ?? <span className="italic text-[var(--text-tertiary)]">Unassigned</span>}
+                        </td>
+                        <td className="py-3 px-3 text-[var(--text-secondary)] whitespace-nowrap">
+                          <Clock className="h-3 w-3 inline mr-1 text-[var(--text-tertiary)]" />
+                          {issue.totalTimeSpent !== undefined ? `${issue.totalTimeSpent.toFixed(2)}h` : "0.00h"}
+                        </td>
+                        <td className="py-3 px-3 text-[var(--text-secondary)]">
+                          {new Date(issue.updatedAt).toLocaleDateString()}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Badge
+                            variant="default"
+                            className="bg-[rgba(34,197,94,0.15)] text-[var(--success)] border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.2)] text-[9px] font-bold py-0.5 px-2"
+                          >
+                            {issue.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

@@ -105,11 +105,26 @@ export const useUpdateCategories = () => {
   });
 };
 
+export interface ModuleNotificationPref {
+  email: boolean;
+  inApp: boolean;
+}
+
+export interface ModulePreferences {
+  issues: ModuleNotificationPref;
+  projects: ModuleNotificationPref;
+  crs: ModuleNotificationPref;
+  tasks: ModuleNotificationPref;
+  "time-tracking": ModuleNotificationPref;
+  system: ModuleNotificationPref;
+}
+
 export interface NotificationSettings {
   emailCritical: boolean;
   inAppSlaBreach: boolean;
   dailySummary: boolean;
   projectHourWarning: boolean;
+  modulePreferences: ModulePreferences;
 }
 
 export const useGetNotifications = () =>

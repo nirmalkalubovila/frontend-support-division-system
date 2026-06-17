@@ -45,6 +45,7 @@ export interface Issue extends GlobalRecords {
   estimatedHours: number | null;
   dueDate: string;
   attachments: IssueAttachment[];
+  totalTimeSpent?: number;
   timeRequest?: {
     hours: number;
     reason: string;
@@ -181,6 +182,15 @@ export const useDeleteAttachment = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
+    },
+  });
+};
+
+export const useNotifyTimeExceeded = () => {
+  return useMutation({
+    mutationFn: async ({ issueId, activeDuration }: { issueId: string; activeDuration: number }) => {
+      const res = await axiosInstance.post(`/issues/${issueId}/time-exceeded`, { activeDuration });
+      return res.data;
     },
   });
 };

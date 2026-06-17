@@ -46,14 +46,45 @@ const prioritiesSchema = z.object({
 
 type PrioritiesForm = z.infer<typeof prioritiesSchema>;
 
+const moduleNotifPrefSchema = z.object({
+  email: z.boolean(),
+  inApp: z.boolean(),
+});
+
 const notificationsSchema = z.object({
   emailCritical: z.boolean(),
   inAppSlaBreach: z.boolean(),
   dailySummary: z.boolean(),
   projectHourWarning: z.boolean(),
+  modulePreferences: z.object({
+    issues: moduleNotifPrefSchema,
+    projects: moduleNotifPrefSchema,
+    crs: moduleNotifPrefSchema,
+    tasks: moduleNotifPrefSchema,
+    "time-tracking": moduleNotifPrefSchema,
+    system: moduleNotifPrefSchema,
+  }),
 });
 
 type NotificationsForm = z.infer<typeof notificationsSchema>;
+
+const DEFAULT_MODULE_PREFERENCES = {
+  issues: { email: true, inApp: true },
+  projects: { email: true, inApp: true },
+  crs: { email: true, inApp: true },
+  tasks: { email: true, inApp: true },
+  "time-tracking": { email: true, inApp: true },
+  system: { email: true, inApp: true },
+};
+
+const MODULE_LABELS: { key: keyof typeof DEFAULT_MODULE_PREFERENCES; label: string; description: string }[] = [
+  { key: "issues", label: "Issues Management", description: "Issue assignments, status changes, SLA alerts" },
+  { key: "projects", label: "Project & Client Management", description: "Project updates, hour warnings, client changes" },
+  { key: "crs", label: "Change Requests (CRs)", description: "CR submissions, approvals, status updates" },
+  { key: "tasks", label: "Tasks Management", description: "Task assignments, progress updates, completions" },
+  { key: "time-tracking", label: "Time Tracking", description: "Time log submissions, overtime alerts" },
+  { key: "system", label: "User & System Settings", description: "System config changes, user role updates" },
+];
 
 const reportScheduleSchema = z.object({
   dailyEnabled: z.boolean(),
@@ -198,12 +229,18 @@ export default function SystemPage() {
 
   const notificationsForm = useForm<NotificationsForm>({
     resolver: zodResolver(notificationsSchema),
-    values: notificationsData || {
-      emailCritical: true,
-      inAppSlaBreach: true,
-      dailySummary: false,
-      projectHourWarning: true,
-    },
+    values: notificationsData
+      ? {
+          ...notificationsData,
+          modulePreferences: notificationsData.modulePreferences || DEFAULT_MODULE_PREFERENCES,
+        }
+      : {
+          emailCritical: true,
+          inAppSlaBreach: true,
+          dailySummary: false,
+          projectHourWarning: true,
+          modulePreferences: DEFAULT_MODULE_PREFERENCES,
+        },
   });
 
   const onSubmitNotifications = (data: NotificationsForm) => {
@@ -551,18 +588,19 @@ export default function SystemPage() {
         </TabsContent>
 
         {/* Notifications */}
-        <TabsContent value="notifications" className="mt-4">
+        <TabsContent value="notifications" className="mt-4 space-y-4">
+          {/* General Preferences Card */}
           <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
             <CardHeader>
-              <CardTitle className="text-base text-[var(--text-primary)]">Notification Preferences</CardTitle>
+              <CardTitle className="text-base text-[var(--text-primary)]">General Notification Preferences</CardTitle>
             </CardHeader>
             <CardContent>
               {isLoadingNotifications ? (
-                <div className="h-48 flex items-center justify-center">
+                <div className="h-32 flex items-center justify-center">
                   <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
                 </div>
               ) : (
-                <form onSubmit={notificationsForm.handleSubmit(onSubmitNotifications)} className="space-y-4">
+                <form id="notif-form" onSubmit={notificationsForm.handleSubmit(onSubmitNotifications)} className="space-y-1">
                   {[
                     { name: "emailCritical" as const, label: "Email for critical issues" },
                     { name: "inAppSlaBreach" as const, label: "In-app SLA breach alerts" },
@@ -583,10 +621,83 @@ export default function SystemPage() {
                       />
                     </div>
                   ))}
+                </form>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Module Notification Control Card */}
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
+            <CardHeader>
+              <div>
+                <CardTitle className="text-base text-[var(--text-primary)]">Module Notification Control</CardTitle>
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Activate or deactivate email and in-app notifications per module for all managers and admins.
+                </p>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingNotifications ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Header row */}
+                  <div className="hidden sm:grid sm:grid-cols-[1fr_80px_80px] gap-4 px-4 pb-2 border-b border-[var(--border)]">
+                    <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Module</span>
+                    <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider text-center">Email</span>
+                    <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider text-center">In-App</span>
+                  </div>
+
+                  {/* Module rows */}
+                  {MODULE_LABELS.map((mod) => {
+                    const emailFieldName = `modulePreferences.${mod.key}.email` as const;
+                    const inAppFieldName = `modulePreferences.${mod.key}.inApp` as const;
+                    return (
+                      <div
+                        key={mod.key}
+                        className="grid grid-cols-1 sm:grid-cols-[1fr_80px_80px] gap-3 sm:gap-4 items-center p-4 rounded-lg bg-[var(--background)] border border-[var(--border)] transition-all hover:border-[var(--primary-light)]"
+                      >
+                        <div>
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">{mod.label}</span>
+                          <p className="text-xs text-[var(--text-secondary)] mt-0.5">{mod.description}</p>
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-center gap-2">
+                          <span className="text-xs text-[var(--text-secondary)] sm:hidden">Email</span>
+                          <Controller
+                            control={notificationsForm.control}
+                            name={emailFieldName as any}
+                            render={({ field }) => (
+                              <Switch
+                                checked={field.value as boolean}
+                                onCheckedChange={field.onChange}
+                              />
+                            )}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-center gap-2">
+                          <span className="text-xs text-[var(--text-secondary)] sm:hidden">In-App</span>
+                          <Controller
+                            control={notificationsForm.control}
+                            name={inAppFieldName as any}
+                            render={({ field }) => (
+                              <Switch
+                                checked={field.value as boolean}
+                                onCheckedChange={field.onChange}
+                              />
+                            )}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+
                   <Button
                     type="submit"
+                    form="notif-form"
                     disabled={updateNotificationsMutation.isPending}
-                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95 mt-4"
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95 mt-2"
                   >
                     {updateNotificationsMutation.isPending ? (
                       <>
@@ -594,10 +705,10 @@ export default function SystemPage() {
                         Saving...
                       </>
                     ) : (
-                      "Save Preferences"
+                      "Save All Preferences"
                     )}
                   </Button>
-                </form>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -3,7 +3,7 @@ import axiosInstance from "@/lib/axios";
 import type { GlobalRecords } from "@/types/global-types";
 
 export type NotificationType = "info" | "warning" | "success" | "error" | "system";
-export type NotificationModule = "issues" | "projects" | "crs" | "tasks" | "system";
+export type NotificationModule = "issues" | "projects" | "crs" | "tasks" | "time-tracking" | "system";
 
 export interface NotificationSender {
   _id: string;

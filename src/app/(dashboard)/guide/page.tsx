@@ -183,7 +183,7 @@ export default function GuidePage() {
                     </p>
                     <ul className="space-y-3 pl-4 list-disc">
                       <li>
-                        <strong className="text-[var(--text-primary)]">Starting the Tracker:</strong> Before clicking Start, you must select the ticket from the dropdown and select the **Work Type** (Investigation, Development, Testing, Communication, Documentation, Deployment). Clicking **Start Tracker** sends a request to the server to open an active session. If the ticket status is not already `In Progress`, the backend automatically transitions it to `In Progress`.
+                        <strong className="text-[var(--text-primary)]">Starting the Tracker:</strong> Before clicking Start, you must select the ticket from the dropdown and select the **Ticket Status / Work Type** (e.g. Backlog, Assigned, Planned Solution, In Progress, Testing, etc.). Clicking **Start Tracker** sends a request to the server to open an active session. If the ticket status is not already `In Progress`, the backend automatically transitions it to `In Progress`.
                       </li>
                       <li>
                         <strong className="text-[var(--text-primary)]">LocalStorage Syncing (Reload Protection):</strong> If you reload the page, close your browser tab, or switch pages, the stopwatch's state (elapsed time, ticker status, and ticket ID) is saved in local browser storage. The stopwatch will continue ticking where it left off.
@@ -210,7 +210,7 @@ export default function GuidePage() {
                         <strong>Select Task:</strong> Open the dashboard, review the **Focus Queue**, and choose the most urgent assigned ticket.
                       </li>
                       <li>
-                        <strong>Start Work:</strong> Click the ticket select dropdown in the stopwatch widget, choose your current ticket, choose your **Work Type** (e.g., *Development*), and click **Start Tracker**. The ticket transitions to `In Progress` in the system, and your timer begins.
+                        <strong>Start Work:</strong> Click the ticket select dropdown in the stopwatch widget, choose your current ticket, choose your **Ticket Status / Work Type** (e.g., *In Progress*), and click **Start Tracker**. The ticket transitions to `In Progress` in the system, and your timer begins.
                       </li>
                       <li>
                         <strong>Develop & Resolve:</strong> Work on the issue. If you need to search documentation or run tests, the stopwatch safely syncs in local storage.
@@ -851,7 +851,7 @@ export default function GuidePage() {
                       Utilization Rate = (Billable Hours / Total Logged Hours) &times; 100
                     </div>
                     <div className="text-[10px] text-[var(--text-tertiary)] italic">
-                      Where <strong>Billable Hours</strong> = sum of Development, Testing, and Investigation log categories. Target utilization rate is &gt;70%.
+                      Where <strong>Billable Hours</strong> = sum of hours logged under billable statuses (e.g., In Progress, Testing, Planned Solution, etc.). Target utilization rate is &gt;70%.
                     </div>
                   </div>
 
