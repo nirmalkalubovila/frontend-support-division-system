@@ -794,16 +794,14 @@ export default function GuidePage() {
                   Example: 45 approved hours logged against a 50-hour monthly retainer = 90% burn rate. Remaining 5 hours carry over if enabled.
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* SECTION C: EXPORT FORMATS AND AUDITS */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
-              Section 4.2 &mdash; Standardized Chart Color System
-            </h3>
-            <p>
-              To maintain consistent dark and light mode styling across all charts and visualizations, the system uses CSS custom property tokens instead of hardcoded hex values:
+              {/* SECTION C: EXPORT FORMATS AND AUDITS */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold text-[var(--text-primary)] border-b border-[var(--border)] pb-2">
+                  Section 4.2 &mdash; Standardized Chart Color System
+                </h3>
+                <p>
+                  To maintain consistent dark and light mode styling across all charts and visualizations, the system uses CSS custom property tokens instead of hardcoded hex values:
             </p>
             <div className="overflow-x-auto border border-[var(--border)] rounded-lg">
               <table className="w-full text-left border-collapse text-[11px]">
