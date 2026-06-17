@@ -23,6 +23,7 @@ import {
   Eye,
   SlidersHorizontal,
   ArrowLeft,
+  History,
 } from "lucide-react";
 import { Button, Badge, Input, Select, Card, CardContent } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
@@ -224,6 +225,7 @@ function ProjectCard({
   const updateMutation = useUpdateIssue();
   const [draggingIssue, setDraggingIssue] = useState<Issue | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<"active" | "history">("active");
 
   const handleDragStart = useCallback((e: React.DragEvent, issue: Issue) => {
     e.dataTransfer.effectAllowed = "move";
@@ -256,6 +258,9 @@ function ProjectCard({
   }, [draggingIssue, updateMutation]);
   const issues = group.issues;
 
+  const activeIssues = useMemo(() => issues.filter((i) => i.status !== "Closed"), [issues]);
+  const historyIssues = useMemo(() => issues.filter((i) => ["Resolved", "Closed"].includes(i.status)), [issues]);
+
   // Calculate project specific stats
   const total = issues.length;
   const critical = issues.filter((i) => i.priority === "Critical" || i.priority === "High").length;
@@ -269,7 +274,7 @@ function ProjectCard({
     for (const col of KANBAN_COLUMNS) {
       grouped[col] = [];
     }
-    for (const issue of issues) {
+    for (const issue of activeIssues) {
       if (grouped[issue.status]) {
         grouped[issue.status].push(issue);
       } else {
@@ -279,7 +284,7 @@ function ProjectCard({
       }
     }
     return grouped;
-  }, [issues]);
+  }, [activeIssues]);
 
   if (isExpanded) {
     return (
@@ -383,7 +388,230 @@ function ProjectCard({
 
         {/* Expanded Issues View Container */}
         <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5 animate-fade-in">
-          {viewMode === "list" ? (
+          {/* Sub-tab Navigation */}
+          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 mb-4">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setSubTab("active")}
+                className={`pb-2 text-sm font-semibold border-b-2 transition-all ${
+                  subTab === "active"
+                    ? "border-[var(--primary)] text-[var(--primary-text)] border-b-[var(--primary)]"
+                    : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Active Tasks
+              </button>
+              <button
+                onClick={() => setSubTab("history")}
+                className={`pb-2 text-sm font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                  subTab === "history"
+                    ? "border-[var(--primary)] text-[var(--primary-text)] border-b-[var(--primary)]"
+                    : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                <History className="h-4 w-4" />
+                Completed History
+              </button>
+            </div>
+          </div>
+
+          {subTab === "active" ? (
+            viewMode === "list" ? (
+              <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-xs font-bold tracking-wider text-[var(--text-secondary)] uppercase">
+                      <th className="py-3 px-4 font-semibold">ID</th>
+                      <th className="py-3 px-4 font-semibold">Title</th>
+                      <th className="py-3 px-4 font-semibold">Type</th>
+                      <th className="py-3 px-4 font-semibold">Priority</th>
+                      <th className="py-3 px-4 font-semibold">Status</th>
+                      <th className="py-3 px-4 font-semibold">Assignee</th>
+                      <th className="py-3 px-4 font-semibold">Due Date</th>
+                      <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)] text-xs">
+                    {activeIssues.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-8 text-center text-[var(--text-tertiary)] font-medium bg-[var(--surface)]/10">
+                          <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mx-auto mb-1.5" />
+                          No active issues found.
+                        </td>
+                      </tr>
+                    ) : (
+                      activeIssues.map((issue) => {
+                        const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
+                        const dueDate = new Date(issue.dueDate);
+                        const isOverdue = dueDate < new Date() && !["Resolved", "Closed"].includes(issue.status);
+
+                        return (
+                          <tr
+                            key={issue._id}
+                            className="hover:bg-[var(--surface-hover)]/40 transition-colors cursor-pointer group"
+                            onClick={() => onIssueClick(issue)}
+                          >
+                            <td className="py-3 px-4 font-mono text-[var(--text-secondary)] font-semibold whitespace-nowrap">
+                              {issue.issueId}
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors max-w-sm truncate">
+                              {issue.title}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${getIssueTypeStyle(issue.type)}`}>
+                                {issue.type}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className="px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider"
+                                style={{
+                                  color: PRIORITY_COLORS[issue.priority],
+                                  backgroundColor: PRIORITY_BG[issue.priority],
+                                }}
+                              >
+                                {issue.priority}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="flex items-center gap-1.5 font-semibold text-[var(--text-primary)]">
+                                <span
+                                  className="h-2 w-2 rounded-full shadow-sm"
+                                  style={{ backgroundColor: `var(--status-${issue.status.toLowerCase().replace(/ /g, "-")})` }}
+                                />
+                                {issue.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {assignee ? (
+                                <div className="flex items-center gap-1.5">
+                                  <div className="h-5.5 w-5.5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shadow-sm">
+                                    {assignee.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="font-medium text-[var(--text-secondary)] hidden md:inline truncate max-w-[80px]">
+                                    {assignee.name}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-[var(--text-tertiary)] font-medium">Unassigned</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <span
+                                className={`flex items-center gap-1 font-medium ${isOverdue ? "text-[var(--destructive)] font-semibold animate-pulse-soft" : "text-[var(--text-secondary)]"
+                                  }`}
+                              >
+                                <Calendar className="h-3.5 w-3.5" />
+                                {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onIssueClick(issue)}
+                                className="h-7 w-7 p-0 rounded-full hover:bg-[var(--surface-hover)]"
+                                title="View Details"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 w-full min-h-[550px]">
+                {KANBAN_COLUMNS.map((column) => {
+                  const columnIssues = projectIssuesByStatus[column] ?? [];
+                  const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
+                  const isOver = dragOverColumn === column;
+                  return (
+                    <div
+                      key={column}
+                      onDragOver={(e) => handleDragOver(e, column)}
+                      onDrop={(e) => handleDrop(e, column)}
+                      onDragLeave={() => setDragOverColumn(null)}
+                      className={`flex flex-col rounded-xl border bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden transition-all duration-200 ${isOver
+                          ? "border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]"
+                          : "border-[var(--border)]"
+                        }`}
+                    >
+                      {/* Column Header */}
+                      <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
+                            <span className="text-xs font-bold text-[var(--text-primary)]">{column}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.badge}`}>
+                              {columnIssues.length}
+                            </span>
+                            <button
+                              onClick={onAddIssue}
+                              className={`h-6 w-6 rounded-lg flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--primary)] ${cfg.addBtn} transition-colors`}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Drop indicator */}
+                      {isOver && draggingIssue && (
+                        <div className="mx-3 mt-2 h-1.5 rounded-full animate-pulse bg-[var(--primary)] opacity-60" />
+                      )}
+
+                      {/* Column Issues Cards */}
+                      <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
+                        {columnIssues.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
+                            <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
+                            <p className="text-xs text-[var(--text-tertiary)] font-medium">No issues</p>
+                            <button
+                              onClick={onAddIssue}
+                              className="mt-2 text-xs text-[var(--primary)] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="h-3 w-3" /> Add Issue
+                            </button>
+                          </div>
+                        ) : (
+                          columnIssues.map((issue) => (
+                            <IssueCard
+                              key={issue._id}
+                              issue={issue}
+                              isDragging={draggingIssue?._id === issue._id}
+                              onDragStart={handleDragStart}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => onIssueClick(issue)}
+                            />
+                          ))
+                        )}
+                        {isOver && draggingIssue && (
+                          <div className="h-16 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[rgba(99,102,241,0.05)] flex items-center justify-center">
+                            <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {columnIssues.length > 0 && (
+                        <button
+                          onClick={onAddIssue}
+                          className={`mx-3 mb-3 mt-1 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--primary)] hover:border-[var(--primary)] ${cfg.addBtn} transition-all`}
+                        >
+                          <Plus className="h-3.5 w-3.5" /> Add Issue
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          ) : (
             <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -394,179 +622,95 @@ function ProjectCard({
                     <th className="py-3 px-4 font-semibold">Priority</th>
                     <th className="py-3 px-4 font-semibold">Status</th>
                     <th className="py-3 px-4 font-semibold">Assignee</th>
-                    <th className="py-3 px-4 font-semibold">Due Date</th>
-                    <th className="py-3 px-4 font-semibold text-right">Actions</th>
+                    <th className="py-3 px-4 font-semibold">Completed Date</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)] text-xs">
-                  {issues.map((issue) => {
-                    const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
-                    const dueDate = new Date(issue.dueDate);
-                    const isOverdue = dueDate < new Date() && !["Resolved", "Closed"].includes(issue.status);
+                  {historyIssues.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-[var(--text-tertiary)] font-medium bg-[var(--surface)]/10">
+                        <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mx-auto mb-1.5" />
+                        No completed tasks in history yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    historyIssues.map((issue) => {
+                      const assignee = typeof issue.assignedTo === "object" && issue.assignedTo ? issue.assignedTo : null;
+                      const completedDate = new Date(issue.updatedAt);
 
-                    return (
-                      <tr
-                        key={issue._id}
-                        className="hover:bg-[var(--surface-hover)]/40 transition-colors cursor-pointer group"
-                        onClick={() => onIssueClick(issue)}
-                      >
-                        <td className="py-3 px-4 font-mono text-[var(--text-secondary)] font-semibold whitespace-nowrap">
-                          {issue.issueId}
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors max-w-sm truncate">
-                          {issue.title}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${getIssueTypeStyle(issue.type)}`}>
-                            {issue.type}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span
-                            className="px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider"
-                            style={{
-                              color: PRIORITY_COLORS[issue.priority],
-                              backgroundColor: PRIORITY_BG[issue.priority],
-                            }}
-                          >
-                            {issue.priority}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="flex items-center gap-1.5 font-semibold text-[var(--text-primary)]">
+                      return (
+                        <tr
+                          key={issue._id}
+                          className="hover:bg-[var(--surface-hover)]/40 transition-colors cursor-pointer group"
+                          onClick={() => onIssueClick(issue)}
+                        >
+                          <td className="py-3 px-4 font-mono text-[var(--text-secondary)] font-semibold whitespace-nowrap">
+                            {issue.issueId}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors max-w-sm truncate">
+                            {issue.title}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider ${getIssueTypeStyle(issue.type)}`}>
+                              {issue.type}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
                             <span
-                              className="h-2 w-2 rounded-full shadow-sm"
-                              style={{ backgroundColor: `var(--status-${issue.status.toLowerCase().replace(/ /g, "-")})` }}
-                            />
-                            {issue.status}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4">
-                          {assignee ? (
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-5.5 w-5.5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shadow-sm">
-                                {assignee.name.charAt(0).toUpperCase()}
+                              className="px-2 py-0.5 text-[9px] font-bold rounded-md uppercase tracking-wider"
+                              style={{
+                                color: PRIORITY_COLORS[issue.priority],
+                                backgroundColor: PRIORITY_BG[issue.priority],
+                              }}
+                            >
+                              {issue.priority}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="flex items-center gap-1.5 font-semibold text-[var(--text-primary)]">
+                              <span
+                                className="h-2 w-2 rounded-full shadow-sm animate-pulse-soft"
+                                style={{ backgroundColor: `var(--status-${issue.status.toLowerCase().replace(/ /g, "-")})` }}
+                              />
+                              {issue.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {assignee ? (
+                              <div className="flex items-center gap-1.5">
+                                <div className="h-5.5 w-5.5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shadow-sm">
+                                  {assignee.name.charAt(0).toUpperCase()}
+                                </div>
+                                <span className="font-medium text-[var(--text-secondary)] hidden md:inline truncate max-w-[80px]">
+                                  {assignee.name}
+                                </span>
                               </div>
-                              <span className="font-medium text-[var(--text-secondary)] hidden md:inline truncate max-w-[80px]">
-                                {assignee.name}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-[var(--text-tertiary)] font-medium">Unassigned</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <span
-                            className={`flex items-center gap-1 font-medium ${isOverdue ? "text-[var(--destructive)] font-semibold animate-pulse-soft" : "text-[var(--text-secondary)]"
-                              }`}
-                          >
-                            <Calendar className="h-3.5 w-3.5" />
-                            {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onIssueClick(issue)}
-                            className="h-7 w-7 p-0 rounded-full hover:bg-[var(--surface-hover)]"
-                            title="View Details"
-                          >
-                            <Eye className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            ) : (
+                              <span className="text-[var(--text-tertiary)] font-medium">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
+                            <Calendar className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
+                            {completedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onIssueClick(issue)}
+                              className="h-7 w-7 p-0 rounded-full hover:bg-[var(--surface-hover)]"
+                              title="View Details"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 w-full min-h-[550px]">
-              {KANBAN_COLUMNS.map((column) => {
-                const columnIssues = projectIssuesByStatus[column] ?? [];
-                const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
-                const isOver = dragOverColumn === column;
-                return (
-                  <div
-                    key={column}
-                    onDragOver={(e) => handleDragOver(e, column)}
-                    onDrop={(e) => handleDrop(e, column)}
-                    onDragLeave={() => setDragOverColumn(null)}
-                    className={`flex flex-col rounded-xl border bg-[var(--background)] min-h-[550px] shadow-sm overflow-hidden transition-all duration-200 ${isOver
-                        ? "border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]"
-                        : "border-[var(--border)]"
-                      }`}
-                  >
-                    {/* Column Header */}
-                    <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`h-2.5 w-2.5 rounded-full ${cfg.dot}`} />
-                          <span className="text-xs font-bold text-[var(--text-primary)]">{column}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${cfg.badge}`}>
-                            {columnIssues.length}
-                          </span>
-                          <button
-                            onClick={onAddIssue}
-                            className={`h-6 w-6 rounded-lg flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--primary)] ${cfg.addBtn} transition-colors`}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Drop indicator */}
-                    {isOver && draggingIssue && (
-                      <div className="mx-3 mt-2 h-1.5 rounded-full animate-pulse bg-[var(--primary)] opacity-60" />
-                    )}
-
-                    {/* Column Issues Cards */}
-                    <div className="flex-1 px-3 py-3 space-y-3 overflow-y-auto min-h-[120px]">
-                      {columnIssues.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-[var(--border)] rounded-xl bg-[var(--surface)]/10 p-3 select-none">
-                          <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mb-1.5" />
-                          <p className="text-xs text-[var(--text-tertiary)] font-medium">No issues</p>
-                          <button
-                            onClick={onAddIssue}
-                            className="mt-2 text-xs text-[var(--primary)] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            <Plus className="h-3 w-3" /> Add Issue
-                          </button>
-                        </div>
-                      ) : (
-                        columnIssues.map((issue) => (
-                          <IssueCard
-                            key={issue._id}
-                            issue={issue}
-                            isDragging={draggingIssue?._id === issue._id}
-                            onDragStart={handleDragStart}
-                            onDragEnd={handleDragEnd}
-                            onClick={() => onIssueClick(issue)}
-                          />
-                        ))
-                      )}
-                      {isOver && draggingIssue && (
-                        <div className="h-16 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[rgba(99,102,241,0.05)] flex items-center justify-center">
-                          <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {columnIssues.length > 0 && (
-                      <button
-                        onClick={onAddIssue}
-                        className={`mx-3 mb-3 mt-1 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--primary)] hover:border-[var(--primary)] ${cfg.addBtn} transition-all`}
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add Issue
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
             </div>
           )}
         </div>
@@ -959,7 +1103,11 @@ function IssuesPageContent() {
       </div>
 
       {/* Create Issue Modal */}
-      <CreateIssueModal open={showCreateModal} onOpenChange={setShowCreateModal} />
+      <CreateIssueModal
+        open={showCreateModal}
+        onOpenChange={setShowCreateModal}
+        defaultProjectId={activeProjectId || undefined}
+      />
 
       {/* Issue Details Modal */}
       <IssueDetailsModal
