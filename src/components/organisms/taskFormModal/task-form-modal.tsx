@@ -135,7 +135,7 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!isPending) onOpenChange(v); }}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 z-[10000]">
         <DialogHeader className="space-y-1 border-b border-[var(--border)] pb-4">
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
             <CheckSquare className="h-5 w-5 text-[var(--primary)]" />

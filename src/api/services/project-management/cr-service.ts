@@ -7,7 +7,7 @@ import type { GlobalRecords } from "@/types/global-types";
 // ──────────────────────────────────────────────────────────────
 
 export type CRStatus =
-  | "Draft" | "Submitted" | "Under Review" | "Approved"
+  | "Submitted"
   | "Rejected" | "In Development" | "Testing" | "Completed" | "Closed";
 
 export type CRPriority = "Critical" | "High" | "Medium" | "Low";

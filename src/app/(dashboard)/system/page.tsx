@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Palette, Settings, Shield, Tag, Bell, Loader2, Calendar } from "lucide-react";
+import { Palette, Settings, Shield, Tag, Bell, Loader2, Calendar, Coins } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button, Switch, Badge, ImageUploader } from "@/components";
 import { PRIORITIES } from "@/lib/constants";
 import useThemeStore from "@/store/theme-store";
@@ -18,6 +18,8 @@ import {
   useUpdateCategories,
   useGetNotifications,
   useUpdateNotifications,
+  useGetFinanceSettings,
+  useUpdateFinanceSettings,
 } from "@/api/services/system/settings-service";
 import {
   useGetReportSchedule,
@@ -329,6 +331,26 @@ export default function SystemPage() {
     });
   };
 
+  // Finance settings form
+  const { data: financeData, isLoading: isLoadingFinance } = useGetFinanceSettings();
+  const updateFinanceMutation = useUpdateFinanceSettings();
+
+  const financeForm = useForm<{ defaultContractedHourlyRate: number }>({
+    values: financeData || { defaultContractedHourlyRate: 5000 },
+  });
+
+  const onSubmitFinance = (data: { defaultContractedHourlyRate: number }) => {
+    updateFinanceMutation.mutate(data, {
+      onSuccess: () => {
+        toast.success("Finance settings saved successfully!");
+      },
+      onError: (err: any) => {
+        const errMsg = err?.response?.data?.message || err?.message || "Failed to save finance settings";
+        toast.error(errMsg);
+      },
+    });
+  };
+
   const onSubmitBranding = (data: BrandingForm) => {
     updateBrandingMutation.mutate({
       companyName: data.companyName,
@@ -418,6 +440,10 @@ export default function SystemPage() {
           <TabsTrigger value="report-schedule" className="gap-1">
             <Calendar className="h-3.5 w-3.5" />
             Report Schedule
+          </TabsTrigger>
+          <TabsTrigger value="finance" className="gap-1">
+            <Coins className="h-3.5 w-3.5" />
+            Finance
           </TabsTrigger>
         </TabsList>
 
@@ -966,6 +992,53 @@ export default function SystemPage() {
                       </>
                     ) : (
                       "Save Schedule Configuration"
+                    )}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        {/* Finance settings */}
+        <TabsContent value="finance" className="mt-4">
+          <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
+            <CardHeader>
+              <CardTitle className="text-base text-[var(--text-primary)]">Finance & Billing Configuration</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoadingFinance ? (
+                <div className="h-48 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+                </div>
+              ) : (
+                <form onSubmit={financeForm.handleSubmit(onSubmitFinance)} className="space-y-4 max-w-md">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-[var(--text-secondary)]" htmlFor="defaultContractedHourlyRate">
+                      Default Contracted Hourly Rate (LKR)
+                    </Label>
+                    <Input
+                      id="defaultContractedHourlyRate"
+                      type="number"
+                      className="bg-[var(--background)] border-[var(--border)] text-sm focus-visible:ring-[var(--primary)]"
+                      {...financeForm.register("defaultContractedHourlyRate", { valueAsNumber: true })}
+                    />
+                    <p className="text-xs text-[var(--text-tertiary)]">
+                      Used as a fallback for calculating overrun costs and effective hourly rates in reports when no project-specific billing rates are defined.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={updateFinanceMutation.isPending}
+                    className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white hover:opacity-95"
+                  >
+                    {updateFinanceMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving Settings...
+                      </>
+                    ) : (
+                      "Save Finance Settings"
                     )}
                   </Button>
                 </form>

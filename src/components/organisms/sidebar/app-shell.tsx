@@ -63,10 +63,10 @@ const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, permission: null },
   { href: "/projects", label: "Projects", icon: FolderKanban, permission: "projects.project.read" },
   { href: "/issues", label: "Issues", icon: Ticket, permission: "issues.issue.read", isChildOfProjects: true },
-  { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.project.read", isChildOfProjects: true },
-  { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.project.read", isChildOfProjects: true, isLastChild: true },
+  { href: "/tasks", label: "Tasks", icon: CheckSquare, permission: "projects.task.read", isChildOfProjects: true },
+  { href: "/crs", label: "CRs", icon: GitPullRequest, permission: "projects.cr.read", isChildOfProjects: true, isLastChild: true },
   { href: "/finance", label: "Finance", icon: Wallet, permission: "finance.payment.read" },
-  { href: "/reports", label: "Reports", icon: BarChart3, permission: "reports.daily_report.read" },
+  { href: "/reports", label: "Reports", icon: BarChart3, permission: "reports.user_performance.read" },
   { href: "/users", label: "Users", icon: Users, permission: "user_management.user.read" },
   { href: "/system", label: "System", icon: Settings, permission: "system.settings.read" },
 ] as const;
