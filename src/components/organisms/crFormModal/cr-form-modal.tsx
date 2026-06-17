@@ -18,7 +18,7 @@ import type { User } from "@/api/services/user-management/user-service";
 
 const CR_TYPES: CRType[] = ["Enhancement", "New Feature", "Modification", "Integration", "UI/UX Change", "Data Change", "Bug Fix", "Other"];
 const CR_PRIORITIES: CRPriority[] = ["Critical", "High", "Medium", "Low"];
-const CR_STATUSES: CRStatus[] = ["Draft", "Submitted", "Under Review", "Approved", "Rejected", "In Development", "Testing", "Completed", "Closed"];
+const CR_STATUSES: CRStatus[] = ["Submitted", "In Development", "Testing", "Completed"];
 
 interface Props {
   open: boolean;
@@ -28,7 +28,7 @@ interface Props {
   availableMembers: User[];
 }
 
-type Section = "basic" | "team" | "details";
+type Section = "basic" | "team";
 
 export function CRFormModal({ open, onOpenChange, projectId, cr, availableMembers }: Props) {
   const isEdit = !!cr;
@@ -38,7 +38,7 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
   const [activeSection, setActiveSection] = useState<Section>("basic");
 
   const emptyForm = {
-    title: "", crType: "Enhancement" as CRType, priority: "Medium" as CRPriority, status: "Draft" as CRStatus,
+    title: "", crType: "Enhancement" as CRType, priority: "Medium" as CRPriority, status: "Submitted" as CRStatus,
     requestedBy: "", requestedDate: "", targetReleaseDate: "", estimatedHours: "", estimatedCost: "",
     assignedProjectManager: "", description: "", businessJustification: "", technicalApproach: "",
     impactAnalysis: "", dependencies: "", risks: "",
@@ -136,7 +136,6 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
   const tabs: { key: Section; label: string }[] = [
     { key: "basic", label: "Basic Info" },
     { key: "team", label: "Team & Dates" },
-    { key: "details", label: "Technical Details" },
   ];
 
   return (
@@ -239,7 +238,7 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                     <select value={form.assignedProjectManager} onChange={(e) => set("assignedProjectManager", e.target.value)}
                       className="w-full h-10 appearance-none rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 pr-7 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]">
                       <option value="">— Unassigned —</option>
-                      {availableMembers.filter((m) => ["super_admin", "manager", "senior_engineer"].includes(m.role)).map((m) => (
+                      {availableMembers.filter((m) => m.role === "manager").map((m) => (
                         <option key={m._id} value={m._id}>{m.name}</option>
                       ))}
                     </select>
@@ -299,25 +298,6 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
               </>
             )}
 
-            {activeSection === "details" && (
-              <>
-                {(
-                  [
-                    { label: "Technical Approach", field: "technicalApproach", placeholder: "How will this be implemented?" },
-                    { label: "Impact Analysis", field: "impactAnalysis", placeholder: "What areas will be affected?" },
-                    { label: "Dependencies", field: "dependencies", placeholder: "List dependencies or blockers..." },
-                    { label: "Risks", field: "risks", placeholder: "Potential risks and mitigation strategies..." },
-                  ] as { label: string; field: keyof typeof form; placeholder: string }[]
-                ).map(({ label, field, placeholder }) => (
-                  <div key={field} className="space-y-1.5">
-                    <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
-                    <Textarea value={form[field]} onChange={(e) => set(field, e.target.value)}
-                      placeholder={placeholder}
-                      className="bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] min-h-[80px] resize-none text-sm font-medium" />
-                  </div>
-                ))}
-              </>
-            )}
           </div>
 
           {/* Footer */}
@@ -332,9 +312,9 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                 className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]">
                 Cancel
               </Button>
-              {activeSection !== "details" && (
+              {activeSection !== "team" && (
                 <Button type="button" size="sm" variant="outline" disabled={isPending}
-                  onClick={() => setActiveSection(activeSection === "basic" ? "team" : "details")}
+                  onClick={() => setActiveSection("team")}
                   className="h-10 text-sm font-semibold border-[var(--border)] hover:bg-[var(--surface-hover)]">
                   Next →
                 </Button>

@@ -12,14 +12,11 @@ import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 
 // ── Config ──────────────────────────────────────────────────────
 export const CR_KANBAN_STATUSES: CRStatus[] = [
-  "Draft", "Submitted", "Under Review", "Approved", "In Development", "Testing", "Completed",
+  "Submitted", "In Development", "Testing", "Completed",
 ];
 
 const COL_CONFIG: Record<string, { dot: string; header: string; addBtn: string; card: string; badge: string }> = {
-  "Draft":          { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",     addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
   "Submitted":      { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
-  "Under Review":   { dot: "bg-yellow-400",  header: "bg-yellow-50 dark:bg-yellow-900/20",    addBtn: "hover:bg-yellow-100",  card: "border-yellow-200 hover:border-yellow-400",  badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  "Approved":       { dot: "bg-emerald-400", header: "bg-emerald-50 dark:bg-emerald-900/20",  addBtn: "hover:bg-emerald-100", card: "border-emerald-200 hover:border-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   "In Development": { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
   "Testing":        { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
   "Completed":      { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
@@ -308,7 +305,7 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
 
   if (isLoading) {
     return (
-      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${CR_KANBAN_STATUSES.length}, minmax(160px, 1fr))` }}>
+      <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${CR_KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>
         {CR_KANBAN_STATUSES.map((s) => <div key={s} className="rounded-xl bg-[var(--surface)] border border-[var(--border)] h-48 animate-pulse" />)}
       </div>
     );
@@ -344,7 +341,7 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
 
       {/* Board */}
       <div className="overflow-x-auto pb-4">
-        <div className="grid gap-3 min-w-max" style={{ gridTemplateColumns: `repeat(${CR_KANBAN_STATUSES.length}, 220px)` }}>
+        <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${CR_KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>
           {CR_KANBAN_STATUSES.map((status) => (
             <CRKanbanColumn
               key={status}

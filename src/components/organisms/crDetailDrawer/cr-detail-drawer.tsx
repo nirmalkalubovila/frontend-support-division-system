@@ -3,8 +3,8 @@
 import React, { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  X, Pencil, Trash2, Paperclip, MessageSquare, Clock, Calendar,
-  FileText, Image as ImageIcon, ExternalLink, Link as LinkIcon, CheckCircle2, AlertCircle, CheckSquare,
+  X, Pencil, Trash2, Paperclip, MessageSquare, Clock,
+  FileText, Image as ImageIcon, ExternalLink, Link as LinkIcon, CheckSquare,
 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,19 +20,14 @@ import useSessionStore from "@/store/session-store";
 import { CRTasksPanel } from "@/components/organisms/crTasksPanel/cr-tasks-panel";
 
 // ── Config ──────────────────────────────────────────────────────
-const CR_STATUSES: CRStatus[] = ["Draft", "Submitted", "Under Review", "Approved", "Rejected", "In Development", "Testing", "Completed", "Closed"];
+const CR_STATUSES: CRStatus[] = ["Submitted", "In Development", "Testing", "Completed"];
 const CR_PRIORITIES: CRPriority[] = ["Critical", "High", "Medium", "Low"];
 
 const STATUS_BADGE: Record<string, string> = {
-  "Draft": "bg-slate-200 text-slate-700 border-slate-300",
   "Submitted": "bg-blue-100 text-blue-700 border-blue-300",
-  "Under Review": "bg-yellow-100 text-yellow-800 border-yellow-300",
-  "Approved": "bg-emerald-100 text-emerald-800 border-emerald-300",
-  "Rejected": "bg-red-100 text-red-700 border-red-300",
   "In Development": "bg-indigo-100 text-indigo-700 border-indigo-300",
   "Testing": "bg-purple-100 text-purple-700 border-purple-300",
   "Completed": "bg-green-100 text-green-700 border-green-300",
-  "Closed": "bg-gray-200 text-gray-600 border-gray-300",
 };
 
 const PRIORITY_CONFIG: Record<string, { dot: string; badge: string }> = {
@@ -45,11 +40,6 @@ const PRIORITY_CONFIG: Record<string, { dot: string; badge: string }> = {
 function fmtDate(d?: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function fmtDateTime(d?: string | null) {
-  if (!d) return "—";
-  return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // ── Role permission helper ──────────────────────────────────────
@@ -71,7 +61,7 @@ interface Props {
   onDelete: (cr: ChangeRequest) => void;
 }
 
-type DrawerTab = "overview" | "tasks" | "timeline" | "attachments" | "comments";
+type DrawerTab = "overview" | "tasks" | "attachments" | "comments";
 
 export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDelete }: Props) {
   const canEdit = useCanEditCR(cr);
@@ -130,7 +120,6 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const tabs: { key: DrawerTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "tasks", label: `Tasks${cr.taskProgress?.total ? ` (${cr.taskProgress.total})` : ""}` },
-    { key: "timeline", label: "Timeline" },
     { key: "attachments", label: `Attachments${cr.attachments?.length ? ` (${cr.attachments.length})` : ""}` },
     { key: "comments", label: `Comments${comments.length ? ` (${comments.length})` : ""}` },
   ];
@@ -332,44 +321,6 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
           {/* ── Tasks ── */}
           {activeTab === "tasks" && (
             <CRTasksPanel cr={cr} projectId={projectId} members={members} />
-          )}
-
-          {/* ── Timeline ── */}
-          {activeTab === "timeline" && (
-            <div className="space-y-3">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Approval & Status History</Label>
-              {cr.timeline?.length > 0 ? (
-                <div className="relative pl-5">
-                  <div className="absolute left-2 top-0 bottom-0 w-px bg-[var(--border)]" />
-                  {[...cr.timeline].reverse().map((event, i) => {
-                    const author = typeof event.changedBy === "object" ? event.changedBy.name : "System";
-                    return (
-                      <div key={event._id || i} className="relative mb-4 last:mb-0">
-                        <span className="absolute -left-3 top-1 h-2 w-2 rounded-full bg-[var(--primary)] border-2 border-[var(--surface)]" />
-                        <div className="bg-[var(--background)] rounded-xl p-3 border border-[var(--border)]">
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {event.fromStatus && (
-                                <>
-                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${STATUS_BADGE[event.fromStatus] ?? ""}`}>{event.fromStatus}</span>
-                                  <span className="text-[10px] text-[var(--text-tertiary)]">→</span>
-                                </>
-                              )}
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${STATUS_BADGE[event.toStatus] ?? ""}`}>{event.toStatus}</span>
-                            </div>
-                            <span className="text-[10px] text-[var(--text-tertiary)]">{fmtDateTime(event.changedAt)}</span>
-                          </div>
-                          <p className="text-xs text-[var(--text-secondary)] mt-1">by {author}</p>
-                          {event.note && <p className="text-xs text-[var(--text-primary)] mt-1 italic">"{event.note}"</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-[var(--text-tertiary)]">No timeline events yet.</p>
-              )}
-            </div>
           )}
 
           {/* ── Attachments ── */}
