@@ -134,3 +134,31 @@ export const useUpdateNotifications = () => {
     },
   });
 };
+
+export interface FinanceSettings {
+  defaultContractedHourlyRate: number;
+}
+
+export const useGetFinanceSettings = () =>
+  useQuery({
+    queryKey: ["/system/finance-settings"],
+    queryFn: async (): Promise<FinanceSettings> => {
+      const res = await axiosInstance.get("/system/finance-settings");
+      return res.data;
+    },
+  });
+
+export const useUpdateFinanceSettings = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: FinanceSettings): Promise<FinanceSettings> => {
+      const res = await axiosInstance.patch("/system/finance-settings", data);
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/system/finance-settings"], data);
+      queryClient.invalidateQueries({ queryKey: ["/system/finance-settings"] });
+    },
+  });
+};
+
