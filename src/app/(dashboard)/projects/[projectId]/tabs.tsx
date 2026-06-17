@@ -19,7 +19,7 @@ import {
   type Task, type TaskStatus,
 } from "@/api/services/project-management/task-service";
 import {
-  useGetProjectCRs, useGetCRStats, useDeleteCR,
+  useGetProjectCRs, useDeleteCR,
   type ChangeRequest, type CRStatus,
 } from "@/api/services/project-management/cr-service";
 import { useGetIssues, type Issue } from "@/api/services/issue-management/issue-service";
@@ -44,10 +44,7 @@ const PRIORITY_DOT: Record<string, string> = {
 };
 
 const CR_STATUS_BADGE: Record<string, string> = {
-  "Draft": "bg-slate-100 text-slate-600 border-slate-200",
   "Submitted": "bg-blue-50 text-blue-700 border-blue-200",
-  "Under Review": "bg-yellow-50 text-yellow-700 border-yellow-200",
-  "Approved": "bg-emerald-50 text-emerald-700 border-emerald-200",
   "Rejected": "bg-red-50 text-red-600 border-red-200",
   "In Development": "bg-indigo-50 text-indigo-700 border-indigo-200",
   "Testing": "bg-purple-50 text-purple-700 border-purple-200",
@@ -303,10 +300,9 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
   const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
   const [drawerCR, setDrawerCR] = useState<ChangeRequest | null>(null);
   const [crToDelete, setCRToDelete] = useState<ChangeRequest | null>(null);
-  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("Draft");
+  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("Submitted");
 
   const { data: crsData, isLoading: crsLoading } = useGetProjectCRs(projectId);
-  const { data: stats } = useGetCRStats(projectId);
   const deleteMutation = useDeleteCR(projectId);
 
   const crs = crsData?.data ?? [];
@@ -327,28 +323,8 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
     } catch { toast.error("Failed to delete CR."); }
   };
 
-  const statItems = [
-    { label: "Total CRs", value: stats?.total ?? 0, color: "text-[var(--primary)]" },
-    { label: "Open", value: stats?.open ?? 0, color: "text-blue-600" },
-    { label: "Approved", value: stats?.approved ?? 0, color: "text-emerald-600" },
-    { label: "In Dev", value: stats?.inDevelopment ?? 0, color: "text-indigo-600" },
-    { label: "Completed", value: stats?.completed ?? 0, color: "text-green-600" },
-    { label: "Rejected", value: stats?.rejected ?? 0, color: "text-red-500" },
-    { label: "Est. Hours", value: `${stats?.totalEstimatedHours ?? 0}h`, color: "text-[var(--text-primary)]" },
-  ];
-
   return (
     <div className="space-y-5">
-      {/* Stats row */}
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-3">
-        {statItems.map(({ label, value, color }) => (
-          <div key={label} className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-3 text-center">
-            <p className={`text-lg font-bold ${color}`}>{value}</p>
-            <p className="text-[10px] text-[var(--text-secondary)] mt-0.5 font-medium">{label}</p>
-          </div>
-        ))}
-      </div>
-
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
@@ -382,7 +358,7 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
           onCRClick={(cr) => setDrawerCR(cr)}
           onEdit={(cr) => { setEditingCR(cr); setShowForm(true); }}
           onDelete={(cr) => setCRToDelete(cr)}
-          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "Draft"); setShowForm(true); }}
+          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "Submitted"); setShowForm(true); }}
         />
       )}
 
