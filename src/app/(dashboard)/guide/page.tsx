@@ -861,7 +861,7 @@ export default function GuidePage() {
                       <tr className="border-b border-[var(--border)]">
                         <td className="p-2.5 font-semibold">Operations Manager</td>
                         <td className="p-2.5">Approves timesheets, manages clients, and builds executive reports.</td>
-                        <td className="p-2.5"><code className="text-amber-500 font-mono">reports.executive_report.read</code>, <code className="text-amber-500 font-mono">project.update</code></td>
+                        <td className="p-2.5"><code className="text-amber-500 font-mono">reports.executive_performance.read</code>, <code className="text-amber-500 font-mono">projects.project.update</code></td>
                       </tr>
                       <tr className="border-b border-[var(--border)]">
                         <td className="p-2.5 font-semibold">Senior Lead</td>
