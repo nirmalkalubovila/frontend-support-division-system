@@ -236,14 +236,15 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     }
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
+  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
+
 
   const handleStartTimer = useCallback(async () => {
     if (!issue?._id) return;
     try {
       await startTimerMutation.mutateAsync({
         issueId: issue._id,
-        workType: (issue.status as any) || 'In Progress',
+        workType: 'In Progress', // Always 'In Progress' — issue.status may contain legacy DB values
       });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to start timer.');
@@ -254,7 +255,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
     localStorage.setItem(`timer_worktype_${issue._id}`, issue.status || 'In Progress');
     window.dispatchEvent(new Event('storage'));
-  }, [issue?._id, issue?.status, startTimerMutation]);
+  }, [issue?._id, startTimerMutation]);
 
   const handlePauseTimer = useCallback(() => {
     if (!issue?._id) return;
