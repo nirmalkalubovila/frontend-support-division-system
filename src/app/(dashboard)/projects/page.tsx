@@ -14,6 +14,9 @@ import { Progress } from "@/components/ui/progress";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { ProjectFormModal } from "@/components";
+import { API_BASE_URL } from "@/lib/constants";
+
+const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
 import {
   usePaginateProjects, useDeleteProject, type Project,
 } from "@/api/services/project-management/project-service";
@@ -51,7 +54,7 @@ function ProjectCard({
   onDelete: (e: React.MouseEvent) => void;
 }) {
   const router = useRouter();
-  const photoUrl = project.photo ? `http://localhost:5001${project.photo}` : null;
+  const photoUrl = project.photo ? `${STATIC_BASE}${project.photo}` : null;
 
   return (
     <Card
@@ -63,7 +66,9 @@ function ProjectCard({
         {/* Header */}
         <div className="flex items-start gap-3">
           {photoUrl ? (
-            <img src={photoUrl} alt={project.name} className="h-11 w-11 rounded-xl object-cover border border-[var(--border)] shrink-0" />
+            <div className="h-11 w-11 rounded-xl overflow-hidden border border-[var(--border)] shrink-0">
+              <img src={photoUrl} alt={project.name} className="h-full w-full object-cover" />
+            </div>
           ) : (
             <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white font-bold text-lg shrink-0">
               {project.name.charAt(0).toUpperCase()}
@@ -185,7 +190,7 @@ function ProjectTableRow({
   onDelete: () => void;
 }) {
   const router = useRouter();
-  const photoUrl = project.photo ? `http://localhost:5001${project.photo}` : null;
+  const photoUrl = project.photo ? `${STATIC_BASE}${project.photo}` : null;
 
   return (
     <tr
@@ -195,7 +200,9 @@ function ProjectTableRow({
       <td className="py-3 px-4">
         <div className="flex items-center gap-3">
           {photoUrl ? (
-            <img src={photoUrl} alt={project.name} className="h-9 w-9 rounded-lg object-cover border border-[var(--border)] shrink-0" />
+            <div className="h-9 w-9 rounded-lg overflow-hidden border border-[var(--border)] shrink-0">
+              <img src={photoUrl} alt={project.name} className="h-full w-full object-cover" />
+            </div>
           ) : (
             <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white font-bold shrink-0">
               {project.name.charAt(0).toUpperCase()}
