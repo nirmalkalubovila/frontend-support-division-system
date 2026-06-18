@@ -220,6 +220,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // Real-time timer synchronization
     socket.on("timer:started", (data: any) => {
       const { itemId, workType, startTime } = data;
+      
       localStorage.setItem(`timer_ticking_${itemId}`, "true");
       localStorage.setItem(`timer_timestamp_${itemId}`, String(new Date(startTime).getTime()));
       localStorage.setItem(`timer_worktype_${itemId}`, workType);
@@ -242,6 +243,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     socket.on("timer:resumed", (data: any) => {
       const { itemId, timestamp } = data;
+
       localStorage.setItem(`timer_ticking_${itemId}`, "true");
       localStorage.setItem(`timer_timestamp_${itemId}`, String(timestamp || Date.now()));
       window.dispatchEvent(new Event("local-timer-update"));

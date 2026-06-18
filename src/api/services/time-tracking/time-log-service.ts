@@ -69,6 +69,7 @@ export interface StopTimerDto {
   taskId?: string | null;
   crId?: string | null;
   note?: string;
+  activeDuration?: number;
 }
 
 export interface CreateManualLogDto {
@@ -118,6 +119,7 @@ export const useStartTimer = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/issues"] });
       queryClient.invalidateQueries({ queryKey: ["/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
@@ -175,6 +177,9 @@ export const useUpdateTimeLog = () => {
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
       queryClient.invalidateQueries({ queryKey: ["/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/crs"] });
+      // Refresh project usedHours after approval status changes
+      queryClient.invalidateQueries({ queryKey: ["/projects/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/projects/paginate"] });
     },
   });
 };
@@ -190,6 +195,9 @@ export const useDeleteTimeLog = () => {
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
       queryClient.invalidateQueries({ queryKey: ["/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/crs"] });
+      // Refresh project usedHours after log deletion
+      queryClient.invalidateQueries({ queryKey: ["/projects/all"] });
+      queryClient.invalidateQueries({ queryKey: ["/projects/paginate"] });
     },
   });
 };

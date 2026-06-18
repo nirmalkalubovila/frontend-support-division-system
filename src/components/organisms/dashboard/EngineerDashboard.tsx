@@ -268,7 +268,10 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   useEffect(() => {
     if (!activeLogs) return;
 
-    const newList: ActiveTimer[] = activeLogs.map((log) => {
+    const localItemsMap = new Map<string, ActiveTimer>();
+
+    // 1. Populate from activeLogs (database active timers)
+    activeLogs.forEach((log) => {
       let itemId = "";
       let type: 'issue' | 'task' | 'cr' = 'issue';
       let itemObj: any = null;
@@ -286,6 +289,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         type = 'cr';
         itemObj = assignedCRs.find(c => c._id === itemId) || log.cr;
       }
+
+      if (!itemId) return;
 
       const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
       const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
@@ -311,7 +316,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         localStorage.setItem(`timer_worktype_${itemId}`, log.workType);
       }
 
-      return {
+      localItemsMap.set(itemId, {
         itemId,
         logId: log._id,
         type,
@@ -319,10 +324,56 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         workType: savedWorkType,
         time: currentTime,
         isTicking,
-      };
+      });
     });
 
-    setActiveTimers(newList);
+    // 2. Scan localStorage for any other timers (paused locally)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("timer_time_")) {
+        const itemId = key.replace("timer_time_", "");
+        if (localItemsMap.has(itemId)) continue; // already added from activeLogs
+
+        let type: 'issue' | 'task' | 'cr' = 'issue';
+        let itemObj: any = issues.find(x => x._id === itemId);
+        if (!itemObj) {
+          itemObj = assignedTasks.find(x => x._id === itemId);
+          type = 'task';
+        }
+        if (!itemObj) {
+          itemObj = assignedCRs.find(x => x._id === itemId);
+          type = 'cr';
+        }
+
+        if (itemObj) {
+          const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
+          const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
+          const savedTimestampStr = localStorage.getItem(`timer_timestamp_${itemId}`);
+          const savedWorkType = (localStorage.getItem(`timer_worktype_${itemId}`) || 
+            (type === 'cr' ? 'In Development' : 'In Progress')) as WorkType;
+
+          let currentTime = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+          let isTicking = savedTickingStr === "true";
+
+          if (isTicking && savedTimestampStr) {
+            const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+            currentTime += elapsed;
+          }
+
+          localItemsMap.set(itemId, {
+            itemId,
+            logId: `local-${itemId}`,
+            type,
+            itemObj,
+            workType: savedWorkType,
+            time: currentTime,
+            isTicking,
+          });
+        }
+      }
+    }
+
+    setActiveTimers(Array.from(localItemsMap.values()));
   }, [activeLogs, issues, assignedTasks, assignedCRs]);
 
   // Concurrent ticking for active timers
@@ -452,6 +503,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     if (!selectedItemId) return;
     const itemId = selectedItemId; // capture current value to avoid stale closure
 
+
+
     // Trigger backend start
     const startPayload = {
       issueId: trackingType === 'issue' ? itemId : null,
@@ -482,11 +535,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     );
   };
 
-  const handleStartTimer = () => {
-    if (!selectedItemId) return;
-    startTimerForItem(selectedItemId, trackingType, selectedWorkType);
-  };
-
   const handlePauseTimerForItem = (itemId: string) => {
     localStorage.setItem(`timer_ticking_${itemId}`, "false");
     localStorage.removeItem(`timer_timestamp_${itemId}`);
@@ -507,7 +555,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     toast.info("Timer paused locally.");
   };
 
-  const handleResumeTimerForItem = (itemId: string) => {
+  const handleResumeTimerForItem = (itemId: string, type: 'issue' | 'task' | 'cr', workType: WorkType) => {
     localStorage.setItem(`timer_ticking_${itemId}`, "true");
     localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
     window.dispatchEvent(new Event("storage"));
@@ -527,6 +575,22 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const handleStopTimerForItem = (t: ActiveTimer) => {
     setItemBeingStopped(t);
     setSubmitNote("");
+
+    // If it's a local-only paused timer (no active log on the backend)
+    if (t.logId.startsWith("local-")) {
+      const itemId = t.itemId;
+      localStorage.removeItem(`timer_time_${itemId}`);
+      localStorage.removeItem(`timer_ticking_${itemId}`);
+      localStorage.removeItem(`timer_timestamp_${itemId}`);
+      localStorage.removeItem(`timer_worktype_${itemId}`);
+      localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
+      window.dispatchEvent(new Event("storage"));
+      setActiveTimers((prev) => prev.filter((x) => x.itemId !== itemId));
+      toast.info("Tracker closed. Session time was already saved.");
+      setItemBeingStopped(null);
+      return;
+    }
+
     setIsSubmitOpen(true);
   };
 
@@ -546,11 +610,23 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const handleSaveTimeLog = () => {
     if (!itemBeingStopped) return;
 
+    const itemId = itemBeingStopped.itemId;
+    const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
+    let activeDuration = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+
+    const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
+    const savedTimestampStr = localStorage.getItem(`timer_timestamp_${itemId}`);
+    if (savedTickingStr === "true" && savedTimestampStr) {
+      const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+      activeDuration += elapsed;
+    }
+
     const stopPayload = {
-      issueId: itemBeingStopped.type === 'issue' ? itemBeingStopped.itemId : null,
-      taskId: itemBeingStopped.type === 'task' ? itemBeingStopped.itemId : null,
-      crId: itemBeingStopped.type === 'cr' ? itemBeingStopped.itemId : null,
+      issueId: itemBeingStopped.type === 'issue' ? itemId : null,
+      taskId: itemBeingStopped.type === 'task' ? itemId : null,
+      crId: itemBeingStopped.type === 'cr' ? itemId : null,
       note: submitNote,
+      activeDuration,
     };
 
     stopTimerMutation.mutate(
@@ -954,6 +1030,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                                 const itemId = task._id; // capture before any async state change
                                 setSelectedItemId(itemId);
                                 setTrackingType('task');
+
                                 const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
                                 updateTaskMutation.mutate({
                                   projectId: projId,
@@ -1077,6 +1154,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                                 const itemId = cr._id; // capture before any async state change
                                 setSelectedItemId(itemId);
                                 setTrackingType('cr');
+
                                 const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
                                 updateCRMutation.mutate({
                                   projectId: projId,
@@ -1219,7 +1297,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                               ) : (
                                 <Button
                                   size="sm"
-                                  onClick={() => handleResumeTimerForItem(t.itemId)}
+                                  onClick={() => handleResumeTimerForItem(t.itemId, t.type, t.workType)}
                                   className="h-6 w-6 p-0 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center"
                                   title="Resume timer"
                                 >

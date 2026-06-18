@@ -241,15 +241,22 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
   const handleStartTimer = useCallback(async () => {
     if (!issue?._id) return;
-    try {
-      await startTimerMutation.mutateAsync({
-        issueId: issue._id,
-        workType: 'In Progress', // Always 'In Progress' — issue.status may contain legacy DB values
-      });
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to start timer.');
-      return;
+    
+    const savedTime = localStorage.getItem(`timer_time_${issue._id}`);
+    const isResume = (savedTime && parseInt(savedTime, 10) > 0) || timeRef.current > 0;
+
+    if (!isResume) {
+      try {
+        await startTimerMutation.mutateAsync({
+          issueId: issue._id,
+          workType: 'In Progress', // Always 'In Progress' — issue.status may contain legacy DB values
+        });
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to start timer.');
+        return;
+      }
     }
+
     setIsTicking(true);
     localStorage.setItem(`timer_ticking_${issue._id}`, 'true');
     localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
@@ -280,12 +287,22 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     setIsTicking(false);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      await stopTimerMutation.mutateAsync({ issueId: issue._id });
+      await stopTimerMutation.mutateAsync({
+        issueId: issue._id,
+        activeDuration: timeRef.current,
+      });
       toast.success("Work ended. Issue moved to Testing.");
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to end work session.");
+      const status = err.response?.status;
+      const message = err.response?.data?.message;
+      if (status === 404 || (message && message.includes("No active timer"))) {
+        toast.info("Work ended. Session was already saved.");
+      } else {
+        toast.error(message || "Failed to end work session.");
+        return; // Do not clear if failed due to other errors
+      }
     }
-    // Always clear localStorage regardless of API result
+    // Always clear localStorage
     timeRef.current = 0;
     setTime(0);
     localStorage.removeItem(`timer_time_${issue._id}`);
