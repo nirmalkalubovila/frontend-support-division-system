@@ -44,6 +44,7 @@ export interface TimeLogQueryParams {
   user?: string;
   project?: string;
   approved?: boolean;
+  active?: boolean;
   sortBy?: string;
 }
 

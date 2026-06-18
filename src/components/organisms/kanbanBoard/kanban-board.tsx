@@ -94,8 +94,8 @@ function AssigneeAvatars({ assignees, max = 3 }: { assignees: TaskAssignee[]; ma
   const rest = assignees.length - max;
   return (
     <div className="flex -space-x-1.5">
-      {visible.map((a) => (
-        <div key={a._id} title={a.name || "Unknown"}
+      {visible.map((a, idx) => (
+        <div key={a._id ? `${a._id}-${idx}` : `assignee-${idx}`} title={a.name || "Unknown"}
           className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border-2 border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">
           {(a.name || "U").charAt(0).toUpperCase()}
         </div>
@@ -329,8 +329,8 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
               <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Assignees</Label>
               {task.assignees.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {task.assignees.map((a) => (
-                    <div key={a._id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+                  {task.assignees.map((a, idx) => (
+                    <div key={a._id ? `${a._id}-${idx}` : `assignee-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)]">
                       <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">{(a.name || "U").charAt(0).toUpperCase()}</div>
                       <span className="text-xs font-medium text-[var(--text-primary)]">{a.name || "Unknown"}</span>
                       {canEdit && <button onClick={() => handleToggleAssignee(a._id)} className="text-[var(--text-tertiary)] hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>}

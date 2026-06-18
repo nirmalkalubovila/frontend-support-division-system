@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { toast } from "sonner";
@@ -143,11 +143,11 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
       setTechnicalApproach(issue.technicalApproach || "");
 
       // Load time & ticking state specifically for this issue
-      const savedTime = localStorage.getItem(`issue_timer_${issue._id}`);
+      const savedTime = localStorage.getItem(`timer_time_${issue._id}`);
       let initialTime = savedTime ? parseInt(savedTime, 10) : 0;
       
-      const savedTicking = localStorage.getItem(`issue_timer_ticking_${issue._id}`);
-      const savedTimestamp = localStorage.getItem(`issue_timer_timestamp_${issue._id}`);
+      const savedTicking = localStorage.getItem(`timer_ticking_${issue._id}`);
+      const savedTimestamp = localStorage.getItem(`timer_timestamp_${issue._id}`);
       
       if (savedTicking === "true" && savedTimestamp) {
         const elapsed = Math.floor((Date.now() - parseInt(savedTimestamp, 10)) / 1000);
@@ -160,6 +160,33 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
       setTime(initialTime);
     }
   }, [open, issue]);
+
+  // Synchronize state from websocket events (stored in localStorage)
+  useEffect(() => {
+    const handleTimerSync = () => {
+      if (!open || !issue?._id) return;
+      const savedTime = localStorage.getItem(`timer_time_${issue._id}`);
+      let initialTime = savedTime ? parseInt(savedTime, 10) : 0;
+      
+      const savedTicking = localStorage.getItem(`timer_ticking_${issue._id}`);
+      const savedTimestamp = localStorage.getItem(`timer_timestamp_${issue._id}`);
+      
+      if (savedTicking === "true" && savedTimestamp) {
+        const elapsed = Math.floor((Date.now() - parseInt(savedTimestamp, 10)) / 1000);
+        initialTime = initialTime + elapsed;
+        setIsTicking(true);
+      } else {
+        setIsTicking(false);
+      }
+      timeRef.current = initialTime;
+      setTime(initialTime);
+    };
+
+    window.addEventListener("local-timer-update", handleTimerSync);
+    return () => {
+      window.removeEventListener("local-timer-update", handleTimerSync);
+    };
+  }, [open, issue?._id]);
 
   // Ref-based interval: updates DOM directly, syncs React state only every 10 seconds
   useEffect(() => {
@@ -185,8 +212,8 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
         // Write to localStorage every 5 seconds instead of every second
         if (tickCount % 5 === 0) {
-          localStorage.setItem(`issue_timer_${issue._id}`, String(newTime));
-          localStorage.setItem(`issue_timer_timestamp_${issue._id}`, String(Date.now()));
+          localStorage.setItem(`timer_time_${issue._id}`, String(newTime));
+          localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
         }
 
         // Sync React state every 10 seconds for warning banner etc
@@ -194,7 +221,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           setTime(newTime);
           const estH = parseFloat(estimatedHours) || 0;
           if (estH > 0 && newTime > estH * 3600) {
-            const notifiedKey = `issue_timer_exceeded_notified_${issue._id}`;
+            const notifiedKey = `timer_exceeded_notified_${issue._id}`;
             const alreadyNotified = localStorage.getItem(notifiedKey);
             if (!alreadyNotified) {
               localStorage.setItem(notifiedKey, "true");
@@ -223,19 +250,26 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
       return;
     }
     setIsTicking(true);
-    localStorage.setItem(`issue_timer_ticking_${issue._id}`, 'true');
-    localStorage.setItem(`issue_timer_timestamp_${issue._id}`, String(Date.now()));
+    localStorage.setItem(`timer_ticking_${issue._id}`, 'true');
+    localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
+    localStorage.setItem(`timer_worktype_${issue._id}`, issue.status || 'In Progress');
     window.dispatchEvent(new Event('storage'));
   }, [issue?._id, issue?.status, startTimerMutation]);
 
   const handlePauseTimer = useCallback(() => {
     if (!issue?._id) return;
     // Persist current time before pausing
-    localStorage.setItem(`issue_timer_${issue._id}`, String(timeRef.current));
+    localStorage.setItem(`timer_time_${issue._id}`, String(timeRef.current));
     setIsTicking(false);
     setTime(timeRef.current);
-    localStorage.setItem(`issue_timer_ticking_${issue._id}`, "false");
-    localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
+    localStorage.setItem(`timer_ticking_${issue._id}`, "false");
+    localStorage.removeItem(`timer_timestamp_${issue._id}`);
+
+    // Broadcast via WebSockets
+    if ((window as any).globalSocket) {
+      (window as any).globalSocket.emit("timer:pause", { itemId: issue._id, time: timeRef.current });
+    }
+
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
 
@@ -253,10 +287,11 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     // Always clear localStorage regardless of API result
     timeRef.current = 0;
     setTime(0);
-    localStorage.removeItem(`issue_timer_${issue._id}`);
-    localStorage.removeItem(`issue_timer_ticking_${issue._id}`);
-    localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
-    localStorage.removeItem(`issue_timer_exceeded_notified_${issue._id}`);
+    localStorage.removeItem(`timer_time_${issue._id}`);
+    localStorage.removeItem(`timer_ticking_${issue._id}`);
+    localStorage.removeItem(`timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`timer_worktype_${issue._id}`);
+    localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id, stopTimerMutation]);
 
@@ -265,10 +300,11 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     setIsTicking(false);
     timeRef.current = 0;
     setTime(0);
-    localStorage.removeItem(`issue_timer_${issue._id}`);
-    localStorage.removeItem(`issue_timer_ticking_${issue._id}`);
-    localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
-    localStorage.removeItem(`issue_timer_exceeded_notified_${issue._id}`);
+    localStorage.removeItem(`timer_time_${issue._id}`);
+    localStorage.removeItem(`timer_ticking_${issue._id}`);
+    localStorage.removeItem(`timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`timer_worktype_${issue._id}`);
+    localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
 
