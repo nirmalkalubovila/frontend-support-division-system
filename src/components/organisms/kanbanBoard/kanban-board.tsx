@@ -833,15 +833,6 @@ export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
         </Button>
       </div>
 
-      {/* Board stats */}
-      <div className="flex items-center gap-4 text-xs text-[var(--text-secondary)]">
-        <span className="font-semibold text-[var(--text-primary)]">{stats.total} task{stats.total !== 1 ? "s" : ""}</span>
-        {hasFilters && <span className="text-[var(--primary)] font-medium">(filtered)</span>}
-        <span className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />{stats.done} done</span>
-        {stats.overdue > 0 && <span className="flex items-center gap-1 text-red-500 font-semibold"><AlertCircle className="h-3.5 w-3.5" />{stats.overdue} overdue</span>}
-        {isRefetching && <span className="text-[var(--text-tertiary)]">Syncing…</span>}
-      </div>
-
       {/* Board */}
       <div className="grid gap-4 pb-6" style={{ gridTemplateColumns: `repeat(${KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>
         {KANBAN_STATUSES.map((status) => (

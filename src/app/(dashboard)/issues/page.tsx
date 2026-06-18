@@ -89,6 +89,18 @@ const getIssueTypeStyle = (type: string) => {
   }
 };
 
+function fmtDuration(hours: number): string {
+  const totalSecs = Math.round(hours * 3600);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} hr`);
+  if (m > 0) parts.push(`${m} min`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} sec`);
+  return parts.join(", ");
+}
+
 // ──────────────────────────────────────────────────────────────
 // Issue Card Component
 // ──────────────────────────────────────────────────────────────
@@ -693,7 +705,7 @@ function ProjectCard({
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
                             <Clock className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
-                            {issue.totalTimeSpent !== undefined ? `${issue.totalTimeSpent.toFixed(2)}h` : "0.00h"}
+                            {issue.totalTimeSpent !== undefined ? fmtDuration(issue.totalTimeSpent) : "0 sec"}
                           </td>
                           <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
                             <Calendar className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
