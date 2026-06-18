@@ -17,7 +17,9 @@ export type WorkType =
   | "Pending Client";
 
 export interface TimeLogRecord extends GlobalRecords {
-  issue: Issue | string;
+  issue: Issue | string | null;
+  task?: import("../project-management/task-service").Task | string | null;
+  cr?: import("../project-management/cr-service").ChangeRequest | string | null;
   user: {
     _id: string;
     name: string;
@@ -37,6 +39,8 @@ export interface TimeLogQueryParams {
   page?: number;
   limit?: number;
   issue?: string;
+  task?: string;
+  cr?: string;
   user?: string;
   project?: string;
   approved?: boolean;
@@ -44,19 +48,25 @@ export interface TimeLogQueryParams {
 }
 
 export interface StartTimerDto {
-  issueId: string;
+  issueId?: string | null;
+  taskId?: string | null;
+  crId?: string | null;
   workType: WorkType;
   note?: string;
   isBillable?: boolean;
 }
 
 export interface StopTimerDto {
-  issueId: string;
+  issueId?: string | null;
+  taskId?: string | null;
+  crId?: string | null;
   note?: string;
 }
 
 export interface CreateManualLogDto {
-  issueId: string;
+  issueId?: string | null;
+  taskId?: string | null;
+  crId?: string | null;
   startTime: string; // ISO date string
   endTime: string; // ISO date string
   workType: WorkType;
@@ -100,6 +110,8 @@ export const useStartTimer = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
   });
 };
@@ -114,6 +126,8 @@ export const useStopTimer = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
   });
 };
@@ -128,6 +142,8 @@ export const useCreateManualLog = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
   });
 };
@@ -149,6 +165,8 @@ export const useUpdateTimeLog = () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/time-logs", variables.logId] });
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
   });
 };
@@ -162,6 +180,8 @@ export const useDeleteTimeLog = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
       queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
     },
   });
 };

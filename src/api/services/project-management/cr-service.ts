@@ -260,3 +260,13 @@ export const useUnlinkTaskFromCR = (projectId: string) => {
     },
   });
 };
+
+export const useGetAssignedCRs = (assigneeId?: string) =>
+  useQuery({
+    queryKey: ["/crs/assigned", assigneeId],
+    queryFn: async (): Promise<ChangeRequest[]> => {
+      const res = await axiosInstance.get(`/crs`, { params: { assignee: assigneeId } });
+      return res.data;
+    },
+    enabled: !!assigneeId,
+  });

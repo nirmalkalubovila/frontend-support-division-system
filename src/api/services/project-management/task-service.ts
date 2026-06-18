@@ -142,3 +142,13 @@ export const useDeleteTaskAttachment = (projectId: string) => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/tasks", projectId] }),
   });
 };
+
+export const useGetAssignedTasks = (assigneeId?: string) =>
+  useQuery({
+    queryKey: ["/tasks/assigned", assigneeId],
+    queryFn: async (): Promise<Task[]> => {
+      const res = await axiosInstance.get(`/tasks`, { params: { assignee: assigneeId } });
+      return res.data;
+    },
+    enabled: !!assigneeId,
+  });
