@@ -55,26 +55,33 @@ export function useIssuesSocket(projectIds: string[]) {
 
     socket.on("issue:created", (issue: Issue) => {
       patchAll((prev) => {
+        if (!prev.data) return prev;
         if (prev.data.some((i) => i._id === issue._id)) return prev;
         return { ...prev, data: [issue, ...prev.data], totalResults: prev.totalResults + 1 };
       });
     });
 
     socket.on("issue:updated", (issue: Issue) => {
-      patchAll((prev) => ({
-        ...prev,
-        data: prev.data.map((i) => (i._id === issue._id ? issue : i)),
-      }));
+      patchAll((prev) => {
+        if (!prev.data) return prev;
+        return {
+          ...prev,
+          data: prev.data.map((i) => (i._id === issue._id ? issue : i)),
+        };
+      });
       // Also patch single-issue cache entry if open in detail modal
       qc.setQueryData<Issue>(["/issues", issue._id], issue);
     });
 
     socket.on("issue:deleted", ({ _id }: { _id: string }) => {
-      patchAll((prev) => ({
-        ...prev,
-        data: prev.data.filter((i) => i._id !== _id),
-        totalResults: Math.max(0, prev.totalResults - 1),
-      }));
+      patchAll((prev) => {
+        if (!prev.data) return prev;
+        return {
+          ...prev,
+          data: prev.data.filter((i) => i._id !== _id),
+          totalResults: Math.max(0, prev.totalResults - 1),
+        };
+      });
     });
 
     return () => {
