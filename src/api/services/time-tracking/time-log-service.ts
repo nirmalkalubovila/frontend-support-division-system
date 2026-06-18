@@ -14,7 +14,14 @@ export type WorkType =
   | "Closed"
   | "Reopened"
   | "On Hold"
-  | "Pending Client";
+  | "Pending Client"
+  | "To Do"
+  | "Review"
+  | "Done"
+  | "Submitted"
+  | "Rejected"
+  | "In Development"
+  | "Completed";
 
 export interface TimeLogRecord extends GlobalRecords {
   issue: Issue | string | null;

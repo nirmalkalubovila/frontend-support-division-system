@@ -27,6 +27,7 @@ import {
   useStartTimer,
   useStopTimer,
   useCreateManualLog,
+  useDeleteTimeLog,
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
 import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/services/issue-management/issue-service";
@@ -45,12 +46,24 @@ interface EngineerDashboardProps {
   currentUserId: string;
 }
 
+// All valid workType values accepted by the backend
+const VALID_WORK_TYPES: WorkType[] = [
+  'Backlog', 'Assigned', 'Planned Solution', 'In Progress', 'Testing',
+  'Resolved', 'Closed', 'Reopened', 'On Hold', 'Pending Client',
+  'To Do', 'Review', 'Done', 'Submitted', 'Rejected', 'In Development', 'Completed',
+];
+
+/** Returns wt if valid, otherwise falls back to a safe default. */
+const sanitizeWorkType = (wt: string | undefined, fallback: WorkType = 'In Progress'): WorkType =>
+  (VALID_WORK_TYPES as string[]).includes(wt ?? '') ? (wt as WorkType) : fallback;
+
 export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardProps) {
   const queryClient = useQueryClient();
   const updateIssueMutation = useUpdateIssue();
   const startTimerMutation = useStartTimer();
   const stopTimerMutation = useStopTimer();
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
+  const deleteTimeLogMutation = useDeleteTimeLog();
 
   // Fetch assigned tasks & CRs
   const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
@@ -104,6 +117,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [selectedWorkType, setSelectedWorkType] = useState<WorkType>("In Progress");
   const [time, setTime] = useState<number>(0);
   const [isTicking, setIsTicking] = useState<boolean>(false);
+  const [activeLogId, setActiveLogId] = useState<string>("");
   
   // Submit modal state
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
@@ -178,6 +192,57 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     if (trackingType === 'cr') return assignedCRs.find((c) => c._id === selectedItemId);
     return null;
   }, [trackingType, selectedItemId, issues, assignedTasks, assignedCRs]);
+
+  // Sync active timer from backend database on load / query change
+  useEffect(() => {
+    if (!logsData?.data) return;
+    
+    // Find if there is an active running timer (endTime is null) in the user's logs
+    const activeDbLog = logsData.data.find((log) => !log.endTime);
+    
+    if (activeDbLog) {
+      const itemId = 
+        typeof activeDbLog.issue === 'object' && activeDbLog.issue ? activeDbLog.issue._id :
+        typeof activeDbLog.task === 'object' && activeDbLog.task ? activeDbLog.task._id :
+        typeof activeDbLog.cr === 'object' && activeDbLog.cr ? activeDbLog.cr._id : 
+        (activeDbLog.issue || activeDbLog.task || activeDbLog.cr || '');
+        
+      const itemType: 'issue' | 'task' | 'cr' = activeDbLog.issue ? 'issue' : activeDbLog.task ? 'task' : 'cr';
+      
+      if (itemId) {
+        // Compute elapsed time from DB startTime
+        const elapsed = Math.floor((Date.now() - new Date(activeDbLog.startTime).getTime()) / 1000);
+        
+        // Write to localStorage FIRST so syncTimer reads the right values
+        localStorage.setItem(`timer_time_${itemId}`, String(elapsed));
+        localStorage.setItem(`timer_ticking_${itemId}`, "true");
+        localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+        // Sanitize workType in case old DB data has a legacy/invalid value
+        const safeWorkType = sanitizeWorkType(
+          activeDbLog.workType,
+          itemType === 'cr' ? 'In Development' : 'In Progress'
+        );
+        localStorage.setItem(`timer_worktype_${itemId}`, safeWorkType);
+        
+        // Only update React state if this is a newly detected active timer
+        if (!isTicking || selectedItemId !== itemId) {
+          setTrackingType(itemType);
+          setSelectedItemId(itemId);
+          setSelectedWorkType(safeWorkType);
+          setActiveLogId(activeDbLog._id);
+          setTime(elapsed);
+          setIsTicking(true);
+          // NOTE: Do NOT dispatch 'storage' event here.
+          // Dispatching it would trigger syncTimer with a STALE selectedItemId
+          // (React state is async), causing it to read the wrong localStorage key
+          // and reset the timer to 0. State is set directly above instead.
+        }
+      }
+    } else {
+      setActiveLogId("");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [logsData]);
 
   // Sync timer state on select item change or storage event
   useEffect(() => {
@@ -275,12 +340,13 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   // ──────────────────────────────────────────────────────────────
   const handleStartTimer = () => {
     if (!selectedItemId) return;
+    const itemId = selectedItemId; // capture current value to avoid stale closure
 
     // Trigger backend start
     const startPayload = {
-      issueId: trackingType === 'issue' ? selectedItemId : null,
-      taskId: trackingType === 'task' ? selectedItemId : null,
-      crId: trackingType === 'cr' ? selectedItemId : null,
+      issueId: trackingType === 'issue' ? itemId : null,
+      taskId: trackingType === 'task' ? itemId : null,
+      crId: trackingType === 'cr' ? itemId : null,
       workType: selectedWorkType,
     };
 
@@ -288,10 +354,13 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       startPayload,
       {
         onSuccess: () => {
+          setTime(0);
           setIsTicking(true);
-          localStorage.setItem(`timer_ticking_${selectedItemId}`, "true");
-          localStorage.setItem(`timer_timestamp_${selectedItemId}`, String(Date.now()));
-          localStorage.setItem(`timer_worktype_${selectedItemId}`, selectedWorkType);
+          // Initialise timer_time_ to "0" so syncTimer doesn't read null → 0 incorrectly
+          localStorage.setItem(`timer_time_${itemId}`, "0");
+          localStorage.setItem(`timer_ticking_${itemId}`, "true");
+          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+          localStorage.setItem(`timer_worktype_${itemId}`, selectedWorkType);
           window.dispatchEvent(new Event("storage"));
           toast.success("Timer started on server.");
         },
@@ -463,7 +532,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       { id: issue._id, data: { status: "In Progress" } },
       {
         onSuccess: () => {
-          // 2. Start the timer on backend
+          // 2. Start the timer on backend — always 'In Progress' as workType
           startTimerMutation.mutate(
             {
               issueId: issue._id,
@@ -722,16 +791,35 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                             <Button
                               size="sm"
                               onClick={() => {
-                                setSelectedItemId(task._id);
+                                const itemId = task._id; // capture before any async state change
+                                setSelectedItemId(itemId);
                                 setTrackingType('task');
                                 const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
                                 updateTaskMutation.mutate({
                                   projectId: projId,
-                                  taskId: task._id,
+                                  taskId: itemId,
                                   data: { status: "In Progress" }
                                 }, {
                                   onSuccess: () => {
-                                    handleStartTimer();
+                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
+                                    startTimerMutation.mutate(
+                                      { taskId: itemId, workType: "In Progress" },
+                                      {
+                                        onSuccess: () => {
+                                          setTime(0);
+                                          setIsTicking(true);
+                                          localStorage.setItem(`timer_time_${itemId}`, "0");
+                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
+                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
+                                          window.dispatchEvent(new Event("storage"));
+                                          toast.success("Timer started for task.");
+                                        },
+                                        onError: (err: any) => {
+                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
+                                        },
+                                      }
+                                    );
                                   }
                                 });
                               }}
@@ -816,16 +904,35 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                             <Button
                               size="sm"
                               onClick={() => {
-                                setSelectedItemId(cr._id);
+                                const itemId = cr._id; // capture before any async state change
+                                setSelectedItemId(itemId);
                                 setTrackingType('cr');
                                 const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
                                 updateCRMutation.mutate({
                                   projectId: projId,
-                                  crId: cr._id,
+                                  crId: itemId,
                                   data: { status: "In Development" }
                                 }, {
                                   onSuccess: () => {
-                                    handleStartTimer();
+                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
+                                    startTimerMutation.mutate(
+                                      { crId: itemId, workType: "In Development" },
+                                      {
+                                        onSuccess: () => {
+                                          setTime(0);
+                                          setIsTicking(true);
+                                          localStorage.setItem(`timer_time_${itemId}`, "0");
+                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
+                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Development");
+                                          window.dispatchEvent(new Event("storage"));
+                                          toast.success("Timer started for CR.");
+                                        },
+                                        onError: (err: any) => {
+                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
+                                        },
+                                      }
+                                    );
                                   }
                                 });
                               }}
