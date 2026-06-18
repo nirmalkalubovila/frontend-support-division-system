@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import {
   useNotifyTimeExceeded,
   type Issue,
 } from "@/api/services/issue-management/issue-service";
+import { useStopTimer, useStartTimer } from "@/api/services/time-tracking/time-log-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
 import useSessionStore from "@/store/session-store";
@@ -72,6 +73,8 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const deleteAttachmentMutation = useDeleteAttachment();
   const deleteIssueMutation = useDeleteIssue();
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
+  const stopTimerMutation = useStopTimer();
+  const startTimerMutation = useStartTimer();
   const { data: users = [] } = useGetAllUsers();
   
   const [isDeleting, setIsDeleting] = useState(false);
@@ -91,9 +94,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [pendingAssigneeId, setPendingAssigneeId] = useState("");
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Form & Fields State
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [status, setStatus] = useState<string>("");
   const [priority, setPriority] = useState<string>("");
   const [assignedTo, setAssignedTo] = useState<string>("");
@@ -103,9 +106,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Stopwatch State & Logic  (ref-based to avoid per-second re-renders)
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [time, setTime] = useState<number>(0);
   const [isTicking, setIsTicking] = useState<boolean>(false);
   const timeRef = useRef<number>(0);
@@ -206,15 +209,24 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     }
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
+  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
 
-  const handleStartTimer = useCallback(() => {
+  const handleStartTimer = useCallback(async () => {
     if (!issue?._id) return;
+    try {
+      await startTimerMutation.mutateAsync({
+        issueId: issue._id,
+        workType: (issue.status as any) || 'In Progress',
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to start timer.');
+      return;
+    }
     setIsTicking(true);
-    localStorage.setItem(`issue_timer_ticking_${issue._id}`, "true");
+    localStorage.setItem(`issue_timer_ticking_${issue._id}`, 'true');
     localStorage.setItem(`issue_timer_timestamp_${issue._id}`, String(Date.now()));
-    window.dispatchEvent(new Event("storage"));
-  }, [issue?._id]);
+    window.dispatchEvent(new Event('storage'));
+  }, [issue?._id, issue?.status, startTimerMutation]);
 
   const handlePauseTimer = useCallback(() => {
     if (!issue?._id) return;
@@ -226,6 +238,27 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
+
+  const handleEndWork = useCallback(async () => {
+    if (!issue?._id) return;
+    // Stop the local interval and capture current time before clearing
+    setIsTicking(false);
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    try {
+      await stopTimerMutation.mutateAsync({ issueId: issue._id });
+      toast.success("Work ended. Issue moved to Testing.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to end work session.");
+    }
+    // Always clear localStorage regardless of API result
+    timeRef.current = 0;
+    setTime(0);
+    localStorage.removeItem(`issue_timer_${issue._id}`);
+    localStorage.removeItem(`issue_timer_ticking_${issue._id}`);
+    localStorage.removeItem(`issue_timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`issue_timer_exceeded_notified_${issue._id}`);
+    window.dispatchEvent(new Event("storage"));
+  }, [issue?._id, stopTimerMutation]);
 
   const handleStopTimer = useCallback(() => {
     if (!issue?._id) return;
@@ -239,9 +272,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Handle Save
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSave = async () => {
     if (!issue) return;
     try {
@@ -396,9 +429,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     toast.success(`Handover to ${pendingAssigneeName} set! Please save changes to apply.`);
   };
 
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // File Upload Handlers
-  // ──────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!issue || !e.target.files || e.target.files.length === 0) return;
     setIsUploading(true);
@@ -665,7 +698,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
 
                 <Separator className="bg-[var(--border)]/50" />
 
-                {/* Digital Clock – uses ref for direct DOM updates */}
+                {/* Digital Clock â€“ uses ref for direct DOM updates */}
                 <div className="bg-[var(--surface-hover)]/30 dark:bg-black/10 rounded-xl p-3 text-center border border-[var(--border)]/30">
                   <p ref={clockDisplayRef} className="text-3xl font-mono font-bold text-[var(--text-primary)] tracking-wider">
                     {formatStopwatchTime(time)}
@@ -693,12 +726,17 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     </button>
                   )}
                   <button
-                    onClick={handleStopTimer}
-                    disabled={time === 0 && !isTicking}
-                    title="Reset timer"
-                    className="flex items-center justify-center h-9 w-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-[var(--surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                    onClick={handleEndWork}
+                    disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
+                    title="End Work"
+                    className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
                   >
-                    <Square className="h-3.5 w-3.5 fill-current" />
+                    {stopTimerMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    )}
+                    End Work
                   </button>
                 </div>
 
@@ -734,7 +772,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           </div>
         </div>
 
-        {/* ── Full-Width Issue Metadata, SLA & Assignment Card (Horizontal Layout) ── */}
+        {/* â”€â”€ Full-Width Issue Metadata, SLA & Assignment Card (Horizontal Layout) â”€â”€ */}
         <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden">
           <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -890,13 +928,13 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     }}
                     className="flex-1 h-9 text-[11px] font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)]"
                   >
-                    ✉ Request
+                    âœ‰ Request
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Pending Time Request Card – full width below the grid */}
+            {/* Pending Time Request Card â€“ full width below the grid */}
             {issue.timeRequest && issue.timeRequest.hours && (
               <div className="mt-4 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
                 <div className="flex flex-wrap items-center justify-between gap-4">
