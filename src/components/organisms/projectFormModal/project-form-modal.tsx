@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Loader2, AlertCircle, FolderKanban, UploadCloud, X, Plus } from "lucide-react";
+import { Loader2, AlertCircle, FolderKanban, UploadCloud, X, Plus, Code2, Headphones } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -11,13 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Progress } from "@/components/ui/progress";
 import {
   useCreateProject, useUpdateProject,
   type Project, type CreateProjectPayload, type MainContact,
 } from "@/api/services/project-management/project-service";
 import { useGetAllClients } from "@/api/services/project-management/client-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
+import { API_BASE_URL } from "@/lib/constants";
+
+const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
 
 const PROJECT_TYPES = ["New Development", "CR", "Support"] as const;
 
@@ -48,6 +50,7 @@ const makeEmptyForm = () => ({
   contractType: "" as any,
   allocatedHours: 0,
   members: [] as string[],
+  stage: "development" as "development" | "support",
 });
 
 export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormModalProps) {
@@ -70,6 +73,8 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
   useEffect(() => {
     if (!open) return;
     if (project) {
+      const inferredStage: "development" | "support" =
+        (project.allocatedHours && project.allocatedHours > 0) ? "support" : "development";
       setForm({
         name: project.name || "",
         description: project.description || "",
@@ -88,8 +93,9 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
         contractType: project.contractType || "",
         allocatedHours: project.allocatedHours || 0,
         members: project.members ? project.members.map((m: any) => typeof m === "object" ? m._id : m) : [],
+        stage: inferredStage,
       });
-      setPhotoPreview(project.photo ? `http://localhost:5001${project.photo}` : null);
+      setPhotoPreview(project.photo ? `${STATIC_BASE}${project.photo}` : null);
     } else {
       setForm(makeEmptyForm());
       setPhotoPreview(null);
@@ -110,8 +116,13 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
       toast.error("Image must be under 5MB.");
       return;
     }
+    setPhotoPreview((prev) => {
+      if (prev?.startsWith("blob:")) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
     setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
+    // reset input so same file can be re-selected
+    e.target.value = "";
   };
 
   const toggleProjectType = (type: string) => {
@@ -144,6 +155,10 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
     setValidationError(null);
     if (!form.name.trim()) {
       setValidationError("Project name is required.");
+      return;
+    }
+    if (form.stage === "support" && (!form.allocatedHours || form.allocatedHours <= 0)) {
+      setValidationError("Monthly allocation hours are required for support stage projects.");
       return;
     }
 
@@ -249,11 +264,22 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
               </Label>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
               {photoPreview ? (
-                <div className="inline-flex items-center gap-3 p-3 rounded-xl border border-[var(--border)] bg-[var(--background)]">
-                  <img src={photoPreview} alt="preview" className="h-16 w-16 object-cover rounded-lg border border-[var(--border)]" />
+                <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--background)]">
+                  <div className="relative h-20 w-20 shrink-0 rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--surface)]">
+                    <img
+                      src={photoPreview}
+                      alt="Project photo preview"
+                      className="h-full w-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = ""; }}
+                    />
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="h-8 text-xs">Replace</Button>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => { setPhotoFile(null); setPhotoPreview(null); }} className="h-8 text-xs">Remove</Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => {
+                      if (photoPreview?.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
+                      setPhotoFile(null);
+                      setPhotoPreview(null);
+                    }} className="h-8 text-xs">Remove</Button>
                   </div>
                 </div>
               ) : (
@@ -278,26 +304,6 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                 value={form.description}
                 onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                 className="bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium min-h-[90px]"
-              />
-            </div>
-
-            {/* Completion */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Completion
-                </Label>
-                <span className="text-sm font-bold text-[var(--primary)]">{form.completion}%</span>
-              </div>
-              <Progress value={form.completion} className="h-2" />
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                value={form.completion}
-                onChange={(e) => setForm((p) => ({ ...p, completion: Number(e.target.value) }))}
-                className="w-full h-4 cursor-pointer accent-[var(--primary)]"
               />
             </div>
 
@@ -345,6 +351,54 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                 ))}
               </div>
             </div>
+
+            {/* Stage Toggle */}
+            <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border)] bg-[var(--background)] w-fit">
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, stage: "development", allocatedHours: 0 }))}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  form.stage === "development"
+                    ? "bg-[var(--primary)] text-white shadow-sm"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                <Code2 className="h-3.5 w-3.5" /> Development
+              </button>
+              <button
+                type="button"
+                onClick={() => setForm((p) => ({ ...p, stage: "support" }))}
+                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  form.stage === "support"
+                    ? "bg-[var(--primary)] text-white shadow-sm"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                <Headphones className="h-3.5 w-3.5" /> Support
+              </button>
+            </div>
+
+            {/* Monthly Allocation — support stage only */}
+            {form.stage === "support" && (
+              <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-[rgba(99,102,241,0.25)] bg-[rgba(99,102,241,0.05)]">
+                <Headphones className="h-4 w-4 text-[var(--primary)] shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1.5">
+                  <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--primary)]">
+                    Monthly Allocation Hours *
+                  </Label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 40"
+                    value={form.allocatedHours || ""}
+                    onChange={(e) => setForm((p) => ({ ...p, allocatedHours: Number(e.target.value) }))}
+                    className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
+                    min={1}
+                    required
+                  />
+                  <p className="text-[10px] text-[var(--text-tertiary)]">Total hours allocated to this project per month.</p>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ── Retainer & Contract Configuration ─────────── */}
@@ -353,7 +407,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
               Retainer & Contract Details
             </h3>
             
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Client Dropdown */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -389,21 +443,6 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                   <option value="Time & Material">Time & Material</option>
                   <option value="Fixed">Fixed Price</option>
                 </select>
-              </div>
-
-              {/* Allocated Hours */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Allocated Hours
-                </Label>
-                <Input
-                  type="number"
-                  placeholder="e.g. 50"
-                  value={form.allocatedHours}
-                  onChange={(e) => setForm((p) => ({ ...p, allocatedHours: Number(e.target.value) }))}
-                  className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
-                  min={0}
-                />
               </div>
             </div>
 
@@ -469,7 +508,22 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                 <Input
                   placeholder="+94 77 123 4567"
                   value={form.mainContact.phone || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, mainContact: { ...p.mainContact, phone: e.target.value } }))}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/[^\d+]/g, "");
+                    let formatted = digits;
+                    if (digits.startsWith("+94")) {
+                      const local = digits.slice(3);
+                      if (local.length <= 2) formatted = `+94 ${local}`;
+                      else if (local.length <= 4) formatted = `+94 ${local.slice(0,2)} ${local.slice(2)}`;
+                      else formatted = `+94 ${local.slice(0,2)} ${local.slice(2,5)} ${local.slice(5,9)}`;
+                    } else if (digits.startsWith("0")) {
+                      const body = digits.slice(1);
+                      if (body.length <= 2) formatted = `0${body}`;
+                      else if (body.length <= 5) formatted = `0${body.slice(0,2)} ${body.slice(2)}`;
+                      else formatted = `0${body.slice(0,2)} ${body.slice(2,5)} ${body.slice(5,9)}`;
+                    }
+                    setForm((p) => ({ ...p, mainContact: { ...p.mainContact, phone: formatted } }));
+                  }}
                   className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
                 />
               </div>

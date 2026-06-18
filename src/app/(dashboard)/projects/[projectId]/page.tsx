@@ -20,6 +20,9 @@ import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { useGetProjectTasks } from "@/api/services/project-management/task-service";
 import type { User } from "@/api/services/user-management/user-service";
 import { TasksTab, CRTab, IssuesTab } from "./tabs";
+import { API_BASE_URL } from "@/lib/constants";
+
+const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -61,7 +64,7 @@ function DashboardTab({ projectId }: { projectId: string }) {
 
   if (!project) return null;
 
-  const photoUrl = project.photo ? `http://localhost:5001${project.photo}` : null;
+  const photoUrl = project.photo ? `${STATIC_BASE}${project.photo}` : null;
 
   return (
     <div className="space-y-6">
