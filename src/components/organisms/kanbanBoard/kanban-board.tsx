@@ -95,9 +95,9 @@ function AssigneeAvatars({ assignees, max = 3 }: { assignees: TaskAssignee[]; ma
   return (
     <div className="flex -space-x-1.5">
       {visible.map((a) => (
-        <div key={a._id} title={a.name}
+        <div key={a._id} title={a.name || "Unknown"}
           className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border-2 border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">
-          {a.name.charAt(0).toUpperCase()}
+          {(a.name || "U").charAt(0).toUpperCase()}
         </div>
       ))}
       {rest > 0 && (
@@ -331,8 +331,8 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
                 <div className="flex flex-wrap gap-2">
                   {task.assignees.map((a) => (
                     <div key={a._id} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-                      <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">{a.name.charAt(0).toUpperCase()}</div>
-                      <span className="text-xs font-medium text-[var(--text-primary)]">{a.name}</span>
+                      <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">{(a.name || "U").charAt(0).toUpperCase()}</div>
+                      <span className="text-xs font-medium text-[var(--text-primary)]">{a.name || "Unknown"}</span>
                       {canEdit && <button onClick={() => handleToggleAssignee(a._id)} className="text-[var(--text-tertiary)] hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>}
                     </div>
                   ))}
@@ -411,10 +411,10 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
                 <div className="space-y-3">
                   {comments.map((c) => (
                     <div key={c.id} className="flex gap-2">
-                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{c.author.charAt(0).toUpperCase()}</div>
+                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{(c.author || "U").charAt(0).toUpperCase()}</div>
                       <div className="flex-1 bg-[var(--background)] rounded-xl p-2.5 border border-[var(--border)]">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-[var(--text-primary)]">{c.author}</span>
+                          <span className="text-xs font-semibold text-[var(--text-primary)]">{c.author || "Unknown"}</span>
                           <span className="text-[10px] text-[var(--text-tertiary)]">{c.time}</span>
                         </div>
                         <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{c.text}</p>

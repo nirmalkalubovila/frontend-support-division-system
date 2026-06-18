@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import axiosInstance from "@/lib/axios";
 import Link from "next/link";
 import {
   Activity,
@@ -28,6 +30,10 @@ import {
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
 import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
+import { useUpdateTask } from "@/api/services/project-management/task-service";
+import { useUpdateCR } from "@/api/services/project-management/cr-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,10 +46,43 @@ interface EngineerDashboardProps {
 }
 
 export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardProps) {
+  const queryClient = useQueryClient();
   const updateIssueMutation = useUpdateIssue();
   const startTimerMutation = useStartTimer();
   const stopTimerMutation = useStopTimer();
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
+
+  // Fetch assigned tasks & CRs
+  const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
+  const { data: crsData, refetch: refetchCRs } = useGetAssignedCRs(currentUserId);
+
+  const assignedTasks = useMemo(() => tasksData ?? [], [tasksData]);
+  const assignedCRs = useMemo(() => crsData ?? [], [crsData]);
+
+  // Generic mutations for task and CR updates
+  const updateTaskMutation = useMutation({
+    mutationFn: async ({ projectId, taskId, data }: { projectId: string; taskId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/tasks/${taskId}`, data);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks", variables.projectId] });
+      refetchTasks();
+    }
+  });
+
+  const updateCRMutation = useMutation({
+    mutationFn: async ({ projectId, crId, data }: { projectId: string; crId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/crs/${crId}`, data);
+      return res.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs", variables.projectId] });
+      refetchCRs();
+    }
+  });
 
   // Fetch recent time logs for current user
   const { data: logsData, refetch: refetchLogs } = useGetTimeLogs({
@@ -54,10 +93,14 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
   const recentLogs = useMemo(() => logsData?.data ?? [], [logsData]);
 
+  // Tabs for the Focus Queue
+  const [activeQueueTab, setActiveQueueTab] = useState<'issues' | 'tasks' | 'crs'>('issues');
+
   // ──────────────────────────────────────────────────────────────
   // Stopwatch Engine State
   // ──────────────────────────────────────────────────────────────
-  const [selectedIssueId, setSelectedIssueId] = useState<string>("");
+  const [trackingType, setTrackingType] = useState<'issue' | 'task' | 'cr'>('issue');
+  const [selectedItemId, setSelectedItemId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<WorkType>("In Progress");
   const [time, setTime] = useState<number>(0);
   const [isTicking, setIsTicking] = useState<boolean>(false);
@@ -67,7 +110,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [submitNote, setSubmitNote] = useState("");
   const [detailedIssue, setDetailedIssue] = useState<Issue | null>(null);
 
-  // Filter issues assigned to this engineer
+  // Issues filtering
   const myAssignedIssues = useMemo(() => {
     return issues.filter((issue) => {
       const assigneeId = typeof issue.assignedTo === "object" && issue.assignedTo !== null
@@ -89,37 +132,71 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [myAssignedIssues]);
 
+  // Tasks filtering
+  const myActiveTasks = useMemo(() => {
+    return assignedTasks.filter((t) => t.status !== "Done");
+  }, [assignedTasks]);
+
+  const myResolvedTasks = useMemo(() => {
+    return assignedTasks.filter((t) => t.status === "Done");
+  }, [assignedTasks]);
+
+  // CRs filtering
+  const myActiveCRs = useMemo(() => {
+    return assignedCRs.filter((c) => c.status !== "Completed" && c.status !== "Closed" && c.status !== "Rejected");
+  }, [assignedCRs]);
+
+  const myResolvedCRs = useMemo(() => {
+    return assignedCRs.filter((c) => c.status === "Completed" || c.status === "Closed" || c.status === "Rejected");
+  }, [assignedCRs]);
+
+  // Focus queues
   const queueIssues = useMemo(() => {
     return [...myActiveIssues].sort((a, b) => {
       const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (
-        (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0)
-      );
+      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
     });
   }, [myActiveIssues]);
 
-  const selectedIssueObj = useMemo(() => {
-    return issues.find((i) => i._id === selectedIssueId);
-  }, [issues, selectedIssueId]);
+  const queueTasks = useMemo(() => {
+    return [...myActiveTasks].sort((a, b) => {
+      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+    });
+  }, [myActiveTasks]);
 
-  // Sync timer state on select issue change or storage event
+  const queueCRs = useMemo(() => {
+    return [...myActiveCRs].sort((a, b) => {
+      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
+    });
+  }, [myActiveCRs]);
+
+  const selectedItemObj = useMemo(() => {
+    if (trackingType === 'issue') return issues.find((i) => i._id === selectedItemId);
+    if (trackingType === 'task') return assignedTasks.find((t) => t._id === selectedItemId);
+    if (trackingType === 'cr') return assignedCRs.find((c) => c._id === selectedItemId);
+    return null;
+  }, [trackingType, selectedItemId, issues, assignedTasks, assignedCRs]);
+
+  // Sync timer state on select item change or storage event
   useEffect(() => {
     const syncTimer = () => {
-      if (!selectedIssueId) {
+      if (!selectedItemId) {
         setTime(0);
         setIsTicking(false);
         return;
       }
 
-      const savedTime = localStorage.getItem(`issue_timer_${selectedIssueId}`);
-      const savedTicking = localStorage.getItem(`issue_timer_ticking_${selectedIssueId}`);
-      const savedTimestamp = localStorage.getItem(`issue_timer_timestamp_${selectedIssueId}`);
-      const savedWorkType = localStorage.getItem(`issue_timer_worktype_${selectedIssueId}`) as WorkType;
+      const savedTime = localStorage.getItem(`timer_time_${selectedItemId}`);
+      const savedTicking = localStorage.getItem(`timer_ticking_${selectedItemId}`);
+      const savedTimestamp = localStorage.getItem(`timer_timestamp_${selectedItemId}`);
+      const savedWorkType = localStorage.getItem(`timer_worktype_${selectedItemId}`) as WorkType;
 
       if (savedTicking === "true" && savedWorkType) {
         setSelectedWorkType(savedWorkType);
-      } else if (selectedIssueObj) {
-        setSelectedWorkType(selectedIssueObj.status as WorkType);
+      } else if (selectedItemObj) {
+        setSelectedWorkType((selectedItemObj.status as WorkType) || "In Progress");
       }
 
       if (savedTicking === "true" && savedTimestamp) {
@@ -137,29 +214,30 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     return () => {
       window.removeEventListener("storage", syncTimer);
     };
-  }, [selectedIssueId, selectedIssueObj?.status]);
+  }, [selectedItemId, selectedItemObj?.status]);
 
   // Tick the timer
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     let tickCount = 0;
-    if (isTicking && selectedIssueId) {
+    if (isTicking && selectedItemId) {
       interval = setInterval(() => {
         tickCount += 1;
         setTime((prev) => {
           const newTime = prev + 1;
-          localStorage.setItem(`issue_timer_${selectedIssueId}`, String(newTime));
-          localStorage.setItem(`issue_timer_timestamp_${selectedIssueId}`, String(Date.now()));
+          localStorage.setItem(`timer_time_${selectedItemId}`, String(newTime));
+          localStorage.setItem(`timer_timestamp_${selectedItemId}`, String(Date.now()));
 
-          if (tickCount % 10 === 0) {
-            const estH = selectedIssueObj?.estimatedHours || 0;
+          // SLA estimate alert only for issues
+          if (trackingType === 'issue' && tickCount % 10 === 0 && selectedItemObj) {
+            const estH = (selectedItemObj as any).estimatedHours || 0;
             if (estH > 0 && newTime > estH * 3600) {
-              const notifiedKey = `issue_timer_exceeded_notified_${selectedIssueId}`;
+              const notifiedKey = `timer_exceeded_notified_${selectedItemId}`;
               const alreadyNotified = localStorage.getItem(notifiedKey);
               if (!alreadyNotified) {
                 localStorage.setItem(notifiedKey, "true");
                 notifyTimeExceededMutation.mutate({
-                  issueId: selectedIssueId,
+                  issueId: selectedItemId,
                   activeDuration: newTime,
                 });
               }
@@ -173,33 +251,47 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isTicking, selectedIssueId, selectedIssueObj, notifyTimeExceededMutation]);
+  }, [isTicking, selectedItemId, selectedItemObj, trackingType, notifyTimeExceededMutation]);
 
-  // Auto-select first active issue if not selected
+  // Auto-select active item when category changes
   useEffect(() => {
-    if (myActiveIssues.length > 0 && !selectedIssueId) {
-      setSelectedIssueId(myActiveIssues[0]._id);
+    if (trackingType === 'issue') {
+      if (myActiveIssues.length > 0 && !myActiveIssues.some(i => i._id === selectedItemId)) {
+        setSelectedItemId(myActiveIssues[0]._id);
+      }
+    } else if (trackingType === 'task') {
+      if (myActiveTasks.length > 0 && !myActiveTasks.some(t => t._id === selectedItemId)) {
+        setSelectedItemId(myActiveTasks[0]._id);
+      }
+    } else if (trackingType === 'cr') {
+      if (myActiveCRs.length > 0 && !myActiveCRs.some(c => c._id === selectedItemId)) {
+        setSelectedItemId(myActiveCRs[0]._id);
+      }
     }
-  }, [myActiveIssues, selectedIssueId]);
+  }, [trackingType, myActiveIssues, myActiveTasks, myActiveCRs]);
 
   // ──────────────────────────────────────────────────────────────
   // Stopwatch Actions
   // ──────────────────────────────────────────────────────────────
   const handleStartTimer = () => {
-    if (!selectedIssueId) return;
+    if (!selectedItemId) return;
 
     // Trigger backend start
+    const startPayload = {
+      issueId: trackingType === 'issue' ? selectedItemId : null,
+      taskId: trackingType === 'task' ? selectedItemId : null,
+      crId: trackingType === 'cr' ? selectedItemId : null,
+      workType: selectedWorkType,
+    };
+
     startTimerMutation.mutate(
-      {
-        issueId: selectedIssueId,
-        workType: selectedWorkType,
-      },
+      startPayload,
       {
         onSuccess: () => {
           setIsTicking(true);
-          localStorage.setItem(`issue_timer_ticking_${selectedIssueId}`, "true");
-          localStorage.setItem(`issue_timer_timestamp_${selectedIssueId}`, String(Date.now()));
-          localStorage.setItem(`issue_timer_worktype_${selectedIssueId}`, selectedWorkType);
+          localStorage.setItem(`timer_ticking_${selectedItemId}`, "true");
+          localStorage.setItem(`timer_timestamp_${selectedItemId}`, String(Date.now()));
+          localStorage.setItem(`timer_worktype_${selectedItemId}`, selectedWorkType);
           window.dispatchEvent(new Event("storage"));
           toast.success("Timer started on server.");
         },
@@ -212,10 +304,10 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   };
 
   const handlePauseTimer = () => {
-    if (!selectedIssueId) return;
+    if (!selectedItemId) return;
     setIsTicking(false);
-    localStorage.setItem(`issue_timer_ticking_${selectedIssueId}`, "false");
-    localStorage.removeItem(`issue_timer_timestamp_${selectedIssueId}`);
+    localStorage.setItem(`timer_ticking_${selectedItemId}`, "false");
+    localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
     window.dispatchEvent(new Event("storage"));
     toast.info("Timer paused locally.");
   };
@@ -229,22 +321,26 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   };
 
   const handleSaveTimeLog = () => {
-    if (!selectedIssueId) return;
+    if (!selectedItemId) return;
+
+    const stopPayload = {
+      issueId: trackingType === 'issue' ? selectedItemId : null,
+      taskId: trackingType === 'task' ? selectedItemId : null,
+      crId: trackingType === 'cr' ? selectedItemId : null,
+      note: submitNote,
+    };
 
     stopTimerMutation.mutate(
-      {
-        issueId: selectedIssueId,
-        note: submitNote,
-      },
+      stopPayload,
       {
         onSuccess: () => {
           setIsTicking(false);
           setTime(0);
-          localStorage.removeItem(`issue_timer_${selectedIssueId}`);
-          localStorage.removeItem(`issue_timer_ticking_${selectedIssueId}`);
-          localStorage.removeItem(`issue_timer_timestamp_${selectedIssueId}`);
-          localStorage.removeItem(`issue_timer_worktype_${selectedIssueId}`);
-          localStorage.removeItem(`issue_timer_exceeded_notified_${selectedIssueId}`);
+          localStorage.removeItem(`timer_time_${selectedItemId}`);
+          localStorage.removeItem(`timer_ticking_${selectedItemId}`);
+          localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
+          localStorage.removeItem(`timer_worktype_${selectedItemId}`);
+          localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
           window.dispatchEvent(new Event("storage"));
           setIsSubmitOpen(false);
           refetchLogs();
@@ -253,15 +349,14 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         onError: (err: any) => {
           const msg = err?.response?.data?.message || "Failed to stop timer on server.";
           toast.error(msg);
-          // If the backend threw an error (e.g. less than 5 mins and discarded), clear locally
           if (err?.response?.status === 400 && msg.includes("discarded")) {
             setIsTicking(false);
             setTime(0);
-            localStorage.removeItem(`issue_timer_${selectedIssueId}`);
-            localStorage.removeItem(`issue_timer_ticking_${selectedIssueId}`);
-            localStorage.removeItem(`issue_timer_timestamp_${selectedIssueId}`);
-            localStorage.removeItem(`issue_timer_worktype_${selectedIssueId}`);
-            localStorage.removeItem(`issue_timer_exceeded_notified_${selectedIssueId}`);
+            localStorage.removeItem(`timer_time_${selectedItemId}`);
+            localStorage.removeItem(`timer_ticking_${selectedItemId}`);
+            localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
+            localStorage.removeItem(`timer_worktype_${selectedItemId}`);
+            localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
             window.dispatchEvent(new Event("storage"));
             setIsSubmitOpen(false);
           }
@@ -271,14 +366,14 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   };
 
   const handleResetTimer = () => {
-    if (!selectedIssueId) return;
+    if (!selectedItemId) return;
     setIsTicking(false);
     setTime(0);
-    localStorage.removeItem(`issue_timer_${selectedIssueId}`);
-    localStorage.removeItem(`issue_timer_ticking_${selectedIssueId}`);
-    localStorage.removeItem(`issue_timer_timestamp_${selectedIssueId}`);
-    localStorage.removeItem(`issue_timer_worktype_${selectedIssueId}`);
-    localStorage.removeItem(`issue_timer_exceeded_notified_${selectedIssueId}`);
+    localStorage.removeItem(`timer_time_${selectedItemId}`);
+    localStorage.removeItem(`timer_ticking_${selectedItemId}`);
+    localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
+    localStorage.removeItem(`timer_worktype_${selectedItemId}`);
+    localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
     window.dispatchEvent(new Event("storage"));
     toast.info("Timer reset.");
   };
@@ -361,7 +456,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   };
 
   const handleStartWork = (issue: Issue) => {
-    setSelectedIssueId(issue._id);
+    setSelectedItemId(issue._id);
 
     // 1. Update status to "In Progress"
     updateIssueMutation.mutate(
@@ -377,11 +472,11 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             {
               onSuccess: () => {
                 setIsTicking(true);
-                localStorage.setItem(`issue_timer_ticking_${issue._id}`, "true");
-                localStorage.setItem(`issue_timer_timestamp_${issue._id}`, String(Date.now()));
-                localStorage.setItem(`issue_timer_worktype_${issue._id}`, "In Progress");
-                if (!localStorage.getItem(`issue_timer_${issue._id}`)) {
-                  localStorage.setItem(`issue_timer_${issue._id}`, "0");
+                localStorage.setItem(`timer_ticking_${issue._id}`, "true");
+                localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
+                localStorage.setItem(`timer_worktype_${issue._id}`, "In Progress");
+                if (!localStorage.getItem(`timer_time_${issue._id}`)) {
+                  localStorage.setItem(`timer_time_${issue._id}`, "0");
                 }
                 window.dispatchEvent(new Event("storage"));
                 toast.success("Work started and timer active.");
@@ -443,104 +538,329 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Focus Queue */}
         <Card className="lg:col-span-2 bg-[var(--surface)] border-[var(--border)] shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-              <ClipboardList className="h-4.5 w-4.5 text-[var(--primary-text)] animate-pulse-soft" />
-              Focus Queue (Priority & Urgency Sorted)
-            </CardTitle>
-            <Link href="/issues" className="text-xs text-[var(--primary-text)] hover:underline flex items-center gap-0.5">
-              Board View <ChevronRight className="h-3 w-3" />
-            </Link>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-4">
+            <div className="space-y-1">
+              <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
+                <ClipboardList className="h-4.5 w-4.5 text-[var(--primary-text)] animate-pulse-soft" />
+                Focus Queue
+              </CardTitle>
+            </div>
+            <div className="flex bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
+              <button
+                onClick={() => setActiveQueueTab('issues')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeQueueTab === 'issues'
+                    ? 'bg-[var(--primary)] text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Issues ({queueIssues.length})
+              </button>
+              <button
+                onClick={() => setActiveQueueTab('tasks')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeQueueTab === 'tasks'
+                    ? 'bg-[var(--primary)] text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Tasks ({queueTasks.length})
+              </button>
+              <button
+                onClick={() => setActiveQueueTab('crs')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                  activeQueueTab === 'crs'
+                    ? 'bg-[var(--primary)] text-white shadow-xs'
+                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                CRs ({queueCRs.length})
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            {queueIssues.length === 0 ? (
-              <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                You have no active issues assigned. Good job!
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {queueIssues.map((issue) => {
-                  const client = typeof issue.client === "object" ? issue.client : null;
-                  return (
-                    <div
-                      key={issue._id}
-                      onClick={() => setDetailedIssue(issue)}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
-                    >
-                      <div className="min-w-0 pr-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                            {issue.issueId}
-                          </span>
-                          <span className="text-xs text-[var(--text-secondary)]">•</span>
-                          <Badge
-                            variant={
-                              issue.priority === "Critical"
-                                ? "destructive"
-                                : issue.priority === "High"
-                                ? "default"
-                                : "secondary"
-                            }
-                            className="text-[9px] uppercase tracking-wide scale-90"
-                          >
-                            {issue.priority}
-                          </Badge>
+            {activeQueueTab === 'issues' && (
+              queueIssues.length === 0 ? (
+                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                  You have no active issues assigned. Good job!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {queueIssues.map((issue) => {
+                    const client = typeof issue.client === "object" ? issue.client : null;
+                    return (
+                      <div
+                        key={issue._id}
+                        onClick={() => setDetailedIssue(issue)}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
+                              Issue
+                            </Badge>
+                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                              {issue.issueId}
+                            </span>
+                            <span className="text-xs text-[var(--text-secondary)]">•</span>
+                            <Badge
+                              variant={
+                                issue.priority === "Critical"
+                                  ? "destructive"
+                                  : issue.priority === "High"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                              className="text-[9px] uppercase tracking-wide scale-90"
+                            >
+                              {issue.priority}
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                            {issue.title}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                            Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
+                            <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
+                          </p>
                         </div>
-                        <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                          {issue.title}
-                        </p>
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                          Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
-                          <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
-                        </p>
-                      </div>
-                      {/* Quick Action transitions */}
-                      <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setDetailedIssue(issue)}
-                          className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
-                          title="View details of this ticket"
-                        >
-                          View
-                        </Button>
-                        {issue.status !== "In Progress" && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleStartWork(issue)}
-                            className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                            title="Start work on this ticket and open the details stopwatch modal"
-                          >
-                            Start Work
-                          </Button>
-                        )}
-                        {issue.status === "In Progress" && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleUpdateStatus(issue._id, "Testing")}
-                            className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-[10px] h-8 px-2.5 rounded-lg"
-                            title="Submit this ticket to your manager for quality review/testing"
-                          >
-                            Send to Testing
-                          </Button>
-                        )}
-                        {issue.status !== "Resolved" && issue.status !== "Testing" && (
+                        {/* Quick Action transitions */}
+                        <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleUpdateStatus(issue._id, "Resolved")}
-                            className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                            title="Mark this ticket as successfully resolved"
+                            onClick={() => setDetailedIssue(issue)}
+                            className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                            title="View details of this ticket"
                           >
-                            Mark Resolved
+                            View
                           </Button>
-                        )}
+                          {issue.status !== "In Progress" && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedItemId(issue._id);
+                                setTrackingType('issue');
+                                handleStartWork(issue);
+                              }}
+                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
+                              title="Start work on this ticket and open the details stopwatch modal"
+                            >
+                              Start Work
+                            </Button>
+                          )}
+                          {issue.status === "In Progress" && (
+                            <Button
+                              size="sm"
+                              onClick={() => handleUpdateStatus(issue._id, "Testing")}
+                              className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-[10px] h-8 px-2.5 rounded-lg"
+                              title="Submit this ticket to your manager for review"
+                            >
+                              Send to Testing
+                            </Button>
+                          )}
+                          {issue.status !== "Resolved" && issue.status !== "Testing" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleUpdateStatus(issue._id, "Resolved")}
+                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
+                              title="Mark this ticket as successfully resolved"
+                            >
+                              Mark Resolved
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+            {activeQueueTab === 'tasks' && (
+              queueTasks.length === 0 ? (
+                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                  You have no active tasks assigned. Good job!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {queueTasks.map((task) => {
+                    return (
+                      <div
+                        key={task._id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                              Task
+                            </Badge>
+                            <span className="text-xs text-[var(--text-secondary)]">•</span>
+                            <Badge
+                              variant={
+                                task.priority === "Critical"
+                                  ? "destructive"
+                                  : task.priority === "High"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                              className="text-[9px] uppercase tracking-wide scale-90"
+                            >
+                              {task.priority}
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                            {task.name}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                            Project: <span className="font-semibold text-[var(--text-primary)]">{(task.project as any)?.name || "N/A"}</span> • Current Status:{" "}
+                            <span className="font-bold text-[var(--primary-text)]">{task.status}</span>
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {task.status !== "In Progress" && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedItemId(task._id);
+                                setTrackingType('task');
+                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
+                                updateTaskMutation.mutate({
+                                  projectId: projId,
+                                  taskId: task._id,
+                                  data: { status: "In Progress" }
+                                }, {
+                                  onSuccess: () => {
+                                    handleStartTimer();
+                                  }
+                                });
+                              }}
+                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
+                            >
+                              Start Work
+                            </Button>
+                          )}
+                          {task.status !== "Done" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
+                                updateTaskMutation.mutate({
+                                  projectId: projId,
+                                  taskId: task._id,
+                                  data: { status: "Done" }
+                                }, {
+                                  onSuccess: () => {
+                                    toast.success("Task marked as Done");
+                                  }
+                                });
+                              }}
+                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
+                            >
+                              Mark Done
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            )}
+            {activeQueueTab === 'crs' && (
+              queueCRs.length === 0 ? (
+                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                  You have no active CRs assigned. Good job!
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {queueCRs.map((cr) => {
+                    return (
+                      <div
+                        key={cr._id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                      >
+                        <div className="min-w-0 pr-3">
+                          <div className="flex items-center gap-2">
+                            <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
+                              CR
+                            </Badge>
+                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                              {cr.crNumber}
+                            </span>
+                            <span className="text-xs text-[var(--text-secondary)]">•</span>
+                            <Badge
+                              variant={
+                                cr.priority === "Critical"
+                                  ? "destructive"
+                                  : cr.priority === "High"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                              className="text-[9px] uppercase tracking-wide scale-90"
+                            >
+                              {cr.priority}
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                            {cr.title}
+                          </p>
+                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                            Project: <span className="font-semibold text-[var(--text-primary)]">{(cr.project as any)?.name || "N/A"}</span> • Current Status:{" "}
+                            <span className="font-bold text-[var(--primary-text)]">{cr.status}</span>
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {cr.status !== "In Development" && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedItemId(cr._id);
+                                setTrackingType('cr');
+                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
+                                updateCRMutation.mutate({
+                                  projectId: projId,
+                                  crId: cr._id,
+                                  data: { status: "In Development" }
+                                }, {
+                                  onSuccess: () => {
+                                    handleStartTimer();
+                                  }
+                                });
+                              }}
+                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
+                            >
+                              Start Work
+                            </Button>
+                          )}
+                          {cr.status !== "Completed" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
+                                updateCRMutation.mutate({
+                                  projectId: projId,
+                                  crId: cr._id,
+                                  data: { status: "Completed" }
+                                }, {
+                                  onSuccess: () => {
+                                    toast.success("CR marked as Completed");
+                                  }
+                                });
+                              }}
+                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
+                            >
+                              Mark Completed
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             )}
           </CardContent>
         </Card>
@@ -558,32 +878,59 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <p className="text-4xl font-mono font-bold text-[var(--text-primary)] tracking-wider">
                 {formatStopwatchTime(time)}
               </p>
-              {selectedIssueObj ? (
-                <p className="text-xs text-[var(--text-secondary)] font-semibold mt-1.5 truncate max-w-full px-2" title={selectedIssueObj.title}>
-                  Tracking: <span className="font-mono text-[var(--primary-text)]">{selectedIssueObj.issueId}</span>
+              {selectedItemObj ? (
+                <p className="text-xs text-[var(--text-secondary)] font-semibold mt-1.5 truncate max-w-full px-2" title={(selectedItemObj as any).title || (selectedItemObj as any).name}>
+                  Tracking: <span className="font-mono text-[var(--primary-text)]">{(selectedItemObj as any).issueId || (selectedItemObj as any).crNumber || "Task"}</span>
                 </p>
               ) : (
                 <p className="text-xs text-[var(--text-secondary)] mt-1.5 font-medium">
-                  No active task selected
+                  No active item selected
                 </p>
               )}
             </div>
 
-            {/* Select ticket */}
+            {/* Select Type Selector */}
             <div className="space-y-1.5">
               <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Select Active Ticket
+                Select Work Category
               </Label>
               <select
-                value={selectedIssueId}
+                value={trackingType}
                 disabled={isTicking}
-                onChange={(e) => setSelectedIssueId(e.target.value)}
+                onChange={(e) => setTrackingType(e.target.value as 'issue' | 'task' | 'cr')}
                 className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
               >
-                <option value="">-- Choose active issue --</option>
-                {myActiveIssues.map((issue) => (
+                <option value="issue">Issues</option>
+                <option value="task">Tasks</option>
+                <option value="cr">Change Requests (CRs)</option>
+              </select>
+            </div>
+
+            {/* Select item */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Select Active {trackingType === 'issue' ? 'Issue' : trackingType === 'task' ? 'Task' : 'CR'}
+              </Label>
+              <select
+                value={selectedItemId}
+                disabled={isTicking}
+                onChange={(e) => setSelectedItemId(e.target.value)}
+                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
+              >
+                <option value="">-- Choose active {trackingType} --</option>
+                {trackingType === 'issue' && myActiveIssues.map((issue) => (
                   <option key={issue._id} value={issue._id}>
                     [{issue.issueId}] {issue.title}
+                  </option>
+                ))}
+                {trackingType === 'task' && myActiveTasks.map((task) => (
+                  <option key={task._id} value={task._id}>
+                    {task.name}
+                  </option>
+                ))}
+                {trackingType === 'cr' && myActiveCRs.map((cr) => (
+                  <option key={cr._id} value={cr._id}>
+                    [{cr.crNumber}] {cr.title}
                   </option>
                 ))}
               </select>
@@ -592,7 +939,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             {/* Select Work Type (Status) */}
             <div className="space-y-1.5">
               <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Ticket Status (Work Type)
+                Status / Work Type
               </Label>
               <select
                 value={selectedWorkType}
@@ -600,36 +947,74 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                 onChange={(e) => {
                   const newStatus = e.target.value as WorkType;
                   setSelectedWorkType(newStatus);
-                  if (selectedIssueId) {
-                    localStorage.setItem(`issue_timer_worktype_${selectedIssueId}`, newStatus);
-                    updateIssueMutation.mutate(
-                      { id: selectedIssueId, data: { status: newStatus } },
-                      {
-                        onSuccess: () => {
-                          toast.success(`Ticket status updated to ${newStatus}`);
-                        },
-                        onError: () => {
-                          if (selectedIssueObj) {
-                            setSelectedWorkType(selectedIssueObj.status as WorkType);
+                  if (selectedItemId) {
+                    localStorage.setItem(`timer_worktype_${selectedItemId}`, newStatus);
+                    if (trackingType === 'issue') {
+                      updateIssueMutation.mutate(
+                        { id: selectedItemId, data: { status: newStatus } },
+                        {
+                          onSuccess: () => toast.success(`Issue status updated to ${newStatus}`),
+                          onError: () => toast.error("Failed to update status on server.")
+                        }
+                      );
+                    } else if (trackingType === 'task') {
+                      const t = myActiveTasks.find(x => x._id === selectedItemId);
+                      if (t) {
+                        const projId = typeof t.project === 'object' ? (t.project as any)._id : t.project;
+                        updateTaskMutation.mutate(
+                          { projectId: projId, taskId: selectedItemId, data: { status: newStatus } },
+                          {
+                            onSuccess: () => toast.success(`Task status updated to ${newStatus}`),
+                            onError: () => toast.error("Failed to update status on server.")
                           }
-                          toast.error("Failed to update status on server.");
-                        },
+                        );
                       }
-                    );
+                    } else if (trackingType === 'cr') {
+                      const c = myActiveCRs.find(x => x._id === selectedItemId);
+                      if (c) {
+                        const projId = typeof c.project === 'object' ? (c.project as any)._id : c.project;
+                        updateCRMutation.mutate(
+                          { projectId: projId, crId: selectedItemId, data: { status: newStatus } },
+                          {
+                            onSuccess: () => toast.success(`CR status updated to ${newStatus}`),
+                            onError: () => toast.error("Failed to update status on server.")
+                          }
+                        );
+                      }
+                    }
                   }
                 }}
                 className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
               >
-                <option value="Backlog">Backlog</option>
-                <option value="Assigned">Assigned</option>
-                <option value="Planned Solution">Planned Solution</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Testing">Testing</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-                <option value="Reopened">Reopened</option>
-                <option value="On Hold">On Hold</option>
-                <option value="Pending Client">Pending Client</option>
+                {trackingType === 'issue' ? (
+                  <>
+                    <option value="Backlog">Backlog</option>
+                    <option value="Assigned">Assigned</option>
+                    <option value="Planned Solution">Planned Solution</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Testing">Testing</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Reopened">Reopened</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Pending Client">Pending Client</option>
+                  </>
+                ) : trackingType === 'task' ? (
+                  <>
+                    <option value="To Do">To Do</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Review">Review</option>
+                    <option value="Done">Done</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="Submitted">Submitted</option>
+                    <option value="In Development">In Development</option>
+                    <option value="Testing">Testing</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Closed">Closed</option>
+                  </>
+                )}
               </select>
             </div>
 
@@ -638,7 +1023,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               {!isTicking ? (
                 <Button
                   onClick={handleStartTimer}
-                  disabled={!selectedIssueId}
+                  disabled={!selectedItemId}
                   className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   title="Start counting work hours for this ticket (Auto-sets ticket status to In Progress on server)"
                 >
@@ -694,7 +1079,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
-                    <th className="py-2.5 px-3">Issue ID</th>
+                    <th className="py-2.5 px-3">Item / Ticket ID</th>
                     <th className="py-2.5 px-3">Work Type</th>
                     <th className="py-2.5 px-3">Duration (hrs)</th>
                     <th className="py-2.5 px-3">Notes</th>
@@ -704,13 +1089,18 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                 </thead>
                 <tbody>
                   {recentLogs.map((log) => {
-                    const issueCode = typeof log.issue === "object" && log.issue !== null
-                      ? log.issue.issueId
-                      : "N/A";
+                    let code = "N/A";
+                    if (log.issue && typeof log.issue === "object") {
+                      code = (log.issue as any).issueId;
+                    } else if (log.task && typeof log.task === "object") {
+                      code = `Task: ${(log.task as any).name.substring(0, 15)}...`;
+                    } else if (log.cr && typeof log.cr === "object") {
+                      code = (log.cr as any).crNumber;
+                    }
                     return (
                       <tr key={log._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)]">
-                          {issueCode}
+                          {code}
                         </td>
                         <td className="py-3 px-3">
                           <Badge variant="outline" className="text-[10px] scale-95 font-medium border-[var(--border)] text-[var(--text-secondary)]">
@@ -839,9 +1229,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <Label className="text-xs font-medium text-[var(--text-secondary)]">Ticket</Label>
+              <Label className="text-xs font-medium text-[var(--text-secondary)]">Item</Label>
               <p className="text-xs font-semibold text-[var(--text-primary)]">
-                [{selectedIssueObj?.issueId}] {selectedIssueObj?.title}
+                [{selectedItemObj ? ((selectedItemObj as any).issueId || (selectedItemObj as any).crNumber || "Task") : ""}] {selectedItemObj ? ((selectedItemObj as any).title || (selectedItemObj as any).name) : ""}
               </p>
             </div>
             <div className="space-y-1.5">
