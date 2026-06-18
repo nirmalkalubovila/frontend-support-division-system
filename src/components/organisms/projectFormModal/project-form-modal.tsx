@@ -21,8 +21,6 @@ import { API_BASE_URL } from "@/lib/constants";
 
 const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
 
-const PROJECT_TYPES = ["New Development", "CR", "Support"] as const;
-
 const TECH_SUGGESTIONS = [
   "React", "Next.js", "Vue.js", "Angular", "Node.js", "Express",
   "NestJS", "MongoDB", "PostgreSQL", "MySQL", "Redis", "Docker",
@@ -123,15 +121,6 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
     setPhotoFile(file);
     // reset input so same file can be re-selected
     e.target.value = "";
-  };
-
-  const toggleProjectType = (type: string) => {
-    setForm((prev) => ({
-      ...prev,
-      projectType: prev.projectType.includes(type)
-        ? prev.projectType.filter((t) => t !== type)
-        : [...prev.projectType, type],
-    }));
   };
 
   const addTech = (tech: string) => {
@@ -329,53 +318,33 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
               </div>
             </div>
 
-            {/* Project Type */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
-                Project Type
-              </Label>
-              <div className="flex gap-2 flex-wrap">
-                {PROJECT_TYPES.map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => toggleProjectType(type)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                      form.projectType.includes(type)
-                        ? "bg-[var(--primary)] border-[var(--primary)] text-white"
-                        : "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)]"
-                    }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Stage Toggle */}
-            <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border)] bg-[var(--background)] w-fit">
-              <button
-                type="button"
-                onClick={() => setForm((p) => ({ ...p, stage: "development", allocatedHours: 0 }))}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  form.stage === "development"
-                    ? "bg-[var(--primary)] text-white shadow-sm"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                <Code2 className="h-3.5 w-3.5" /> Development
-              </button>
-              <button
-                type="button"
-                onClick={() => setForm((p) => ({ ...p, stage: "support" }))}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  form.stage === "support"
-                    ? "bg-[var(--primary)] text-white shadow-sm"
-                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                }`}
-              >
-                <Headphones className="h-3.5 w-3.5" /> Support
-              </button>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Project Stage</Label>
+              <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border)] bg-[var(--background)] w-fit">
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, stage: "development", allocatedHours: 0 }))}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    form.stage === "development"
+                      ? "bg-[var(--primary)] text-white shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  <Code2 className="h-3.5 w-3.5" /> Development
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm((p) => ({ ...p, stage: "support" }))}
+                  className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    form.stage === "support"
+                      ? "bg-[var(--primary)] text-white shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  <Headphones className="h-3.5 w-3.5" /> Support
+                </button>
+              </div>
             </div>
 
             {/* Monthly Allocation — support stage only */}
