@@ -12,10 +12,11 @@ import {
   Users,
   TrendingUp,
   ShieldAlert,
-  History,
 } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { StatCard } from "@/components/atoms/statCard";
+import { TimesheetApprovalView } from "@/app/(dashboard)/reports/timesheet-approval/timesheet-approval-view";
+import { useGetProjectsMonthlyUsage } from "@/api/services/project-management/project-service";
 import { Progress } from "@/components/ui/progress";
 import {
   ResponsiveContainer,
@@ -41,6 +42,31 @@ interface ManagementDashboardProps {
 }
 
 export function ManagementDashboard({ issues, projects, users }: ManagementDashboardProps) {
+  // Compute default date range (last 30 days) and current month string YYYY-MM
+  const defaultDates = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 30);
+    return {
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
+      currentMonthStr: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`
+    };
+  }, []);
+
+  // Fetch monthly usage of all projects for the current month
+  const { data: monthlyUsageData } = useGetProjectsMonthlyUsage(defaultDates.currentMonthStr);
+
+  const monthlyUsageMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (monthlyUsageData) {
+      monthlyUsageData.forEach((item) => {
+        map[item.projectId] = item.monthlyUsedHours;
+      });
+    }
+    return map;
+  }, [monthlyUsageData]);
+
   // ──────────────────────────────────────────────────────────────
   // SLA & General KPIs
   // ──────────────────────────────────────────────────────────────
@@ -181,11 +207,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
       .slice(0, 5);
   }, [issues]);
 
-  const resolvedIssues = useMemo(() => {
-    return issues
-      .filter((i) => i.status === "Resolved" || i.status === "Closed")
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [issues]);
+
 
   return (
     <div className="space-y-6">
@@ -377,29 +399,59 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
               projects.slice(0, 5).map((project) => {
                 const allocated = project.allocatedHours || 0;
                 const used = project.usedHours || 0;
-                const ratio = allocated > 0 ? (used / allocated) * 100 : 0;
-                const percent = Math.min(Math.round(ratio), 100);
+                const isSupport = project.projectType && project.projectType.includes('Support');
+                const monthlyUsed = isSupport ? (monthlyUsageMap[project._id] || 0) : 0;
+                const actualRatio = allocated > 0 ? (monthlyUsed / allocated) * 100 : 0;
+                const percent = Math.min(Math.round(actualRatio), 100);
 
                 return (
                   <div key={project._id} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-[var(--text-primary)] truncate max-w-[170px]">
-                        {project.name}
-                      </span>
-                      <span className="text-[var(--text-secondary)] font-mono">
-                        {used}/{allocated}h ({percent}%)
-                      </span>
+                    <div className="flex justify-between items-start gap-2 text-xs font-semibold">
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <span className="text-[var(--text-primary)] truncate font-semibold">
+                          {project.name}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className={`text-[8px] py-0 px-1 font-bold ${
+                            isSupport 
+                              ? "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400" 
+                              : "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400"
+                          }`}>
+                            {isSupport ? "Support" : "Development"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        {isSupport ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[var(--text-secondary)] font-mono whitespace-nowrap">
+                              {monthlyUsed.toFixed(1)}/{allocated}h this month
+                            </span>
+                            {monthlyUsed > allocated && (
+                              <Badge variant="destructive" className="text-[8px] scale-90 origin-right py-0 px-1 font-bold">
+                                Exceeded
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-secondary)] font-mono whitespace-nowrap">
+                            {used.toFixed(1)}h used
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <Progress
-                      value={percent}
-                      indicatorClassName={
-                        percent > 90
-                          ? "bg-[var(--destructive)]"
-                          : percent > 75
-                          ? "bg-amber-500"
-                          : "bg-[var(--primary)]"
-                      }
-                    />
+                    {isSupport && (
+                      <Progress
+                        value={percent}
+                        indicatorClassName={
+                          actualRatio > 100
+                            ? "bg-[var(--destructive)]"
+                            : actualRatio > 80
+                            ? "bg-amber-500"
+                            : "bg-[var(--primary)]"
+                        }
+                      />
+                    )}
                   </div>
                 );
               })
@@ -500,89 +552,20 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
         </Card>
       </div>
 
-      {/* Row 4: Resolved Issues History */}
+      {/* Row 4: Timesheet Approval Queue */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
         <CardHeader>
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <History className="h-4.5 w-4.5 text-[var(--success)]" />
-            Resolved Issues History (Division-wide)
+            <Clock className="h-4.5 w-4.5 text-[var(--primary-text)]" />
+            Timesheet Approval Queue
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {resolvedIssues.length === 0 ? (
-            <div className="text-center py-8 text-sm text-[var(--text-tertiary)]">
-              No resolved issues in history.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
-                    <th className="py-2.5 px-3">Issue ID</th>
-                    <th className="py-2.5 px-3">Title</th>
-                    <th className="py-2.5 px-3">Project</th>
-                    <th className="py-2.5 px-3">Priority</th>
-                    <th className="py-2.5 px-3">Assignee</th>
-                    <th className="py-2.5 px-3">Time Spent</th>
-                    <th className="py-2.5 px-3">Resolved Date</th>
-                    <th className="py-2.5 px-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {resolvedIssues.map((issue) => {
-                    const client = typeof issue.client === "object" ? issue.client : null;
-                    const project = typeof issue.project === "object" ? issue.project : null;
-                    const assignee = typeof issue.assignedTo === "object" ? issue.assignedTo : null;
-                    return (
-                      <tr key={issue._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
-                        <td className="py-3 px-3 font-semibold text-[var(--text-primary)] font-mono">
-                          {issue.issueId}
-                        </td>
-                        <td className="py-3 px-3 font-medium text-[var(--text-primary)] truncate max-w-[220px]" title={issue.title}>
-                          {issue.title}
-                        </td>
-                        <td className="py-3 px-3 text-[var(--text-secondary)]">
-                          {project?.name ?? "N/A"} {client?.code ? `(${client.code})` : ""}
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge
-                            variant={
-                              issue.priority === "Critical"
-                                ? "destructive"
-                                : issue.priority === "High"
-                                ? "default"
-                                : "secondary"
-                            }
-                            className="text-[9px] uppercase tracking-wide scale-90"
-                          >
-                            {issue.priority}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-3 text-[var(--text-secondary)]">
-                          {assignee?.name ?? <span className="italic text-[var(--text-tertiary)]">Unassigned</span>}
-                        </td>
-                        <td className="py-3 px-3 text-[var(--text-secondary)] whitespace-nowrap">
-                          <Clock className="h-3 w-3 inline mr-1 text-[var(--text-tertiary)]" />
-                          {issue.totalTimeSpent !== undefined ? `${issue.totalTimeSpent.toFixed(2)}h` : "0.00h"}
-                        </td>
-                        <td className="py-3 px-3 text-[var(--text-secondary)]">
-                          {new Date(issue.updatedAt).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-3">
-                          <Badge
-                            variant="default"
-                            className="bg-[rgba(34,197,94,0.15)] text-[var(--success)] border border-[rgba(34,197,94,0.3)] hover:bg-[rgba(34,197,94,0.2)] text-[9px] font-bold py-0.5 px-2"
-                          >
-                            {issue.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <TimesheetApprovalView
+            startDate={defaultDates.startDate}
+            endDate={defaultDates.endDate}
+            isManagerOrAdmin={true}
+          />
         </CardContent>
       </Card>
     </div>

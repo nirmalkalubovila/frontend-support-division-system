@@ -34,6 +34,8 @@ export function TimesheetApprovalView({
   const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [selectedDeveloperId, setSelectedDeveloperId] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("pending");
+  const [selectedWorkType, setSelectedWorkType] = useState<string>("all");
+  const [selectedProjectType, setSelectedProjectType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("all"); // default all search
 
   // Editing state
@@ -57,7 +59,12 @@ export function TimesheetApprovalView({
 
   const projects = useMemo(() => projectsData?.data ?? [], [projectsData]);
   const developers = useMemo(() => {
-    return (usersData ?? []).filter(u => u.role === "engineer" || u.role === "senior_engineer");
+    // List only senior software engineers, engineers, and interns as developers
+    return (usersData ?? []).filter(u => 
+      u.role === "senior_engineer" || 
+      u.role === "engineer" || 
+      u.role === "intern"
+    );
   }, [usersData]);
 
   // Client-side filtering of logs based on dates and dropdown choices
@@ -86,6 +93,20 @@ export function TimesheetApprovalView({
       });
     }
 
+    // Project Type filter
+    if (selectedProjectType && selectedProjectType !== "all") {
+      list = list.filter(log => {
+        const projectObj = typeof log.project === 'object' ? log.project : null;
+        if (!projectObj || !projectObj.projectType) return false;
+        if (selectedProjectType === "Support") {
+          return projectObj.projectType.includes("Support");
+        } else if (selectedProjectType === "Development") {
+          return projectObj.projectType.includes("Development");
+        }
+        return false;
+      });
+    }
+
     // Developer filter
     if (selectedDeveloperId && selectedDeveloperId !== "all") {
       list = list.filter(log => {
@@ -103,6 +124,19 @@ export function TimesheetApprovalView({
       }
     }
 
+    // Work Item Type filter
+    if (selectedWorkType && selectedWorkType !== "all") {
+      if (selectedWorkType === "issue") {
+        list = list.filter(log => log.issue);
+      } else if (selectedWorkType === "cr") {
+        list = list.filter(log => log.cr);
+      } else if (selectedWorkType === "task") {
+        list = list.filter(log => log.task);
+      } else if (selectedWorkType === "general") {
+        list = list.filter(log => !log.issue && !log.cr && !log.task);
+      }
+    }
+
     // Note Search filter
     if (searchQuery && searchQuery.trim() !== "" && searchQuery !== "all") {
       const q = searchQuery.toLowerCase();
@@ -110,7 +144,7 @@ export function TimesheetApprovalView({
     }
 
     return list;
-  }, [logsData, startDate, endDate, selectedProjectId, selectedDeveloperId, selectedStatus, searchQuery]);
+  }, [logsData, startDate, endDate, selectedProjectId, selectedDeveloperId, selectedStatus, selectedWorkType, selectedProjectType, searchQuery]);
 
   // Totals calculations
   const summary = useMemo(() => {
@@ -328,6 +362,20 @@ export function TimesheetApprovalView({
               </select>
             </div>
 
+            {/* Filter by Project Type */}
+            <div className="space-y-1">
+              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Project Type</Label>
+              <select
+                value={selectedProjectType}
+                onChange={(e) => setSelectedProjectType(e.target.value)}
+                className="block w-40 text-xs h-9 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+              >
+                <option value="all">All Types</option>
+                <option value="Support">Support</option>
+                <option value="Development">Development</option>
+              </select>
+            </div>
+
             {/* Filter by Developer */}
             <div className="space-y-1">
               <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Developer</Label>
@@ -354,6 +402,22 @@ export function TimesheetApprovalView({
                 <option value="all">All Statuses</option>
                 <option value="pending">Pending Approval</option>
                 <option value="approved">Approved</option>
+              </select>
+            </div>
+
+            {/* Filter by Work Item Type */}
+            <div className="space-y-1">
+              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Work Item Type</Label>
+              <select
+                value={selectedWorkType}
+                onChange={(e) => setSelectedWorkType(e.target.value)}
+                className="block w-40 text-xs h-9 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+              >
+                <option value="all">All Items</option>
+                <option value="issue">Issues</option>
+                <option value="cr">CRs</option>
+                <option value="task">Tasks</option>
+                <option value="general">Project Work</option>
               </select>
             </div>
           </div>
@@ -433,13 +497,43 @@ export function TimesheetApprovalView({
                           </div>
                         </td>
                         <td className="p-3">
-                          <span className="font-medium text-[var(--text-primary)]">{projName}</span>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-[var(--text-primary)]">{projName}</span>
+                            {typeof log.project === 'object' && log.project?.projectType && (
+                              <div className="flex flex-wrap gap-1 mt-0.5">
+                                {log.project.projectType.map((type: string) => {
+                                  let typeColor = "bg-slate-500/10 text-slate-600 border-slate-500/20";
+                                  if (type === "Support") typeColor = "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400";
+                                  if (type === "Development") typeColor = "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400";
+                                  return (
+                                    <Badge key={type} variant="outline" className={`text-[8px] py-0 px-1 scale-90 origin-left font-bold ${typeColor}`}>
+                                      {type}
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="p-3">
-                          <div className="flex flex-col">
-                            <Badge variant="outline" className="w-fit text-[9px] bg-[var(--background)] border-[var(--border)] font-mono py-0 px-1 font-semibold text-[var(--text-secondary)]">
-                              {getLogReferenceCode(log)}
-                            </Badge>
+                          <div className="flex flex-col gap-1">
+                            {log.issue ? (
+                              <Badge variant="outline" className="w-fit text-[9px] bg-sky-500/10 text-sky-600 border-sky-500/20 font-mono py-0 px-1 font-bold">
+                                {typeof log.issue === 'object' ? log.issue.issueId : "Issue"}
+                              </Badge>
+                            ) : log.cr ? (
+                              <Badge variant="outline" className="w-fit text-[9px] bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/20 font-mono py-0 px-1 font-bold">
+                                {typeof log.cr === 'object' ? log.cr.crNumber : "CR"}
+                              </Badge>
+                            ) : log.task ? (
+                              <Badge variant="outline" className="w-fit text-[9px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 py-0 px-1 font-bold">
+                                Task
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="w-fit text-[9px] bg-slate-500/10 text-slate-600 border-slate-500/20 py-0 px-1 font-bold">
+                                Project Work
+                              </Badge>
+                            )}
                             <span className="text-[10px] text-[var(--text-secondary)] truncate max-w-[150px] mt-0.5" title={getLogReferenceTitle(log)}>
                               {getLogReferenceTitle(log)}
                             </span>
@@ -484,7 +578,7 @@ export function TimesheetApprovalView({
                           <div className="flex items-center justify-end gap-1.5">
                             {!log.approved && isManagerOrAdmin && (
                               <Button
-                                size="xs"
+                                size="sm"
                                 variant="outline"
                                 onClick={() => handleApprove(log._id)}
                                 className="h-7 w-7 p-0 bg-emerald-500/10 hover:bg-emerald-500/25 border-emerald-500/20 hover:border-emerald-500/40 text-emerald-600 rounded-md"
@@ -496,7 +590,7 @@ export function TimesheetApprovalView({
                             {isManagerOrAdmin && (
                               <>
                                 <Button
-                                  size="xs"
+                                  size="sm"
                                   variant="outline"
                                   onClick={() => handleEditClick(log)}
                                   className="h-7 w-7 p-0 bg-slate-500/10 hover:bg-slate-500/25 border-slate-500/20 hover:border-slate-500/40 text-slate-600 rounded-md"
@@ -505,7 +599,7 @@ export function TimesheetApprovalView({
                                   <Edit2 className="h-3 w-3" />
                                 </Button>
                                 <Button
-                                  size="xs"
+                                  size="sm"
                                   variant="outline"
                                   onClick={() => handleReject(log._id)}
                                   className="h-7 w-7 p-0 bg-red-500/10 hover:bg-red-500/25 border-red-500/20 hover:border-red-500/40 text-red-600 rounded-md"

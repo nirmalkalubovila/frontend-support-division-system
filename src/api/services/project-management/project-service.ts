@@ -33,7 +33,7 @@ export interface Project extends GlobalRecords {
   completion: number;
   startDate?: string | null;
   endDate?: string | null;
-  projectType: ("New Development" | "CR" | "Support")[];
+  projectType: ("Development" | "Support")[];
   mainContact?: MainContact;
   techStack: string[];
 }
@@ -157,3 +157,18 @@ export const useDeleteProject = () => {
     },
   });
 };
+
+export interface ProjectMonthlyUsage {
+  projectId: string;
+  monthlyUsedHours: number;
+}
+
+export const useGetProjectsMonthlyUsage = (month: string) =>
+  useQuery({
+    queryKey: ["/projects/monthly-usage", month],
+    queryFn: async (): Promise<ProjectMonthlyUsage[]> => {
+      const res = await axiosInstance.get("/projects/monthly-usage", { params: { month } });
+      return res.data;
+    },
+    enabled: !!month,
+  });

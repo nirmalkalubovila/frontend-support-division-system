@@ -265,7 +265,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [page, setPage] = useState(1);
-  const [typeFilter, setTypeFilter] = useState<"All" | "New Development" | "Support">("All");
+  const [typeFilter, setTypeFilter] = useState<"All" | "Development" | "Support">("All");
 
   const [showFormModal, setShowFormModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -342,7 +342,7 @@ export default function ProjectsPage() {
 
         {/* Type Filter Pills */}
         <div className="flex items-center gap-1.5">
-          {(["All", "New Development", "Support"] as const).map((t) => (
+          {(["All", "Development", "Support"] as const).map((t) => (
             <button
               key={t}
               onClick={() => { setTypeFilter(t); setPage(1); }}

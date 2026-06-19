@@ -8,7 +8,8 @@ import type { GlobalRecords } from "@/types/global-types";
 
 export type CRStatus =
   | "To Do"
-  | "Rejected" | "In Progress" | "Review" | "Done" | "Closed";
+  | "Rejected" | "In Progress" | "Review" | "Done" | "Closed"
+  | "Submitted" | "In Development" | "Completed";
 
 export type CRPriority = "Critical" | "High" | "Medium" | "Low";
 

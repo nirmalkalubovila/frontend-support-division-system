@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { 
-  BarChart3, FileText, Users, Briefcase, RefreshCw, Info, Clock
+  BarChart3, FileText, Users, Briefcase, RefreshCw, Info
 } from "lucide-react";
 import { 
   Tabs, TabsList, TabsTrigger, TabsContent, Input, Label, Button 
@@ -14,7 +14,6 @@ import useSessionStore from "@/store/session-store";
 import { ProjectPerformanceView } from "./project-performance/project-performance-view";
 import { UserPerformanceView } from "./user-performance/user-performance-view";
 import { ExecutivePerformanceView } from "./executive-view/executive-view";
-import { TimesheetApprovalView } from "./timesheet-approval/timesheet-approval-view";
 
 export default function ReportsPage() {
   // Date range selectors (Default: Last 30 Days)
@@ -218,12 +217,6 @@ export default function ReportsPage() {
             <FileText className="h-4 w-4" />
             Executive View
           </TabsTrigger>
-          {isManagerOrAdmin && (
-            <TabsTrigger value="timesheet-approval" className="text-xs py-2 px-4 flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Timesheet Approval
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {/* ── SECTION 1: PROJECT PERFORMANCE ─────────────────────────────────── */}
@@ -268,17 +261,6 @@ export default function ReportsPage() {
             daysCount={daysCount}
           />
         </TabsContent>
-
-        {/* ── SECTION 4: TIMESHEET APPROVAL ────────────────────────────────────────── */}
-        {isManagerOrAdmin && (
-          <TabsContent value="timesheet-approval" className="mt-6">
-            <TimesheetApprovalView 
-              startDate={startDate}
-              endDate={endDate}
-              isManagerOrAdmin={isManagerOrAdmin}
-            />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );
