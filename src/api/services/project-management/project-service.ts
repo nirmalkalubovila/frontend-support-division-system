@@ -36,6 +36,7 @@ export interface Project extends GlobalRecords {
   projectType: ("New Development" | "CR" | "Support")[];
   mainContact?: MainContact;
   techStack: string[];
+  stage?: 'development' | 'support';
 }
 
 export interface CreateProjectPayload {
@@ -52,6 +53,7 @@ export interface CreateProjectPayload {
   projectType?: string[];
   mainContact?: MainContact;
   techStack?: string[];
+  stage?: 'development' | 'support';
 }
 
 export type UpdateProjectPayload = Partial<CreateProjectPayload> & { isActive?: boolean };
@@ -62,7 +64,7 @@ export type UpdateProjectPayload = Partial<CreateProjectPayload> & { isActive?: 
 
 function toFormData(data: CreateProjectPayload | UpdateProjectPayload): FormData {
   const fd = new FormData();
-  const { photo, projectType, techStack, members, mainContact, ...rest } = data as any;
+  const { photo, projectType, techStack, members, mainContact, stage, ...rest } = data as any;
 
   Object.entries(rest).forEach(([k, v]) => {
     if (v !== undefined && v !== null) fd.append(k, String(v));
@@ -73,6 +75,7 @@ function toFormData(data: CreateProjectPayload | UpdateProjectPayload): FormData
   if (techStack) fd.append("techStack", JSON.stringify(techStack));
   if (members) fd.append("members", JSON.stringify(members));
   if (mainContact) fd.append("mainContact", JSON.stringify(mainContact));
+  if (stage) fd.append("stage", stage);
 
   return fd;
 }

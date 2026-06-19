@@ -277,7 +277,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     try {
       await startTimerMutation.mutateAsync({
         issueId: issue._id,
-        workType: 'In Progress', // Always 'In Progress' — issue.status may contain legacy DB values
+        workType: 'In Progress',
       });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to start timer.');
@@ -289,37 +289,55 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     window.dispatchEvent(new Event('storage'));
   }, [issue?._id, startTimerMutation]);
 
-  const handlePauseTimer = useCallback(() => {
+  const handlePauseTimer = useCallback(async () => {
     if (!issue?._id) return;
-    // Persist current time before pausing
-    localStorage.setItem(`timer_time_${issue._id}`, String(timeRef.current));
+    // Stop the local interval first
     setIsTicking(false);
-    setTime(timeRef.current);
-    localStorage.setItem(`timer_ticking_${issue._id}`, "false");
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    const currentTime = timeRef.current;
+    setTime(currentTime);
+    localStorage.setItem(`timer_time_${issue._id}`, String(currentTime));
+    localStorage.setItem(`timer_ticking_${issue._id}`, 'false');
     localStorage.removeItem(`timer_timestamp_${issue._id}`);
-    window.dispatchEvent(new Event("storage"));
-  }, [issue?._id]);
+    window.dispatchEvent(new Event('storage'));
+    // Save the segment to the backend so duration is persisted
+    try {
+      await stopTimerMutation.mutateAsync({ issueId: issue._id });
+    } catch {
+      // Silently ignore — backend may reject if segment < 5 min
+    }
+  }, [issue?._id, stopTimerMutation]);
 
   const handleEndWork = useCallback(async () => {
     if (!issue?._id) return;
-    // Stop the local interval and capture current time before clearing
+    const wasTickingNow = isTicking;
     setIsTicking(false);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      await stopTimerMutation.mutateAsync({ issueId: issue._id });
-      toast.success("Work ended. Issue moved to Review.");
+      if (wasTickingNow) {
+        // Timer is actively running — stop it and save the segment
+        await stopTimerMutation.mutateAsync({ issueId: issue._id });
+      } else {
+        // Timer was paused — handlePauseTimer already saved the last segment.
+        // Try to stop any lingering active log (edge case: re-started briefly then ended)
+        try {
+          await stopTimerMutation.mutateAsync({ issueId: issue._id });
+        } catch {
+          // No active log is expected when paused — that's fine
+        }
+      }
+      toast.success('Work ended. Issue moved to Review.');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to end work session.");
+      toast.error(err.response?.data?.message || 'Failed to end work session.');
     }
-    // Always clear localStorage regardless of API result
     timeRef.current = 0;
     setTime(0);
     localStorage.removeItem(`timer_time_${issue._id}`);
     localStorage.removeItem(`timer_ticking_${issue._id}`);
     localStorage.removeItem(`timer_timestamp_${issue._id}`);
     localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
-    window.dispatchEvent(new Event("storage"));
-  }, [issue?._id, stopTimerMutation]);
+    window.dispatchEvent(new Event('storage'));
+  }, [issue?._id, isTicking, stopTimerMutation]);
 
   const handleStopTimer = useCallback(() => {
     if (!issue?._id) return;

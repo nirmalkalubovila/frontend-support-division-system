@@ -261,26 +261,23 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
 
     try {
       if (wasTickingNow) {
-        // Timer is actively running — stopTimer will save the segment AND auto-move to Review
+        // Timer is actively running — stop it and save the segment
         await stopTimerMutation.mutateAsync({ taskId: task._id });
       } else {
-        // Timer was paused — the last segment was already saved by handlePauseTimer.
-        // The backend stopTimer already moved the task to Review on that pause.
-        // We still try to stop any lingering active log (edge-case: resumed briefly then ended)
+        // Timer was paused — handlePauseTimer already saved the last segment.
+        // Try to stop any lingering active log (edge case: re-started briefly then ended)
         try {
           await stopTimerMutation.mutateAsync({ taskId: task._id });
         } catch {
-          // No active log — that's expected when paused. Manually ensure task is in Review.
-          if (task.status !== "Review" && task.status !== "Done") {
-            try {
-              await updateMutation.mutateAsync({ taskId: task._id, data: { status: "Review" } });
-            } catch { /* best-effort */ }
+          // No active log is expected when paused — manually move task to Review
+          if (task.status !== 'Review' && task.status !== 'Done') {
+            try { await updateMutation.mutateAsync({ taskId: task._id, data: { status: 'Review' } }); } catch { /* best-effort */ }
           }
         }
       }
-      toast.success("Work ended. Task moved to Review.");
+      toast.success('Work ended. Task moved to Review.');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to end work session.");
+      toast.error(err.response?.data?.message || 'Failed to end work session.');
     }
 
     timeRef.current = 0;
@@ -288,8 +285,8 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
     localStorage.removeItem(`timer_time_${task._id}`);
     localStorage.removeItem(`timer_ticking_${task._id}`);
     localStorage.removeItem(`timer_timestamp_${task._id}`);
-    window.dispatchEvent(new Event("storage"));
-  }, [task?._id, task?.status, stopTimerMutation, updateMutation, isTicking]);
+    window.dispatchEvent(new Event('storage'));
+  }, [task?._id, task?.status, isTicking, stopTimerMutation, updateMutation]);
 
   const handleStatusChange = async (toStatus: TaskStatus) => {
     if (!task || !canEdit) return;

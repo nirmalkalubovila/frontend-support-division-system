@@ -66,7 +66,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
     if (!open) return;
     if (project) {
       const inferredStage: "development" | "support" =
-        (project.allocatedHours && project.allocatedHours > 0) ? "support" : "development";
+        project.stage === 'support' ? 'support' : (project.allocatedHours && project.allocatedHours > 0) ? "support" : "development";
       setForm({
         name: project.name || "",
         description: project.description || "",
@@ -164,6 +164,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
       contractType: form.contractType || null,
       allocatedHours: Number(form.allocatedHours) || 0,
       members: form.members,
+      stage: form.stage,
     };
 
     try {
@@ -351,11 +352,12 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                   </Label>
                   <Input
                     type="number"
-                    placeholder="e.g. 40"
+                    placeholder="e.g. 40.5"
                     value={form.allocatedHours || ""}
-                    onChange={(e) => setForm((p) => ({ ...p, allocatedHours: Number(e.target.value) }))}
+                    onChange={(e) => setForm((p) => ({ ...p, allocatedHours: parseFloat(e.target.value) }))}
                     className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
-                    min={1}
+                    min={0.5}
+                    step="any"
                     required
                   />
                   <p className="text-[10px] text-[var(--text-tertiary)]">Total hours allocated to this project per month.</p>
