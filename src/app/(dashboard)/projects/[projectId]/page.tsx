@@ -10,7 +10,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { StatCard } from "@/components/atoms/statCard";
@@ -94,14 +93,6 @@ function DashboardTab({ projectId }: { projectId: string }) {
               {project.description && (
                 <p className="text-sm text-[var(--text-secondary)] leading-relaxed line-clamp-2">{project.description}</p>
               )}
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs">
-                  <span className="text-[var(--text-secondary)]">Completion</span>
-                  <span className="font-semibold text-[var(--primary)]">{project.completion ?? 0}%</span>
-                </div>
-                <Progress value={project.completion ?? 0} className="h-2" />
-              </div>
             </div>
           </div>
         </CardContent>

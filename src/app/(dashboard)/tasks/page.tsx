@@ -9,18 +9,131 @@ import {
   X,
   FolderKanban,
   ArrowLeft,
+  History,
+  Clock,
+  Calendar,
+  Eye,
+  AlertCircle,
 } from "lucide-react";
 import { Button, Input, Select } from "@/components";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
-import { useGetProjectTasks } from "@/api/services/project-management/task-service";
+import { useGetProjectTasks, type Task } from "@/api/services/project-management/task-service";
 import { TasksTab } from "../projects/[projectId]/tabs";
+import { TaskDetailDrawer } from "@/components/organisms/kanbanBoard/kanban-board";
 
 interface ProjectGroup {
   id: string;
   name: string;
   clientCode: string;
   clientName: string;
+}
+
+function fmtDuration(hours: number): string {
+  const totalSecs = Math.round(hours * 3600);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} hr`);
+  if (m > 0) parts.push(`${m} min`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} sec`);
+  return parts.join(", ");
+}
+
+function CompletedTasksHistory({
+  tasks,
+  onTaskClick,
+}: {
+  tasks: Task[];
+  onTaskClick: (task: Task) => void;
+}) {
+  const completedTasks = useMemo(() => tasks.filter((t) => t.status === "Done"), [tasks]);
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-xs font-bold tracking-wider text-[var(--text-secondary)] uppercase">
+            <th className="py-3 px-4 font-semibold">Task Name</th>
+            <th className="py-3 px-4 font-semibold">Priority</th>
+            <th className="py-3 px-4 font-semibold">Status</th>
+            <th className="py-3 px-4 font-semibold">Assignees</th>
+            <th className="py-3 px-4 font-semibold">Time Spent</th>
+            <th className="py-3 px-4 font-semibold">Completed Date</th>
+            <th className="py-3 px-4 text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--border)] text-xs">
+          {completedTasks.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="py-8 text-center text-[var(--text-tertiary)] font-medium bg-[var(--surface)]/10">
+                <AlertCircle className="h-5 w-5 text-[var(--text-tertiary)] mx-auto mb-1.5" />
+                No completed tasks found.
+              </td>
+            </tr>
+          ) : (
+            completedTasks.map((task) => {
+              const completedDate = new Date(task.updatedAt);
+              return (
+                <tr
+                  key={task._id}
+                  className="hover:bg-[var(--surface-hover)]/40 transition-colors cursor-pointer group"
+                  onClick={() => onTaskClick(task)}
+                >
+                  <td className="py-3 px-4 font-semibold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors max-w-sm truncate">
+                    {task.name}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border flex items-center gap-1 w-fit bg-slate-50 text-slate-700 border-slate-200">
+                      <span className={`h-1.5 w-1.5 rounded-full ${task.priority === 'Critical' ? 'bg-red-500' : task.priority === 'High' ? 'bg-orange-500' : task.priority === 'Medium' ? 'bg-yellow-400' : 'bg-green-500'}`} />
+                      {task.priority}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="flex items-center gap-1.5 font-semibold text-[var(--text-primary)]">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm" />
+                      {task.status}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex -space-x-1">
+                      {task.assignees.map((a) => (
+                        <div key={a._id} title={a.name}
+                          className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold">
+                          {a.name.charAt(0).toUpperCase()}
+                        </div>
+                      ))}
+                      {task.assignees.length === 0 && <span className="text-[10px] text-[var(--text-tertiary)]">—</span>}
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
+                    <Clock className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
+                    {task.totalTimeSpent !== undefined ? fmtDuration(task.totalTimeSpent) : "0 sec"}
+                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap text-[var(--text-secondary)] font-medium">
+                    <Calendar className="h-3.5 w-3.5 inline mr-1 text-[var(--text-tertiary)]" />
+                    {completedDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </td>
+                  <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onTaskClick(task)}
+                      className="h-7 w-7 p-0 rounded-full hover:bg-[var(--surface-hover)]"
+                      title="View Details"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-[var(--text-secondary)]" />
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function ProjectTasksCard({
@@ -37,6 +150,13 @@ function ProjectTasksCard({
   allUsers: User[];
 }) {
   const { data: tasks = [], isLoading } = useGetProjectTasks(group.id);
+  const [subTab, setSubTab] = useState<"active" | "history">("active");
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  const currentDrawerTask = useMemo(
+    () => selectedTask ? tasks.find((t) => t._id === selectedTask._id) ?? selectedTask : null,
+    [selectedTask, tasks]
+  );
 
   const total = tasks.length;
   const done = tasks.filter((t) => t.status === "Done").length;
@@ -96,8 +216,50 @@ function ProjectTasksCard({
         </div>
 
         <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5">
-          <TasksTab projectId={group.id} members={allUsers} />
+          {/* Sub-tab Navigation */}
+          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 mb-4">
+            <div className="flex gap-4">
+              <button
+                onClick={() => setSubTab("active")}
+                className={`pb-2 text-sm font-semibold border-b-2 transition-all ${
+                  subTab === "active"
+                    ? "border-[var(--primary)] text-[var(--primary-text)] border-b-[var(--primary)]"
+                    : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                Active Tasks
+              </button>
+              <button
+                onClick={() => setSubTab("history")}
+                className={`pb-2 text-sm font-semibold border-b-2 transition-all flex items-center gap-1.5 ${
+                  subTab === "history"
+                    ? "border-[var(--primary)] text-[var(--primary-text)] border-b-[var(--primary)]"
+                    : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                <History className="h-4 w-4" />
+                Completed History
+              </button>
+            </div>
+          </div>
+
+          {subTab === "active" ? (
+            <TasksTab projectId={group.id} members={allUsers} />
+          ) : (
+            <CompletedTasksHistory tasks={tasks} onTaskClick={(t) => setSelectedTask(t)} />
+          )}
         </div>
+
+        {currentDrawerTask && (
+          <TaskDetailDrawer
+            task={currentDrawerTask}
+            projectId={group.id}
+            members={allUsers}
+            onClose={() => setSelectedTask(null)}
+            onEdit={() => setSelectedTask(null)}
+            onDelete={() => setSelectedTask(null)}
+          />
+        )}
       </div>
     );
   }

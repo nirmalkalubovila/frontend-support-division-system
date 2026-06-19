@@ -20,14 +20,14 @@ import useSessionStore from "@/store/session-store";
 import { CRTasksPanel } from "@/components/organisms/crTasksPanel/cr-tasks-panel";
 
 // ── Config ──────────────────────────────────────────────────────
-const CR_STATUSES: CRStatus[] = ["Submitted", "In Development", "Testing", "Completed"];
+const CR_STATUSES: CRStatus[] = ["To Do", "In Progress", "Review", "Done"];
 const CR_PRIORITIES: CRPriority[] = ["Critical", "High", "Medium", "Low"];
 
 const STATUS_BADGE: Record<string, string> = {
-  "Submitted": "bg-blue-100 text-blue-700 border-blue-300",
-  "In Development": "bg-indigo-100 text-indigo-700 border-indigo-300",
-  "Testing": "bg-purple-100 text-purple-700 border-purple-300",
-  "Completed": "bg-green-100 text-green-700 border-green-300",
+  "To Do": "bg-blue-100 text-blue-700 border-blue-300",
+  "In Progress": "bg-indigo-100 text-indigo-700 border-indigo-300",
+  "Review": "bg-purple-100 text-purple-700 border-purple-300",
+  "Done": "bg-green-100 text-green-700 border-green-300",
 };
 
 const PRIORITY_CONFIG: Record<string, { dot: string; badge: string }> = {

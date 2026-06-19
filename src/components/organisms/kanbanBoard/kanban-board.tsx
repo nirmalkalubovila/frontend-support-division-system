@@ -8,6 +8,7 @@ import {
   ChevronDown, Link as LinkIcon, Paperclip, MessageSquare,
   CheckSquare, AlertCircle, CheckCircle2,
   FileText, Image as ImageIcon, ExternalLink, RefreshCw, Wifi, WifiOff, ShieldAlert, GitPullRequest,
+  Play, Pause, Square, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import type { User } from "@/api/services/user-management/user-service";
 import useSessionStore from "@/store/session-store";
 import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 import { validateTaskTransition, WORKFLOW_TRANSITIONS } from "@/lib/task-workflow";
+import { useStartTimer, useStopTimer } from "@/api/services/time-tracking/time-log-service";
 
 // ──────────────────────────────────────────────────────────────
 // Constants
@@ -51,6 +53,18 @@ const PRIORITY_CONFIG: Record<TaskPriority, { dot: string; badge: string }> = {
 function fmtDate(d?: string | null) {
   if (!d) return null;
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function fmtDuration(hours: number): string {
+  const totalSecs = Math.round(hours * 3600);
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} hr`);
+  if (m > 0) parts.push(`${m} min`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} sec`);
+  return parts.join(", ");
 }
 
 function isOverdue(endDate?: string | null, status?: TaskStatus) {
@@ -121,7 +135,7 @@ interface DrawerProps {
   onDelete: (t: Task) => void;
 }
 
-function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete }: DrawerProps) {
+export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete }: DrawerProps) {
   const canEdit = useCanEditTask(task ?? ({} as Task));
   const updateMutation = useUpdateTask(projectId);
   const uploadMutation = useUploadTaskAttachments(projectId);
@@ -133,6 +147,149 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
 
   // Workflow rejection state
   const [rejection, setRejection] = useState<{ fromStatus: TaskStatus; toStatus: TaskStatus; reason: string } | null>(null);
+
+  // Time Tracker State & Logic
+  const startTimerMutation = useStartTimer();
+  const stopTimerMutation = useStopTimer();
+  const [time, setTime] = useState<number>(0);
+  const [isTicking, setIsTicking] = useState<boolean>(false);
+  const timeRef = useRef<number>(0);
+  const clockDisplayRef = useRef<HTMLParagraphElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const formatStopwatchTime = useCallback((sec: number) => {
+    const hours = Math.floor(sec / 3600);
+    const minutes = Math.floor((sec % 3600) / 60);
+    const seconds = sec % 60;
+    return [
+      String(hours).padStart(2, "0"),
+      String(minutes).padStart(2, "0"),
+      String(seconds).padStart(2, "0"),
+    ].join(":");
+  }, []);
+
+  useEffect(() => {
+    if (task) {
+      const savedTime = localStorage.getItem(`timer_time_${task._id}`);
+      let initialTime = savedTime ? parseInt(savedTime, 10) : 0;
+
+      const savedTicking = localStorage.getItem(`timer_ticking_${task._id}`);
+      const savedTimestamp = localStorage.getItem(`timer_timestamp_${task._id}`);
+
+      if (savedTicking === "true" && savedTimestamp) {
+        const elapsed = Math.floor((Date.now() - parseInt(savedTimestamp, 10)) / 1000);
+        initialTime = initialTime + elapsed;
+        setIsTicking(true);
+      } else {
+        setIsTicking(false);
+      }
+      timeRef.current = initialTime;
+      setTime(initialTime);
+    }
+  }, [task]);
+
+  useEffect(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    if (isTicking && task?._id) {
+      let tickCount = 0;
+      intervalRef.current = setInterval(() => {
+        timeRef.current += 1;
+        tickCount += 1;
+        const newTime = timeRef.current;
+
+        if (clockDisplayRef.current) {
+          clockDisplayRef.current.textContent = formatStopwatchTime(newTime);
+        }
+
+        if (tickCount % 5 === 0) {
+          localStorage.setItem(`timer_time_${task._id}`, String(newTime));
+          localStorage.setItem(`timer_timestamp_${task._id}`, String(Date.now()));
+        }
+
+        if (tickCount % 10 === 0) {
+          setTime(newTime);
+        }
+      }, 1000);
+    }
+    return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
+  }, [isTicking, task?._id, formatStopwatchTime]);
+
+  const handleStartTimer = useCallback(async () => {
+    if (!task?._id) return;
+    try {
+      await startTimerMutation.mutateAsync({
+        taskId: task._id,
+        workType: 'In Progress',
+      });
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to start timer.');
+      return;
+    }
+    setIsTicking(true);
+    localStorage.setItem(`timer_ticking_${task._id}`, 'true');
+    localStorage.setItem(`timer_timestamp_${task._id}`, String(Date.now()));
+    window.dispatchEvent(new Event('storage'));
+  }, [task?._id, startTimerMutation]);
+
+  const handlePauseTimer = useCallback(async () => {
+    if (!task?._id) return;
+    // Stop the local display immediately
+    setIsTicking(false);
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    const currentTime = timeRef.current;
+    setTime(currentTime);
+    localStorage.setItem(`timer_time_${task._id}`, String(currentTime));
+    localStorage.setItem(`timer_ticking_${task._id}`, "false");
+    localStorage.removeItem(`timer_timestamp_${task._id}`);
+    window.dispatchEvent(new Event("storage"));
+    // Also stop the backend timer so this segment is saved properly.
+    // We intentionally don't await — failure is non-blocking so the UI stays paused.
+    // If the backend had no active log (e.g. it was already stopped), we silently ignore.
+    try {
+      await stopTimerMutation.mutateAsync({ taskId: task._id });
+    } catch {
+      // Silently ignore — backend may not have an active log if segment < 5 min.
+      // The time display still accumulates correctly on the frontend.
+    }
+  }, [task?._id, stopTimerMutation]);
+
+  const handleEndWork = useCallback(async () => {
+    if (!task?._id) return;
+    const wasTickingNow = isTicking;
+    setIsTicking(false);
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+
+    try {
+      if (wasTickingNow) {
+        // Timer is actively running — stopTimer will save the segment AND auto-move to Review
+        await stopTimerMutation.mutateAsync({ taskId: task._id });
+      } else {
+        // Timer was paused — the last segment was already saved by handlePauseTimer.
+        // The backend stopTimer already moved the task to Review on that pause.
+        // We still try to stop any lingering active log (edge-case: resumed briefly then ended)
+        try {
+          await stopTimerMutation.mutateAsync({ taskId: task._id });
+        } catch {
+          // No active log — that's expected when paused. Manually ensure task is in Review.
+          if (task.status !== "Review" && task.status !== "Done") {
+            try {
+              await updateMutation.mutateAsync({ taskId: task._id, data: { status: "Review" } });
+            } catch { /* best-effort */ }
+          }
+        }
+      }
+      toast.success("Work ended. Task moved to Review.");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to end work session.");
+    }
+
+    timeRef.current = 0;
+    setTime(0);
+    localStorage.removeItem(`timer_time_${task._id}`);
+    localStorage.removeItem(`timer_ticking_${task._id}`);
+    localStorage.removeItem(`timer_timestamp_${task._id}`);
+    window.dispatchEvent(new Event("storage"));
+  }, [task?._id, task?.status, stopTimerMutation, updateMutation, isTicking]);
 
   const handleStatusChange = async (toStatus: TaskStatus) => {
     if (!task || !canEdit) return;
@@ -276,6 +433,78 @@ function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete 
                   Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
                 </p>
               </div>
+            )}
+
+            {/* Time Tracker */}
+            {canEdit && (
+              <>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] shadow-sm overflow-hidden">
+                  <div className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="h-4 w-4 text-[var(--primary)]" />
+                        Time Tracker
+                      </span>
+                      {isTicking && (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-bold capitalize">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Ticking
+                        </span>
+                      )}
+                    </Label>
+                  </div>
+                  
+                  <div className="p-4 space-y-4">
+                    {/* Digital Clock */}
+                    <div className="bg-[var(--surface-hover)]/30 dark:bg-black/10 rounded-xl p-3 text-center border border-[var(--border)]/30">
+                      <p ref={clockDisplayRef} className="text-3xl font-mono font-bold text-[var(--text-primary)] tracking-wider">
+                        {formatStopwatchTime(time)}
+                      </p>
+                      <p className="text-[9px] text-[var(--text-tertiary)] font-medium mt-1 uppercase tracking-wider">Tracked Duration</p>
+                    </div>
+
+                    {/* Timer Controls */}
+                    <div className="flex gap-2">
+                      {!isTicking ? (
+                        <button
+                          onClick={handleStartTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          Start Work
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handlePauseTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Pause className="h-3.5 w-3.5 fill-current" />
+                          Pause Timer
+                        </button>
+                      )}
+                      <button
+                        onClick={handleEndWork}
+                        disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
+                        title="End Work"
+                        className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
+                      >
+                        {stopTimerMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 fill-current" />
+                        )}
+                        End Work
+                      </button>
+                    </div>
+                    {task.totalTimeSpent !== undefined && task.totalTimeSpent > 0 && (
+                      <div className="text-[10px] text-center text-[var(--text-secondary)] font-medium bg-[var(--surface-hover)]/40 py-1.5 px-3 rounded-lg border border-[var(--border)]/20">
+                        Total Logged: <span className="font-bold text-[var(--text-primary)]">{fmtDuration(task.totalTimeSpent)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Separator className="bg-[var(--border)]" />
+              </>
             )}
 
             {/* Priority */}
