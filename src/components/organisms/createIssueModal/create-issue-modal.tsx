@@ -92,6 +92,36 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
 
   const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
 
+  const estH = form.estimatedHours ? Number(form.estimatedHours) : 0;
+  const hoursVal = form.estimatedHours ? String(Math.floor(estH)) : "";
+  const minutesVal = form.estimatedHours ? String(Math.round((estH - Math.floor(estH)) * 60)) : "";
+
+  const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const h = e.target.value;
+    const m = minutesVal || "0";
+    if (h === "" && m === "0") {
+      handleChange("estimatedHours", "");
+    } else {
+      const dec = Number(h || 0) + Number(m) / 60;
+      handleChange("estimatedHours", String(dec));
+    }
+  };
+
+  const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let mVal = e.target.value;
+    if (mVal !== "") {
+      const mNum = Math.min(59, Math.max(0, Number(mVal)));
+      mVal = String(mNum);
+    }
+    const h = hoursVal || "0";
+    if (h === "0" && mVal === "") {
+      handleChange("estimatedHours", "");
+    } else {
+      const dec = Number(h) + Number(mVal || 0) / 60;
+      handleChange("estimatedHours", String(dec));
+    }
+  };
+
   // Reset form when dialog closes or initialize type when categories load
   useEffect(() => {
     if (!open) {
@@ -410,26 +440,39 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="issue-hours" className="text-sm font-semibold flex items-center justify-between">
-                <span>Estimated Hours</span>
+              <Label className="text-sm font-semibold flex items-center justify-between">
+                <span>Estimated Time</span>
                 {form.estimatedHours && (
                   <span className="text-xs font-normal text-[var(--text-tertiary)] bg-[var(--surface-hover)] px-2 py-0.5 rounded-md">
-                    {Number(form.estimatedHours) * 60} minutes
+                    {Math.round(Number(form.estimatedHours) * 60)} minutes total
                   </span>
                 )}
               </Label>
-              <Input
-                id="issue-hours"
-                type="number"
-                min={0}
-                step={0.5}
-                placeholder="e.g. 4"
-                value={form.estimatedHours}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  handleChange("estimatedHours", e.target.value)
-                }
-                className="h-11 text-sm"
-              />
+              <div className="flex gap-3">
+                <div className="flex-1 relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="Hours"
+                    value={hoursVal}
+                    onChange={handleHoursChange}
+                    className="h-11 text-sm pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-tertiary)] pointer-events-none">hrs</span>
+                </div>
+                <div className="flex-1 relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={59}
+                    placeholder="Minutes"
+                    value={minutesVal}
+                    onChange={handleMinutesChange}
+                    className="h-11 text-sm pr-12"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-tertiary)] pointer-events-none">mins</span>
+                </div>
+              </div>
             </div>
           </div>
 

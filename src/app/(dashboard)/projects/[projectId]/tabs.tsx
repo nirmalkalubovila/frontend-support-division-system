@@ -323,7 +323,7 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
   const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
   const [drawerCR, setDrawerCR] = useState<ChangeRequest | null>(null);
   const [crToDelete, setCRToDelete] = useState<ChangeRequest | null>(null);
-  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("Submitted");
+  const [defaultStatus, setDefaultStatus] = useState<CRStatus>("To Do");
 
   const { data: crsData, isLoading: crsLoading } = useGetProjectCRs(projectId);
   const deleteMutation = useDeleteCR(projectId);
@@ -381,7 +381,7 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
           onCRClick={(cr) => setDrawerCR(cr)}
           onEdit={(cr) => { setEditingCR(cr); setShowForm(true); }}
           onDelete={(cr) => setCRToDelete(cr)}
-          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "Submitted"); setShowForm(true); }}
+          onAdd={(status) => { setEditingCR(null); setDefaultStatus(status ?? "To Do"); setShowForm(true); }}
         />
       )}
 
@@ -498,12 +498,10 @@ const PRIORITY_BORDER_CLASSES: Record<string, string> = {
 };
 
 const COL_CONFIG: Record<string, { dot: string; header: string; addBtn: string; card: string; badge: string }> = {
-  "Backlog":          { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",     addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
-  "Assigned":         { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
-  "Planned Solution": { dot: "bg-amber-400",  header: "bg-amber-50 dark:bg-amber-900/20",    addBtn: "hover:bg-amber-100",  card: "border-amber-200 hover:border-amber-400",  badge: "bg-amber-50 text-amber-700 border-amber-200" },
+  "To Do":            { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",     addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200" },
   "In Progress":      { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  "Testing":          { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
-  "Resolved":         { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
+  "Review":          { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
+  "Done":         { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
 };
 
 const getIssueTypeStyle = (type: string) => {
@@ -655,8 +653,8 @@ export function IssuesTab({ projectId, members }: { projectId: string; members: 
       if (grouped[issue.status]) {
         grouped[issue.status].push(issue);
       } else {
-        if (grouped["Backlog"]) {
-          grouped["Backlog"].push(issue);
+        if (grouped["To Do"]) {
+          grouped["To Do"].push(issue);
         }
       }
     }
@@ -890,10 +888,10 @@ export function IssuesTab({ projectId, members }: { projectId: string; members: 
           </table>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4 w-full min-h-[500px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 w-full min-h-[500px]">
           {KANBAN_COLUMNS.map((column) => {
             const columnIssues = projectIssuesByStatus[column] ?? [];
-            const cfg = COL_CONFIG[column] ?? COL_CONFIG["Backlog"];
+            const cfg = COL_CONFIG[column] ?? COL_CONFIG["To Do"];
             return (
               <div
                 key={column}

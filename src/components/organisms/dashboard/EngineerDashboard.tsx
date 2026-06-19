@@ -156,13 +156,13 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
   const myActiveIssues = useMemo(() => {
     return myAssignedIssues.filter(
-      (i) => i.status !== "Resolved" && i.status !== "Closed"
+      (i) => i.status !== "Resolved" && i.status !== "Closed" && i.status !== "Done"
     );
   }, [myAssignedIssues]);
 
   const myResolvedIssues = useMemo(() => {
     return myAssignedIssues
-      .filter((i) => i.status === "Resolved" || i.status === "Closed")
+      .filter((i) => i.status === "Resolved" || i.status === "Closed" || i.status === "Done")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [myAssignedIssues]);
 
@@ -177,11 +177,11 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
   // CRs filtering
   const myActiveCRs = useMemo(() => {
-    return assignedCRs.filter((c) => c.status !== "Completed" && c.status !== "Closed" && c.status !== "Rejected");
+    return assignedCRs.filter((c) => c.status !== "Done" && c.status !== "Closed" && c.status !== "Rejected");
   }, [assignedCRs]);
 
   const myResolvedCRs = useMemo(() => {
-    return assignedCRs.filter((c) => c.status === "Completed" || c.status === "Closed" || c.status === "Rejected");
+    return assignedCRs.filter((c) => c.status === "Done" || c.status === "Closed" || c.status === "Rejected");
   }, [assignedCRs]);
 
   // Focus queues
@@ -693,7 +693,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const resolvedThisWeek = myAssignedIssues.filter(
       (i) =>
-        ["Resolved", "Closed"].includes(i.status) &&
+        ["Resolved", "Closed", "Done"].includes(i.status) &&
         new Date(i.updatedAt) >= sevenDaysAgo
     ).length;
 
@@ -947,22 +947,22 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           {issue.status === "In Progress" && (
                             <Button
                               size="sm"
-                              onClick={() => handleUpdateStatus(issue._id, "Testing")}
+                              onClick={() => handleUpdateStatus(issue._id, "Review")}
                               className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-[10px] h-8 px-2.5 rounded-lg"
                               title="Submit this ticket to your manager for review"
                             >
-                              Send to Testing
+                              Send to Review
                             </Button>
                           )}
-                          {issue.status !== "Resolved" && issue.status !== "Testing" && (
+                          {issue.status !== "Done" && issue.status !== "Review" && (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleUpdateStatus(issue._id, "Resolved")}
+                              onClick={() => handleUpdateStatus(issue._id, "Done")}
                               className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
                               title="Mark this ticket as successfully resolved"
                             >
-                              Mark Resolved
+                              Mark Done
                             </Button>
                           )}
                         </div>
@@ -1147,7 +1147,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           </p>
                         </div>
                         <div className="flex gap-1.5 shrink-0">
-                          {cr.status !== "In Development" && (
+                          {cr.status !== "In Progress" && (
                             <Button
                               size="sm"
                               onClick={() => {
@@ -1159,12 +1159,12 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                                 updateCRMutation.mutate({
                                   projectId: projId,
                                   crId: itemId,
-                                  data: { status: "In Development" }
+                                  data: { status: "In Progress" }
                                 }, {
                                   onSuccess: () => {
                                     // Use itemId directly — do NOT rely on selectedItemId state (it's async)
                                     startTimerMutation.mutate(
-                                      { crId: itemId, workType: "In Development" },
+                                      { crId: itemId, workType: "In Progress" },
                                       {
                                         onSuccess: () => {
                                           setTime(0);
@@ -1172,7 +1172,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                                           localStorage.setItem(`timer_time_${itemId}`, "0");
                                           localStorage.setItem(`timer_ticking_${itemId}`, "true");
                                           localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Development");
+                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
                                           window.dispatchEvent(new Event("storage"));
                                           toast.success("Timer started for CR.");
                                         },
@@ -1189,7 +1189,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                               Start Work
                             </Button>
                           )}
-                          {cr.status !== "Completed" && (
+                          {cr.status !== "Done" && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -1198,16 +1198,16 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                                 updateCRMutation.mutate({
                                   projectId: projId,
                                   crId: cr._id,
-                                  data: { status: "Completed" }
+                                  data: { status: "Done" }
                                 }, {
                                   onSuccess: () => {
-                                    toast.success("CR marked as Completed");
+                                    toast.success("CR marked as Done");
                                   }
                                 });
                               }}
                               className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
                             >
-                              Mark Completed
+                              Mark Done
                             </Button>
                           )}
                         </div>
@@ -1463,6 +1463,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
                     <th className="py-2.5 px-3">Item / Ticket ID</th>
                     <th className="py-2.5 px-3">Work Type</th>
+                    <th className="py-2.5 px-3">Started Time</th>
+                    <th className="py-2.5 px-3">Ended Time</th>
                     <th className="py-2.5 px-3">Duration (hrs)</th>
                     <th className="py-2.5 px-3">Notes</th>
                     <th className="py-2.5 px-3">Date</th>
@@ -1488,6 +1490,12 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           <Badge variant="outline" className="text-[10px] scale-95 font-medium border-[var(--border)] text-[var(--text-secondary)]">
                             {log.workType}
                           </Badge>
+                        </td>
+                        <td className="py-3 px-3 font-mono">
+                          {new Date(log.startTime).toLocaleTimeString()}
+                        </td>
+                        <td className="py-3 px-3 font-mono">
+                          {log.endTime ? new Date(log.endTime).toLocaleTimeString() : <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium">
                           {log.duration.toFixed(2)}h
