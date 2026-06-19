@@ -121,7 +121,7 @@ interface DrawerProps {
   onDelete: (t: Task) => void;
 }
 
-function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete }: DrawerProps) {
+export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete }: DrawerProps) {
   const canEdit = useCanEditTask(task ?? ({} as Task));
   const updateMutation = useUpdateTask(projectId);
   const uploadMutation = useUploadTaskAttachments(projectId);

@@ -18,7 +18,7 @@ import type { User } from "@/api/services/user-management/user-service";
 
 const CR_TYPES: CRType[] = ["Enhancement", "New Feature", "Modification", "Integration", "UI/UX Change", "Data Change", "Bug Fix", "Other"];
 const CR_PRIORITIES: CRPriority[] = ["Critical", "High", "Medium", "Low"];
-const CR_STATUSES: CRStatus[] = ["Submitted", "In Development", "Testing", "Completed"];
+const CR_STATUSES: CRStatus[] = ["To Do", "In Progress", "Review", "Done"];
 
 interface Props {
   open: boolean;
@@ -38,7 +38,7 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
   const [activeSection, setActiveSection] = useState<Section>("basic");
 
   const emptyForm = {
-    title: "", crType: "Enhancement" as CRType, priority: "Medium" as CRPriority, status: "Submitted" as CRStatus,
+    title: "", crType: "Enhancement" as CRType, priority: "Medium" as CRPriority, status: "To Do" as CRStatus,
     requestedBy: "", requestedDate: "", targetReleaseDate: "", estimatedHours: "", estimatedCost: "",
     assignedProjectManager: "", description: "", businessJustification: "", technicalApproach: "",
     impactAnalysis: "", dependencies: "", risks: "",

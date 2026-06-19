@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { ProjectFormModal } from "@/components";
@@ -62,7 +61,7 @@ function ProjectCard({
       className="bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)] hover:shadow-lg transition-all cursor-pointer flex flex-col group"
     >
       {/* ── Clickable body ── */}
-      <CardContent className="p-5 flex flex-col flex-1 space-y-3">
+      <CardContent className="p-5 flex flex-col flex-1 gap-4">
         {/* Header */}
         <div className="flex items-start gap-3">
           {photoUrl ? (
@@ -86,64 +85,58 @@ function ProjectCard({
                 {project.isActive ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <ProjectTypeBadges types={project.projectType} />
+            <div className="mt-1">
+              <ProjectTypeBadges types={project.projectType} />
+            </div>
           </div>
-        </div>
-
-        {/* Completion */}
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs">
-            <span className="text-[var(--text-secondary)]">Completion</span>
-            <span className="font-semibold text-[var(--text-primary)]">{project.completion ?? 0}%</span>
-          </div>
-          <Progress value={project.completion ?? 0} className="h-1.5" />
         </div>
 
         {/* Dates */}
-        <div className="flex gap-3 text-xs text-[var(--text-secondary)]">
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />{fmtDate(project.startDate)}
-          </span>
-          <span className="text-[var(--text-tertiary)]">→</span>
+        <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)] bg-[var(--background)] rounded-lg px-3 py-2 border border-[var(--border)]">
+          <Calendar className="h-3 w-3 shrink-0" />
+          <span>{fmtDate(project.startDate)}</span>
+          <span className="text-[var(--text-tertiary)]">/</span>
           <span>{fmtDate(project.endDate)}</span>
         </div>
 
-        {/* Contact */}
-        {(project.mainContact?.name || project.mainContact?.email) && (
-          <div className="text-xs text-[var(--text-secondary)] space-y-0.5">
-            {project.mainContact.email && (
-              <div className="flex items-center gap-1.5 truncate">
-                <Mail className="h-3 w-3 shrink-0" />
-                <span className="truncate">{project.mainContact.email}</span>
-              </div>
-            )}
-            {project.mainContact.phone && (
-              <div className="flex items-center gap-1.5">
-                <Phone className="h-3 w-3 shrink-0" />
-                <span>{project.mainContact.phone}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tech Stack */}
-        {project.techStack?.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {project.techStack.slice(0, 4).map((tech) => (
-              <span key={tech} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-secondary)]">
-                {tech}
-              </span>
-            ))}
-            {project.techStack.length > 4 && (
-              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-tertiary)]">
-                +{project.techStack.length - 4}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Spacer pushes action bar to bottom */}
+        {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Footer meta: contact + tech */}
+        {(project.mainContact?.email || project.mainContact?.phone || project.techStack?.length > 0) && (
+          <div className="border-t border-[var(--border)] pt-3 space-y-2">
+            {(project.mainContact?.email || project.mainContact?.phone) && (
+              <div className="text-xs text-[var(--text-secondary)] space-y-1">
+                {project.mainContact.email && (
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Mail className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
+                    <span className="truncate">{project.mainContact.email}</span>
+                  </div>
+                )}
+                {project.mainContact.phone && (
+                  <div className="flex items-center gap-1.5">
+                    <Phone className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
+                    <span>{project.mainContact.phone}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            {project.techStack?.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {project.techStack.slice(0, 4).map((tech) => (
+                  <span key={tech} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-secondary)]">
+                    {tech}
+                  </span>
+                ))}
+                {project.techStack.length > 4 && (
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-tertiary)]">
+                    +{project.techStack.length - 4}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
 
       {/* ── Action Bar — always at bottom, buttons stop propagation ── */}
@@ -219,12 +212,6 @@ function ProjectTableRow({
           className={`text-[10px] font-bold ${project.isActive ? "bg-[var(--success)] text-white border-0" : ""}`}>
           {project.isActive ? "Active" : "Inactive"}
         </Badge>
-      </td>
-      <td className="py-3 px-4">
-        <div className="space-y-1 min-w-[100px]">
-          <span className="text-xs text-[var(--text-secondary)]">{project.completion ?? 0}%</span>
-          <Progress value={project.completion ?? 0} className="h-1.5 w-24" />
-        </div>
       </td>
       <td className="py-3 px-4 text-xs text-[var(--text-secondary)]">
         {fmtDate(project.startDate)} → {fmtDate(project.endDate)}
@@ -418,7 +405,7 @@ export default function ProjectsPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--border)] bg-[var(--background)]">
-                {["Project", "Status", "Completion", "Dates", "Contact", "Tech Stack", "Actions"].map((h) => (
+                {["Project", "Status", "Dates", "Contact", "Tech Stack", "Actions"].map((h) => (
                   <th key={h} className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">{h}</th>
                 ))}
               </tr>
