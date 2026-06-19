@@ -376,8 +376,13 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
             ) : (
               projects.slice(0, 5).map((project) => {
                 const allocated = project.allocatedHours || 0;
-                const used = project.usedHours || 0;
-                const ratio = allocated > 0 ? (used / allocated) * 100 : 0;
+                const usedDecimal = project.usedHours || 0;
+                const totalSecs = Math.round(usedDecimal * 3600);
+                const usedH = Math.floor(totalSecs / 3600);
+                const usedM = Math.floor((totalSecs % 3600) / 60);
+                const usedS = totalSecs % 60;
+                const usedLabel = `${usedH}h ${usedM}m ${usedS}s`;
+                const ratio = allocated > 0 ? (usedDecimal / allocated) * 100 : 0;
                 const percent = Math.min(Math.round(ratio), 100);
 
                 return (
@@ -387,7 +392,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
                         {project.name}
                       </span>
                       <span className="text-[var(--text-secondary)] font-mono">
-                        {used}/{allocated}h ({percent}%)
+                        {usedLabel} / {allocated}h ({percent}%)
                       </span>
                     </div>
                     <Progress
