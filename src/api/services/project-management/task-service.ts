@@ -54,6 +54,7 @@ export interface Task extends GlobalRecords {
   attachments: TaskAttachment[];
   comments?: TaskComment[];
   order: number;
+  totalTimeSpent?: number;
 }
 
 export interface CreateTaskPayload {
