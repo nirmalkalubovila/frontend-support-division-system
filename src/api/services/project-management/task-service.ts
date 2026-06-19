@@ -55,6 +55,16 @@ export interface Task extends GlobalRecords {
   comments?: TaskComment[];
   order: number;
   totalTimeSpent?: number;
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: {
+    requestedTo: any;
+    reason: string | null;
+    requestedBy: any;
+    status: 'Pending' | 'Approved' | 'Rejected' | null;
+    requestedAt: string | null;
+  } | null;
 }
 
 export interface CreateTaskPayload {
@@ -68,6 +78,10 @@ export interface CreateTaskPayload {
   relatedLinks?: RelatedLink[];
   parent?: string | null;
   cr?: string | null;
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: any;
 }
 
 export type UpdateTaskPayload = Partial<CreateTaskPayload>;
@@ -152,4 +166,13 @@ export const useGetAssignedTasks = (assigneeId?: string) =>
       return res.data;
     },
     enabled: !!assigneeId,
+  });
+
+export const useGetAllTasks = () =>
+  useQuery({
+    queryKey: ["/tasks/all"],
+    queryFn: async (): Promise<Task[]> => {
+      const res = await axiosInstance.get(`/tasks`);
+      return res.data;
+    },
   });

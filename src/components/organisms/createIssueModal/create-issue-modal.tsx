@@ -49,6 +49,11 @@ const initialForm = {
   estimatedHours: "",
 };
 
+const DEFAULT_CLIENTS: Client[] = [];
+const DEFAULT_PROJECTS: Project[] = [];
+const DEFAULT_USERS: User[] = [];
+const DEFAULT_CATEGORIES: string[] = [];
+
 // Max file size 10MB
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = [
@@ -88,7 +93,8 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
   const { data: clientsData } = useGetAllClients();
   const { data: projectsData } = useGetAllProjects();
   const { data: usersData } = useGetAllUsers();
-  const { data: categories = [] } = useGetCategories();
+  const { data: categoriesData } = useGetCategories();
+  const categories = categoriesData ?? DEFAULT_CATEGORIES;
 
   const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
 
@@ -133,14 +139,18 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
       setFilePreviews([]);
     } else {
       const defaultType = categories.length > 0 ? categories[0] : "Bug";
-      setForm((prev) => ({ ...prev, type: prev.type === "Bug" ? defaultType : prev.type }));
+      setForm((prev) => {
+        const nextType = prev.type === "Bug" ? defaultType : prev.type;
+        if (prev.type === nextType) return prev;
+        return { ...prev, type: nextType };
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, categories]);
 
-  const clients: Client[] = clientsData?.data ?? [];
-  const projects: Project[] = projectsData?.data ?? [];
-  const users: User[] = usersData ?? [];
+  const clients = clientsData?.data ?? DEFAULT_CLIENTS;
+  const projects = projectsData?.data ?? DEFAULT_PROJECTS;
+  const users = usersData ?? DEFAULT_USERS;
 
   // Prefill defaultProjectId when open or when projects load
   useEffect(() => {
@@ -148,11 +158,14 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
       const proj = projects.find((p) => p._id === defaultProjectId);
       if (proj) {
         setForm((prev) => {
-          const next = { ...prev, project: defaultProjectId };
-          if (proj.client) {
-            next.client = typeof proj.client === "object" ? proj.client._id : proj.client;
+          const targetProject = defaultProjectId;
+          const targetClient = proj.client
+            ? (typeof proj.client === "object" ? proj.client._id : proj.client)
+            : prev.client;
+          if (prev.project === targetProject && prev.client === targetClient) {
+            return prev;
           }
-          return next;
+          return { ...prev, project: targetProject, client: targetClient };
         });
       }
     }
@@ -430,7 +443,7 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
                 options={[
                   { label: "Unassigned (Backlog)", value: "" },
                   ...users
-                    .filter((u) => u.isActive)
+                    .filter((u) => u.isActive && (u.role === "senior_engineer" || u.role === "engineer" || u.role === "intern"))
                     .map((u) => ({
                       label: `${u.name} — ${ROLE_LABELS[u.role] || u.role}`,
                       value: u._id,

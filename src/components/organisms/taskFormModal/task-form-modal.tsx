@@ -218,18 +218,20 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Assign Developers</Label>
               <div className="flex flex-wrap gap-2">
-                {availableMembers.map((u) => {
-                  const selected = form.assignees?.includes(u._id);
-                  return (
-                    <button key={u._id} type="button" onClick={() => toggleAssignee(u._id)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selected ? "bg-[var(--primary)] border-[var(--primary)] text-white" : "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)]"}`}>
-                      <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${selected ? "bg-white/20 text-white" : "bg-[var(--primary-light)] text-[var(--primary)]"}`}>
-                        {u.name.charAt(0).toUpperCase()}
-                      </span>
-                      {u.name.split(" ")[0]}
-                    </button>
-                  );
-                })}
+                {availableMembers
+                  .filter((u) => (u.role === "senior_engineer" || u.role === "engineer" || u.role === "intern") || form.assignees?.includes(u._id))
+                  .map((u) => {
+                    const selected = form.assignees?.includes(u._id);
+                    return (
+                      <button key={u._id} type="button" onClick={() => toggleAssignee(u._id)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all ${selected ? "bg-[var(--primary)] border-[var(--primary)] text-white" : "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)]"}`}>
+                        <span className={`h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${selected ? "bg-white/20 text-white" : "bg-[var(--primary-light)] text-[var(--primary)]"}`}>
+                          {u.name.charAt(0).toUpperCase()}
+                        </span>
+                        {u.name.split(" ")[0]}
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           )}

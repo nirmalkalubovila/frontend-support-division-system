@@ -75,6 +75,16 @@ export interface ChangeRequest extends GlobalRecords {
     done: number;
     completionPercentage: number;
   };
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: {
+    requestedTo: any;
+    reason: string | null;
+    requestedBy: any;
+    status: 'Pending' | 'Approved' | 'Rejected' | null;
+    requestedAt: string | null;
+  } | null;
 }
 
 export interface CRStats {
@@ -107,6 +117,10 @@ export interface CreateCRPayload {
   dependencies?: string | null;
   risks?: string | null;
   relatedLinks?: { label: string; url: string }[];
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: any;
 }
 
 export type UpdateCRPayload = Partial<CreateCRPayload & { actualHours: number | null; statusNote: string; order: number }>;
@@ -270,4 +284,13 @@ export const useGetAssignedCRs = (assigneeId?: string) =>
       return res.data;
     },
     enabled: !!assigneeId,
+  });
+
+export const useGetAllCRs = () =>
+  useQuery({
+    queryKey: ["/crs/all"],
+    queryFn: async (): Promise<ChangeRequest[]> => {
+      const res = await axiosInstance.get(`/crs`);
+      return res.data;
+    },
   });

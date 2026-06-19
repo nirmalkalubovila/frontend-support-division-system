@@ -249,7 +249,7 @@ export function CRFormModal({ open, onOpenChange, projectId, cr, availableMember
                 <div className="space-y-2">
                   <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Assigned Developers</Label>
                   <div className="flex flex-wrap gap-1.5">
-                    {availableMembers.filter((m) => m.role !== "intern").map((m) => {
+                    {availableMembers.filter((m) => m.role === "senior_engineer" || m.role === "engineer" || m.role === "intern").map((m) => {
                       const sel = assignedDevs.includes(m._id);
                       return (
                         <button key={m._id} type="button"

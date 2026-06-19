@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import useSessionStore from "@/store/session-store";
 import { ROLE_LABELS } from "@/lib/constants";
 import { useGetIssues } from "@/api/services/issue-management/issue-service";
@@ -17,6 +19,20 @@ import {
 
 export default function DashboardPage() {
   const userInfo = useSessionStore((s) => s.userInfo);
+  const queryClient = useQueryClient();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await queryClient.invalidateQueries();
+      toast.success("Dashboard data refreshed!");
+    } catch {
+      toast.error("Failed to refresh dashboard data.");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // ──────────────────────────────────────────────────────────────
   // API Queries (cached and managed via TanStack Query)
@@ -107,7 +123,19 @@ export default function DashboardPage() {
             </span>
           </p>
         </div>
-        <div className="flex items-center shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 text-xs text-[var(--text-secondary)] border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] rounded-lg px-3 py-1.5 h-8.5 cursor-pointer"
+            title="Refresh dashboard data"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-[var(--primary)]" : ""}`} />
+            {isRefreshing ? "Refreshing..." : "Refresh"}
+          </Button>
+
           <Link href="/guide">
             <Button
               variant="outline"

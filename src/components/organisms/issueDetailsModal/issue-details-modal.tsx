@@ -94,6 +94,32 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [pendingAssigneeId, setPendingAssigneeId] = useState("");
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
 
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  const handleApprovalSubmit = async () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    if (!issue?._id) return;
+
+    try {
+      await updateIssueMutation.mutateAsync({
+        id: issue._id,
+        data: {
+          submittedForReview: true
+        }
+      });
+      toast.success("Submitted for Senior SE review.");
+      setShowApprovalDialog(false);
+      setConfirmCheckbox(false);
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to submit for review.");
+    }
+  };
+
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Form & Fields State
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -729,15 +755,21 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     <select
                       id="status"
                       value={status}
-                      disabled={issue.status === "Closed" && userInfo?.role !== "super_admin"}
+                      disabled={issue.submittedForReview || (issue.status === "Closed" && userInfo?.role !== "super_admin")}
                       onChange={(e) => setStatus(e.target.value)}
                       className={`w-full h-9 appearance-none rounded-lg border px-3 pr-10 text-xs font-bold focus:outline-none transition-all duration-200 disabled:opacity-75 disabled:cursor-not-allowed ${
                         STATUS_SELECT_COLORS[status] || "border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]"
                       }`}
                     >
                       {ISSUE_STATUSES.map((col) => {
-                        if (col === "Closed" && userInfo?.role !== "super_admin" && issue.status !== "Closed") {
-                          return null;
+                        const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
+                        if (isDevOrIntern) {
+                          if (col as string === "Done") {
+                            return null;
+                          }
+                          if (col as string === "To Do" && issue.status !== "To Do") {
+                            return null;
+                          }
                         }
                         return (
                           <option key={col} value={col}>
@@ -760,39 +792,58 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                   <p className="text-[9px] text-[var(--text-tertiary)] font-medium mt-1 uppercase tracking-wider">Tracked Duration</p>
                 </div>
 
-                {/* Timer Controls */}
-                <div className="flex gap-2">
-                  {!isTicking ? (
-                    <button
-                      onClick={handleStartTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      Start Work
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handlePauseTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                    >
-                      <Pause className="h-3.5 w-3.5 fill-current" />
-                      Pause Timer
-                    </button>
-                  )}
-                  <button
-                    onClick={handleEndWork}
-                    disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
-                    title="End Work"
-                    className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
-                  >
-                    {stopTimerMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Square className="h-3.5 w-3.5 fill-current" />
+                {issue.submittedForReview ? (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-center text-xs font-semibold">
+                    Submitted for Senior SE review. Timer locked.
+                  </div>
+                ) : (
+                  <>
+                    {/* Timer Controls */}
+                    <div className="flex gap-2">
+                      {!isTicking ? (
+                        <button
+                          onClick={handleStartTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          Start Work
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handlePauseTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Pause className="h-3.5 w-3.5 fill-current" />
+                          Pause Timer
+                        </button>
+                      )}
+                      <button
+                        onClick={handleEndWork}
+                        disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
+                        title="End Work"
+                        className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
+                      >
+                        {stopTimerMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 fill-current" />
+                        )}
+                        End Work
+                      </button>
+                    </div>
+                    {status === "Review" && (
+                      <button
+                        onClick={() => {
+                          setConfirmCheckbox(false);
+                          setShowApprovalDialog(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[var(--accent)] hover:opacity-90 text-white text-xs font-bold transition-all shadow-sm cursor-pointer mt-2"
+                      >
+                        Send for Senior SE Approval
+                      </button>
                     )}
-                    End Work
-                  </button>
-                </div>
+                  </>
+                )}
 
                 {/* Estimate Progress Bar */}
                 {Number(estimatedHours || 0) > 0 && (
@@ -1218,6 +1269,53 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           </Button>
           <Button onClick={handleHandoverSubmit} className="h-9 text-xs bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
             Confirm Handover
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Approval Dialog */}
+    <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+      <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)]">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">
+            Send for Senior SE Approval
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+          </p>
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+            <input
+              type="checkbox"
+              id="confirmCheckboxHoriz"
+              checked={confirmCheckbox}
+              onChange={(e) => setConfirmCheckbox(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+            />
+            <Label htmlFor="confirmCheckboxHoriz" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+              I confirm task/cr/issue implemented and reviewed to check by senior SE
+            </Label>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowApprovalDialog(false);
+              setConfirmCheckbox(false);
+            }}
+            className="text-xs h-9 rounded-lg"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleApprovalSubmit}
+            disabled={!confirmCheckbox || updateIssueMutation.isPending}
+            className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-xs h-9 rounded-lg"
+          >
+            Confirm & Submit
           </Button>
         </DialogFooter>
       </DialogContent>

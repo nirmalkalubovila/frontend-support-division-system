@@ -31,15 +31,16 @@ import {
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
 import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/services/issue-management/issue-service";
-import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
-import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
-import { useUpdateTask } from "@/api/services/project-management/task-service";
-import { useUpdateCR } from "@/api/services/project-management/cr-service";
+import { useGetAssignedTasks, useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetAssignedCRs, useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
+import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { IssueDetailsModal } from "../issueDetailsModal/issue-details-modal";
+import { TaskDetailDrawer } from "@/components/organisms/kanbanBoard/kanban-board";
+import { CRDetailDrawer } from "@/components/organisms/crDetailDrawer/cr-detail-drawer";
 
 interface EngineerDashboardProps {
   issues: Issue[];
@@ -65,12 +66,18 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
   const deleteTimeLogMutation = useDeleteTimeLog();
 
-  // Fetch assigned tasks & CRs
+  // Fetch assigned and all tasks & CRs, and users
   const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
   const { data: crsData, refetch: refetchCRs } = useGetAssignedCRs(currentUserId);
+  const { data: allTasksData, refetch: refetchAllTasks } = useGetAllTasks();
+  const { data: allCRsData, refetch: refetchAllCRs } = useGetAllCRs();
+  const { data: allUsersData } = useGetAllUsers();
 
   const assignedTasks = useMemo(() => tasksData ?? [], [tasksData]);
   const assignedCRs = useMemo(() => crsData ?? [], [crsData]);
+  const allTasks = useMemo(() => allTasksData ?? [], [allTasksData]);
+  const allCRs = useMemo(() => allCRsData ?? [], [allCRsData]);
+  const allUsers = useMemo(() => allUsersData ?? [], [allUsersData]);
 
   // Generic mutations for task and CR updates
   const updateTaskMutation = useMutation({
@@ -81,7 +88,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/tasks", variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks/all"] });
       refetchTasks();
+      refetchAllTasks();
     }
   });
 
@@ -93,7 +102,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/crs"] });
       queryClient.invalidateQueries({ queryKey: ["/crs", variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/crs/all"] });
       refetchCRs();
+      refetchAllCRs();
     }
   });
 
@@ -107,7 +118,23 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const recentLogs = useMemo(() => logsData?.data ?? [], [logsData]);
 
   // Tabs for the Focus Queue
-  const [activeQueueTab, setActiveQueueTab] = useState<'issues' | 'tasks' | 'crs'>('issues');
+  const [activePrimaryTab, setActivePrimaryTab] = useState<'new' | 'started'>('new');
+  const [activeSubTab, setActiveSubTab] = useState<'issues' | 'tasks' | 'crs'>('issues');
+
+  // Re-assignment dialog state
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [itemToReassign, setItemToReassign] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; project?: string } | null>(null);
+  const [reassignTo, setReassignTo] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+
+  // Approval modal state
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [itemToApprove, setItemToApprove] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; project?: string } | null>(null);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  // Claim modal state
+  const [claimConfirmOpen, setClaimConfirmOpen] = useState(false);
+  const [itemToClaim, setItemToClaim] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; taskObj?: Task; crObj?: ChangeRequest } | null>(null);
 
   // Fetch active time logs for current user to track concurrent timers
   const { data: activeLogsData } = useGetTimeLogs({
@@ -143,6 +170,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [submitNote, setSubmitNote] = useState("");
   const [detailedIssue, setDetailedIssue] = useState<Issue | null>(null);
+  const [detailedTask, setDetailedTask] = useState<Task | null>(null);
+  const [detailedCR, setDetailedCR] = useState<ChangeRequest | null>(null);
 
   // Issues filtering
   const myAssignedIssues = useMemo(() => {
@@ -184,34 +213,74 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     return assignedCRs.filter((c) => c.status === "Done" || c.status === "Closed" || c.status === "Rejected");
   }, [assignedCRs]);
 
-  // Focus queues
-  const queueIssues = useMemo(() => {
-    return [...myActiveIssues].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveIssues]);
+  const priorityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
-  const queueTasks = useMemo(() => {
-    return [...myActiveTasks].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveTasks]);
+  // "New" Tab Lists (status === 'To Do', assigned to current user)
+  const newIssues = useMemo(() => {
+    return issues
+      .filter((i) => {
+        const assigneeId = typeof i.assignedTo === "object" && i.assignedTo !== null
+          ? i.assignedTo._id
+          : i.assignedTo;
+        return assigneeId === currentUserId && i.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [issues, currentUserId]);
 
-  const queueCRs = useMemo(() => {
-    return [...myActiveCRs].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveCRs]);
+  const newTasks = useMemo(() => {
+    return allTasks
+      .filter((t) => {
+        const isAssigned = t.assignees?.some((a) => (typeof a === "object" && a !== null ? a._id : a) === currentUserId);
+        return isAssigned && t.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allTasks, currentUserId]);
+
+  const newCRs = useMemo(() => {
+    return allCRs
+      .filter((c) => {
+        const isAssigned = c.assignedDevelopers?.some((d) => (typeof d === "object" && d !== null ? d._id : d) === currentUserId);
+        return isAssigned && c.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allCRs, currentUserId]);
+
+  // "Started" Tab Lists (assigned to current user, and status is 'In Progress' or 'Review')
+  const startedIssues = useMemo(() => {
+    return issues
+      .filter((i) => {
+        const assigneeId = typeof i.assignedTo === "object" && i.assignedTo !== null
+          ? i.assignedTo._id
+          : i.assignedTo;
+        return assigneeId === currentUserId && (i.status === "In Progress" || i.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [issues, currentUserId]);
+
+  const startedTasks = useMemo(() => {
+    return allTasks
+      .filter((t) => {
+        const isAssigned = t.assignees?.some((a) => (typeof a === "object" && a !== null ? a._id : a) === currentUserId);
+        return isAssigned && (t.status === "In Progress" || t.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allTasks, currentUserId]);
+
+  const startedCRs = useMemo(() => {
+    return allCRs
+      .filter((c) => {
+        const isAssigned = c.assignedDevelopers?.some((d) => (typeof d === "object" && d !== null ? d._id : d) === currentUserId);
+        return isAssigned && (c.status === "In Progress" || c.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allCRs, currentUserId]);
 
   const selectedItemObj = useMemo(() => {
     if (trackingType === 'issue') return issues.find((i) => i._id === selectedItemId);
-    if (trackingType === 'task') return assignedTasks.find((t) => t._id === selectedItemId);
-    if (trackingType === 'cr') return assignedCRs.find((c) => c._id === selectedItemId);
+    if (trackingType === 'task') return allTasks.find((t) => t._id === selectedItemId);
+    if (trackingType === 'cr') return allCRs.find((c) => c._id === selectedItemId);
     return null;
-  }, [trackingType, selectedItemId, issues, assignedTasks, assignedCRs]);
+  }, [trackingType, selectedItemId, issues, allTasks, allCRs]);
 
   // Sync active timer from backend database on load / query change
   useEffect(() => {
@@ -454,22 +523,22 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     };
   }, []);
 
-  // Filter out issues/tasks/CRs that already have active timers from the dropdown selectors
+  // Filter out issues/tasks/CRs that already have active timers or are submitted for review from the dropdown selectors
   const filteredActiveIssues = useMemo(() => {
     return myActiveIssues.filter(
-      (issue) => !activeTimers.some((t) => t.itemId === issue._id)
+      (issue) => !activeTimers.some((t) => t.itemId === issue._id) && !issue.submittedForReview
     );
   }, [myActiveIssues, activeTimers]);
 
   const filteredActiveTasks = useMemo(() => {
     return myActiveTasks.filter(
-      (task) => !activeTimers.some((t) => t.itemId === task._id)
+      (task) => !activeTimers.some((t) => t.itemId === task._id) && !task.submittedForReview
     );
   }, [myActiveTasks, activeTimers]);
 
   const filteredActiveCRs = useMemo(() => {
     return myActiveCRs.filter(
-      (cr) => !activeTimers.some((t) => t.itemId === cr._id)
+      (cr) => !activeTimers.some((t) => t.itemId === cr._id) && !cr.submittedForReview
     );
   }, [myActiveCRs, activeTimers]);
 
@@ -495,6 +564,30 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       }
     }
   }, [trackingType, filteredActiveIssues, filteredActiveTasks, filteredActiveCRs]);
+
+  // Unified stopwatch gating logic for workTypes (statuses)
+  const stopwatchWorkTypeOptions = useMemo(() => {
+    if (!selectedItemObj) return [];
+    if (selectedItemObj.submittedForReview) return [];
+
+    const hasPastLogs = ((selectedItemObj as any).totalTimeSpent && (selectedItemObj as any).totalTimeSpent > 0) ||
+                        selectedItemObj.status === 'In Progress' ||
+                        selectedItemObj.status === 'Review';
+
+    if (selectedItemObj.status === 'To Do' && !hasPastLogs) {
+      return ['In Progress'];
+    }
+    return ['In Progress', 'Review'];
+  }, [selectedItemObj]);
+
+  // Keep selectedWorkType in sync with stopwatchWorkTypeOptions
+  useEffect(() => {
+    if (stopwatchWorkTypeOptions.length > 0) {
+      if (!stopwatchWorkTypeOptions.includes(selectedWorkType)) {
+        setSelectedWorkType(stopwatchWorkTypeOptions[0] as WorkType);
+      }
+    }
+  }, [stopwatchWorkTypeOptions, selectedWorkType]);
 
   // ──────────────────────────────────────────────────────────────
   // Stopwatch Actions
@@ -724,6 +817,229 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     };
   }, [myActiveIssues, myAssignedIssues, recentLogs]);
 
+  // Claim items ("Added to You")
+  const handleClaimIssue = (issueId: string) => {
+    updateIssueMutation.mutate(
+      { id: issueId, data: { assignedTo: currentUserId, status: "In Progress" } },
+      {
+        onSuccess: () => {
+          toast.success("Issue claimed successfully!");
+          queryClient.invalidateQueries({ queryKey: ["/issues"] });
+        },
+        onError: () => {
+          toast.error("Failed to claim issue.");
+        }
+      }
+    );
+  };
+
+  const handleClaimTask = (task: Task) => {
+    const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
+    updateTaskMutation.mutate(
+      {
+        projectId: projId,
+        taskId: task._id,
+        data: { assignees: [currentUserId], status: "In Progress" }
+      },
+      {
+        onSuccess: () => {
+          toast.success("Task claimed successfully!");
+          refetchAllTasks();
+          refetchTasks();
+        },
+        onError: () => {
+          toast.error("Failed to claim task.");
+        }
+      }
+    );
+  };
+
+  const handleClaimCR = (cr: ChangeRequest) => {
+    const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
+    updateCRMutation.mutate(
+      {
+        projectId: projId,
+        crId: cr._id,
+        data: { assignedDevelopers: [currentUserId], status: "In Progress" }
+      },
+      {
+        onSuccess: () => {
+          toast.success("CR claimed successfully!");
+          refetchAllCRs();
+          refetchCRs();
+        },
+        onError: () => {
+          toast.error("Failed to claim CR.");
+        }
+      }
+    );
+  };
+
+  const confirmClaimAction = () => {
+    if (!itemToClaim) return;
+    if (itemToClaim.type === 'issue') {
+      handleClaimIssue(itemToClaim.id);
+    } else if (itemToClaim.type === 'task' && itemToClaim.taskObj) {
+      handleClaimTask(itemToClaim.taskObj);
+    } else if (itemToClaim.type === 'cr' && itemToClaim.crObj) {
+      handleClaimCR(itemToClaim.crObj);
+    }
+    setClaimConfirmOpen(false);
+    setItemToClaim(null);
+  };
+
+  // Submit Re-assignment request
+  const handleReassignSubmit = () => {
+    if (!itemToReassign || !reassignReason) {
+      toast.error("Please provide a reason.");
+      return;
+    }
+
+    const payload = {
+      reassignRequest: {
+        requestedTo: reassignTo || null,
+        reason: reassignReason,
+        requestedBy: currentUserId,
+        status: 'Pending',
+        requestedAt: new Date()
+      }
+    };
+
+    if (itemToReassign.type === 'issue') {
+      updateIssueMutation.mutate(
+        { id: itemToReassign.id, data: payload },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            queryClient.invalidateQueries({ queryKey: ["/issues"] });
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    } else if (itemToReassign.type === 'task') {
+      updateTaskMutation.mutate(
+        {
+          projectId: itemToReassign.project!,
+          taskId: itemToReassign.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            refetchAllTasks();
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    } else if (itemToReassign.type === 'cr') {
+      updateCRMutation.mutate(
+        {
+          projectId: itemToReassign.project!,
+          crId: itemToReassign.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            refetchAllCRs();
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    }
+  };
+
+  // Submit Approval request (Send for Senior SE Approval)
+  const handleApprovalSubmit = () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    if (!itemToApprove) return;
+
+    const payload = {
+      submittedForReview: true
+    };
+
+    if (itemToApprove.type === 'issue') {
+      updateIssueMutation.mutate(
+        { id: itemToApprove.id, data: payload },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            queryClient.invalidateQueries({ queryKey: ["/issues"] });
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    } else if (itemToApprove.type === 'task') {
+      updateTaskMutation.mutate(
+        {
+          projectId: itemToApprove.project!,
+          taskId: itemToApprove.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            refetchAllTasks();
+            refetchTasks();
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    } else if (itemToApprove.type === 'cr') {
+      updateCRMutation.mutate(
+        {
+          projectId: itemToApprove.project!,
+          crId: itemToApprove.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            refetchAllCRs();
+            refetchCRs();
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────
   // Focus Queue updates
   // ──────────────────────────────────────────────────────────────
@@ -832,390 +1148,666 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             </div>
             <div className="flex bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
               <button
-                onClick={() => setActiveQueueTab('issues')}
+                onClick={() => {
+                  setActivePrimaryTab('new');
+                  setActiveSubTab('issues');
+                }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'issues'
+                  activePrimaryTab === 'new'
                     ? 'bg-[var(--primary)] text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Issues ({queueIssues.length})
+                New ({newIssues.length + newTasks.length + newCRs.length})
               </button>
               <button
-                onClick={() => setActiveQueueTab('tasks')}
+                onClick={() => {
+                  setActivePrimaryTab('started');
+                  setActiveSubTab('issues');
+                }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'tasks'
+                  activePrimaryTab === 'started'
                     ? 'bg-[var(--primary)] text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Tasks ({queueTasks.length})
-              </button>
-              <button
-                onClick={() => setActiveQueueTab('crs')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'crs'
-                    ? 'bg-[var(--primary)] text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                CRs ({queueCRs.length})
+                Started ({startedIssues.length + startedTasks.length + startedCRs.length})
               </button>
             </div>
           </CardHeader>
           <CardContent>
-            {activeQueueTab === 'issues' && (
-              queueIssues.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active issues assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueIssues.map((issue) => {
-                    const client = typeof issue.client === "object" ? issue.client : null;
-                    const activeTimer = activeTimers.find(t => t.itemId === issue._id);
-                    return (
-                      <div
-                        key={issue._id}
-                        onClick={() => setDetailedIssue(issue)}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              Issue
-                            </Badge>
-                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                              {issue.issueId}
-                            </span>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                issue.priority === "Critical"
-                                  ? "destructive"
-                                  : issue.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {issue.priority}
-                            </Badge>
-                            {activeTimer && (
-                              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
-                                <span className="relative flex h-1.5 w-1.5 mr-0.5">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
-                                </span>
-                                {formatStopwatchTime(activeTimer.time)}
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {issue.title}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
-                          </p>
-                        </div>
-                        {/* Quick Action transitions */}
-                        <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDetailedIssue(issue)}
-                            className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
-                            title="View details of this ticket"
+            {/* Nested Sub-Tabs Navigation */}
+            <div className="flex gap-2 mb-4 border-b border-[var(--border)] pb-2">
+              <button
+                onClick={() => setActiveSubTab('issues')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'issues'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Issues ({activePrimaryTab === 'new' ? newIssues.length : startedIssues.length})
+              </button>
+              <button
+                onClick={() => setActiveSubTab('tasks')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'tasks'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Tasks ({activePrimaryTab === 'new' ? newTasks.length : startedTasks.length})
+              </button>
+              <button
+                onClick={() => setActiveSubTab('crs')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'crs'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                CRs ({activePrimaryTab === 'new' ? newCRs.length : startedCRs.length})
+              </button>
+            </div>
+
+            {/* List rendering */}
+            {activePrimaryTab === 'new' && (
+              <>
+                {activeSubTab === 'issues' && (
+                  newIssues.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new issues in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newIssues.map((issue) => {
+                        const client = typeof issue.client === "object" ? issue.client : null;
+                        const assignee = typeof issue.assignedTo === "object" && issue.assignedTo !== null
+                          ? issue.assignedTo
+                          : null;
+                        const assigneeName = assignee
+                          ? (assignee._id === currentUserId ? "You" : assignee.name)
+                          : null;
+                        return (
+                          <div
+                            key={issue._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
                           >
-                            View
-                          </Button>
-                          {issue.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedItemId(issue._id);
-                                setTrackingType('issue');
-                                handleStartWork(issue);
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                              title="Start work on this ticket and open the details stopwatch modal"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {issue.status === "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateStatus(issue._id, "Review")}
-                              className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-[10px] h-8 px-2.5 rounded-lg"
-                              title="Submit this ticket to your manager for review"
-                            >
-                              Send to Review
-                            </Button>
-                          )}
-                          {issue.status !== "Done" && issue.status !== "Review" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleUpdateStatus(issue._id, "Done")}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                              title="Mark this ticket as successfully resolved"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            {activeQueueTab === 'tasks' && (
-              queueTasks.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active tasks assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueTasks.map((task) => {
-                    const activeTimer = activeTimers.find(t => t.itemId === task._id);
-                    return (
-                      <div
-                        key={task._id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              Task
-                            </Badge>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                task.priority === "Critical"
-                                  ? "destructive"
-                                  : task.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {task.priority}
-                            </Badge>
-                            {activeTimer && (
-                              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
-                                <span className="relative flex h-1.5 w-1.5 mr-0.5">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Issue
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {issue.issueId}
                                 </span>
-                                {formatStopwatchTime(activeTimer.time)}
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={issue.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {issue.priority}
+                                </Badge>
+                                {assigneeName && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {assigneeName}
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
                               </div>
-                            )}
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {issue.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedIssue(issue)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: issue._id, type: 'issue' });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: issue._id, type: 'issue' });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
                           </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {task.name}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Project: <span className="font-semibold text-[var(--text-primary)]">{(task.project as any)?.name || "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{task.status}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          {task.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const itemId = task._id; // capture before any async state change
-                                setSelectedItemId(itemId);
-                                setTrackingType('task');
-
-                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
-                                updateTaskMutation.mutate({
-                                  projectId: projId,
-                                  taskId: itemId,
-                                  data: { status: "In Progress" }
-                                }, {
-                                  onSuccess: () => {
-                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
-                                    startTimerMutation.mutate(
-                                      { taskId: itemId, workType: "In Progress" },
-                                      {
-                                        onSuccess: () => {
-                                          setTime(0);
-                                          setIsTicking(true);
-                                          localStorage.setItem(`timer_time_${itemId}`, "0");
-                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
-                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
-                                          window.dispatchEvent(new Event("storage"));
-                                          toast.success("Timer started for task.");
-                                        },
-                                        onError: (err: any) => {
-                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
-                                        },
-                                      }
-                                    );
-                                  }
-                                });
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {task.status !== "Done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
-                                updateTaskMutation.mutate({
-                                  projectId: projId,
-                                  taskId: task._id,
-                                  data: { status: "Done" }
-                                }, {
-                                  onSuccess: () => {
-                                    toast.success("Task marked as Done");
-                                  }
-                                });
-                              }}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            {activeQueueTab === 'crs' && (
-              queueCRs.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active CRs assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueCRs.map((cr) => {
-                    const activeTimer = activeTimers.find(t => t.itemId === cr._id);
-                    return (
-                      <div
-                        key={cr._id}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              CR
-                            </Badge>
-                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                              {cr.crNumber}
-                            </span>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                cr.priority === "Critical"
-                                  ? "destructive"
-                                  : cr.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {cr.priority}
-                            </Badge>
-                            {activeTimer && (
-                              <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
-                                <span className="relative flex h-1.5 w-1.5 mr-0.5">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'tasks' && (
+                  newTasks.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new tasks in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newTasks.map((task) => {
+                        const projName = typeof task.project === 'object' && task.project ? (task.project as any).name : 'N/A';
+                        const projId = typeof task.project === 'object' && task.project ? (task.project as any)._id : task.project;
+                        const assigneeNames = task.assignees && task.assignees.length > 0
+                          ? task.assignees.map(a => {
+                              const id = typeof a === 'object' && a ? a._id : a;
+                              const name = typeof a === 'object' && a ? a.name : a;
+                              return id === currentUserId ? 'You' : name;
+                            }).join(', ')
+                          : null;
+                        return (
+                          <div
+                            key={task._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Task
+                                </Badge>
+                                <Badge
+                                  variant={task.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {task.priority}
+                                </Badge>
+                                {assigneeNames && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {assigneeNames}
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {task.name}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedTask(task)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: task._id, type: 'task', taskObj: task });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: task._id, type: 'task', project: projId });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'crs' && (
+                  newCRs.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new Change Requests in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newCRs.map((cr) => {
+                        const projName = typeof cr.project === 'object' && cr.project ? (cr.project as any).name : 'N/A';
+                        const projId = typeof cr.project === 'object' && cr.project ? (cr.project as any)._id : cr.project;
+                        const devNames = cr.assignedDevelopers && cr.assignedDevelopers.length > 0
+                          ? cr.assignedDevelopers.map(d => {
+                              const id = typeof d === 'object' && d ? d._id : d;
+                              const name = typeof d === 'object' && d ? d.name : d;
+                              return id === currentUserId ? 'You' : name;
+                            }).join(', ')
+                          : null;
+                        return (
+                          <div
+                            key={cr._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  CR
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {cr.crNumber}
                                 </span>
-                                {formatStopwatchTime(activeTimer.time)}
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={cr.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {cr.priority}
+                                </Badge>
+                                {devNames && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {devNames}
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
                               </div>
-                            )}
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {cr.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedCR(cr)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: cr._id, type: 'cr', crObj: cr });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: cr._id, type: 'cr', project: projId });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
                           </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {cr.title}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Project: <span className="font-semibold text-[var(--text-primary)]">{(cr.project as any)?.name || "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{cr.status}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          {cr.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const itemId = cr._id; // capture before any async state change
-                                setSelectedItemId(itemId);
-                                setTrackingType('cr');
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
+            )}
 
-                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
-                                updateCRMutation.mutate({
-                                  projectId: projId,
-                                  crId: itemId,
-                                  data: { status: "In Progress" }
-                                }, {
-                                  onSuccess: () => {
-                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
-                                    startTimerMutation.mutate(
-                                      { crId: itemId, workType: "In Progress" },
-                                      {
-                                        onSuccess: () => {
-                                          setTime(0);
-                                          setIsTicking(true);
-                                          localStorage.setItem(`timer_time_${itemId}`, "0");
-                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
-                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
-                                          window.dispatchEvent(new Event("storage"));
-                                          toast.success("Timer started for CR.");
-                                        },
-                                        onError: (err: any) => {
-                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
-                                        },
-                                      }
-                                    );
-                                  }
-                                });
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {cr.status !== "Done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
-                                updateCRMutation.mutate({
-                                  projectId: projId,
-                                  crId: cr._id,
-                                  data: { status: "Done" }
-                                }, {
-                                  onSuccess: () => {
-                                    toast.success("CR marked as Done");
-                                  }
-                                });
-                              }}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
+            {activePrimaryTab === 'started' && (
+              <>
+                {activeSubTab === 'issues' && (
+                  startedIssues.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active issues currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedIssues.map((issue) => {
+                        const client = typeof issue.client === "object" ? issue.client : null;
+                        const activeTimer = activeTimers.find(t => t.itemId === issue._id);
+                        return (
+                          <div
+                            key={issue._id}
+                            onClick={() => {
+                              if (issue.submittedForReview) return;
+                              setSelectedItemId(issue._id);
+                              setTrackingType('issue');
+                              toast.info(`Selected issue [${issue.issueId}] for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${issue.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Issue
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {issue.issueId}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={issue.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {issue.priority}
+                                </Badge>
+                                {issue.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {issue.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {issue.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedIssue(issue)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {issue.status === "Review" && !issue.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: issue._id, type: 'issue' });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'tasks' && (
+                  startedTasks.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active tasks currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedTasks.map((task) => {
+                        const projName = typeof task.project === 'object' && task.project ? (task.project as any).name : 'N/A';
+                        const projId = typeof task.project === 'object' && task.project ? (task.project as any)._id : task.project;
+                        const activeTimer = activeTimers.find(t => t.itemId === task._id);
+                        return (
+                          <div
+                            key={task._id}
+                            onClick={() => {
+                              if (task.submittedForReview) return;
+                              setSelectedItemId(task._id);
+                              setTrackingType('task');
+                              toast.info(`Selected task "${task.name}" for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${task.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Task
+                                </Badge>
+                                <Badge
+                                  variant={task.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {task.priority}
+                                </Badge>
+                                {task.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {task.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {task.name}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{task.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedTask(task)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {task.status === "Review" && !task.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: task._id, type: 'task', project: projId });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'crs' && (
+                  startedCRs.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active Change Requests currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedCRs.map((cr) => {
+                        const projName = typeof cr.project === 'object' && cr.project ? (cr.project as any).name : 'N/A';
+                        const projId = typeof cr.project === 'object' && cr.project ? (cr.project as any)._id : cr.project;
+                        const activeTimer = activeTimers.find(t => t.itemId === cr._id);
+                        return (
+                          <div
+                            key={cr._id}
+                            onClick={() => {
+                              if (cr.submittedForReview) return;
+                              setSelectedItemId(cr._id);
+                              setTrackingType('cr');
+                              toast.info(`Selected CR [${cr.crNumber}] for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${cr.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  CR
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {cr.crNumber}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={cr.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {cr.priority}
+                                </Badge>
+                                {cr.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {cr.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {cr.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{cr.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedCR(cr)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {cr.status === "Review" && !cr.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: cr._id, type: 'cr', project: projId });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -1397,41 +1989,17 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   }}
                   className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
                 >
-                  {trackingType === 'issue' ? (
-                    <>
-                      <option value="Backlog">Backlog</option>
-                      <option value="Assigned">Assigned</option>
-                      <option value="Planned Solution">Planned Solution</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Testing">Testing</option>
-                      <option value="Resolved">Resolved</option>
-                      <option value="Closed">Closed</option>
-                      <option value="Reopened">Reopened</option>
-                      <option value="On Hold">On Hold</option>
-                      <option value="Pending Client">Pending Client</option>
-                    </>
-                  ) : trackingType === 'task' ? (
-                    <>
-                      <option value="To Do">To Do</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Review">Review</option>
-                      <option value="Done">Done</option>
-                    </>
-                  ) : (
-                    <>
-                      <option value="Submitted">Submitted</option>
-                      <option value="In Development">In Development</option>
-                      <option value="Testing">Testing</option>
-                      <option value="Completed">Completed</option>
-                      <option value="Closed">Closed</option>
-                    </>
-                  )}
+                  {stopwatchWorkTypeOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <Button
                 onClick={handleStartTimer}
-                disabled={!selectedItemId || startTimerMutation.isPending}
+                disabled={!selectedItemId || selectedItemObj?.submittedForReview || startTimerMutation.isPending}
                 className="w-full flex items-center justify-center gap-1.5 h-10 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                 title="Start counting work hours for this ticket"
               >
@@ -1691,6 +2259,209 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         open={!!detailedIssue}
         onOpenChange={(open) => !open && setDetailedIssue(null)}
       />
+
+      {detailedTask && (
+        <TaskDetailDrawer
+          task={detailedTask}
+          projectId={typeof detailedTask.project === 'object' && detailedTask.project ? (detailedTask.project as any)._id : (detailedTask.project as string)}
+          members={allUsers}
+          onClose={() => setDetailedTask(null)}
+          onEdit={() => {
+            setDetailedTask(null);
+            queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+            refetchTasks();
+            refetchAllTasks();
+          }}
+          onDelete={() => {
+            setDetailedTask(null);
+            queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+            refetchTasks();
+            refetchAllTasks();
+          }}
+        />
+      )}
+
+      {detailedCR && (
+        <CRDetailDrawer
+          cr={detailedCR}
+          projectId={typeof detailedCR.project === 'object' && detailedCR.project ? (detailedCR.project as any)._id : (detailedCR.project as string)}
+          members={allUsers}
+          onClose={() => setDetailedCR(null)}
+          onEdit={() => {
+            setDetailedCR(null);
+            queryClient.invalidateQueries({ queryKey: ["/crs"] });
+            refetchCRs();
+            refetchAllCRs();
+          }}
+          onDelete={() => {
+            setDetailedCR(null);
+            queryClient.invalidateQueries({ queryKey: ["/crs"] });
+            refetchCRs();
+            refetchAllCRs();
+          }}
+        />
+      )}
+
+      {/* Reassign Dialog */}
+      <Dialog open={reassignModalOpen} onOpenChange={(open) => {
+        setReassignModalOpen(open);
+        if (!open) {
+          setItemToReassign(null);
+          setReassignTo("");
+          setReassignReason("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Request Re-assignment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="reassignTo" className="text-xs font-medium text-[var(--text-secondary)]">Reassign To</Label>
+              <select
+                id="reassignTo"
+                value={reassignTo}
+                onChange={(e) => setReassignTo(e.target.value)}
+                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
+              >
+                <option value="">-- Select Developer (Optional) --</option>
+                {allUsers
+                  .filter((user) => user._id !== currentUserId && ["intern", "engineer", "senior_engineer", "manager"].includes(user.role))
+                  .map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} ({user.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reassignReason" className="text-xs font-medium text-[var(--text-secondary)]">Reason for Re-assignment</Label>
+              <Textarea
+                id="reassignReason"
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                placeholder="Explain why you are requesting re-assignment..."
+                className="text-xs bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReassignModalOpen(false);
+                setItemToReassign(null);
+                setReassignTo("");
+                setReassignReason("");
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReassignSubmit}
+              disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+              className="bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white text-xs h-9 rounded-lg"
+            >
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Dialog */}
+      <Dialog open={approvalModalOpen} onOpenChange={(open) => {
+        setApprovalModalOpen(open);
+        if (!open) {
+          setItemToApprove(null);
+          setConfirmCheckbox(false);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Send for Senior SE Approval
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+            </p>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+              <input
+                type="checkbox"
+                id="confirmCheckbox"
+                checked={confirmCheckbox}
+                onChange={(e) => setConfirmCheckbox(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+              />
+              <Label htmlFor="confirmCheckbox" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+                I confirm task/cr/issue implemented and reviewed to check by senior SE
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApprovalModalOpen(false);
+                setItemToApprove(null);
+                setConfirmCheckbox(false);
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApprovalSubmit}
+              disabled={!confirmCheckbox || updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+              className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-xs h-9 rounded-lg"
+            >
+              Confirm & Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim Confirmation Dialog */}
+      <Dialog open={claimConfirmOpen} onOpenChange={(open) => {
+        setClaimConfirmOpen(open);
+        if (!open) {
+          setItemToClaim(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[400px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Claim Work Item
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-xs text-[var(--text-secondary)] leading-relaxed">
+            Are you sure you want to add this item to your queue and start working on it? This will set its status to "In Progress" and assign it to you.
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setClaimConfirmOpen(false);
+                setItemToClaim(null);
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmClaimAction}
+              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-xs h-9 rounded-lg font-semibold shadow-sm"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
