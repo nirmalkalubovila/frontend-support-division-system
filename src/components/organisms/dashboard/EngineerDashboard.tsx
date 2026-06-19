@@ -30,7 +30,8 @@ import {
   useDeleteTimeLog,
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
-import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/services/issue-management/issue-service";
+import { useUpdateIssue, useNotifyTimeExceeded, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
 import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
 import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
 import { useUpdateTask } from "@/api/services/project-management/task-service";
@@ -53,7 +54,13 @@ const VALID_WORK_TYPES: WorkType[] = [
   'To Do', 'Review', 'Done', 'Submitted', 'Rejected', 'In Development', 'Completed',
 ];
 
-/** Returns wt if valid, otherwise falls back to a safe default. */
+const formatDuration = (decimalHours: number): string => {
+  const totalMins = Math.round(decimalHours * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs}h ${mins}m`;
+};
+
 const sanitizeWorkType = (wt: string | undefined, fallback: WorkType = 'In Progress'): WorkType =>
   (VALID_WORK_TYPES as string[]).includes(wt ?? '') ? (wt as WorkType) : fallback;
 
@@ -64,6 +71,49 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const stopTimerMutation = useStopTimer();
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
   const deleteTimeLogMutation = useDeleteTimeLog();
+  const deleteIssueMutation = useDeleteIssue();
+
+  // Selection states for clearing logs & issues
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [isConfirmLogsOpen, setIsConfirmLogsOpen] = useState(false);
+  const [isConfirmIssuesOpen, setIsConfirmIssuesOpen] = useState(false);
+  const [isDeletingLogs, setIsDeletingLogs] = useState(false);
+  const [isDeletingIssues, setIsDeletingIssues] = useState(false);
+
+  const handleClearSelectedLogs = async () => {
+    setIsDeletingLogs(true);
+    try {
+      await Promise.all(
+        selectedLogIds.map((id) => deleteTimeLogMutation.mutateAsync(id))
+      );
+      toast.success("Successfully cleared selected time logs.");
+      setSelectedLogIds([]);
+    } catch (err: any) {
+      toast.error("Failed to clear some time logs.");
+    } finally {
+      setIsDeletingLogs(false);
+      setIsConfirmLogsOpen(false);
+      refetchLogs();
+    }
+  };
+
+  const handleClearSelectedIssues = async () => {
+    setIsDeletingIssues(true);
+    try {
+      await Promise.all(
+        selectedIssueIds.map((id) => deleteIssueMutation.mutateAsync(id))
+      );
+      toast.success("Successfully cleared selected resolved issues.");
+      setSelectedIssueIds([]);
+    } catch (err: any) {
+      toast.error("Failed to clear some resolved issues.");
+    } finally {
+      setIsDeletingIssues(false);
+      setIsConfirmIssuesOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/issues"] });
+    }
+  };
 
   // Fetch assigned tasks & CRs
   const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
@@ -1033,7 +1083,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               </Label>
               <select
                 value={trackingType}
-                disabled={isTicking}
                 onChange={(e) => setTrackingType(e.target.value as 'issue' | 'task' | 'cr')}
                 className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
               >
@@ -1050,7 +1099,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               </Label>
               <select
                 value={selectedItemId}
-                disabled={isTicking}
                 onChange={(e) => setSelectedItemId(e.target.value)}
                 className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
               >
@@ -1080,7 +1128,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               </Label>
               <select
                 value={selectedWorkType}
-                disabled={isTicking}
                 onChange={(e) => {
                   const newStatus = e.target.value as WorkType;
                   setSelectedWorkType(newStatus);
@@ -1195,11 +1242,21 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
       {/* Row 3: Recent Time Logs */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <Clock className="h-4.5 w-4.5 text-[var(--primary-text)]" />
             My Recent Time Logs
           </CardTitle>
+          {selectedLogIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs h-8 px-3 rounded-lg"
+              onClick={() => setIsConfirmLogsOpen(true)}
+            >
+              Clear Selected ({selectedLogIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {recentLogs.length === 0 ? (
@@ -1211,11 +1268,25 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={recentLogs.length > 0 && selectedLogIds.length === recentLogs.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLogIds(recentLogs.map((l) => l._id));
+                          } else {
+                            setSelectedLogIds([]);
+                          }
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Item / Ticket ID</th>
                     <th className="py-2.5 px-3">Work Type</th>
                     <th className="py-2.5 px-3">Started Time</th>
                     <th className="py-2.5 px-3">Ended Time</th>
-                    <th className="py-2.5 px-3">Duration (hrs)</th>
+                    <th className="py-2.5 px-3">Duration</th>
                     <th className="py-2.5 px-3">Notes</th>
                     <th className="py-2.5 px-3">Date</th>
                     <th className="py-2.5 px-3">Status</th>
@@ -1233,6 +1304,20 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                     }
                     return (
                       <tr key={log._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedLogIds.includes(log._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedLogIds((prev) => [...prev, log._id]);
+                              } else {
+                                setSelectedLogIds((prev) => prev.filter((id) => id !== log._id));
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)]">
                           {code}
                         </td>
@@ -1248,7 +1333,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           {log.endTime ? new Date(log.endTime).toLocaleTimeString() : <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium">
-                          {log.duration.toFixed(2)}h
+                          {formatDuration(log.duration)}
                         </td>
                         <td className="py-3 px-3 truncate max-w-[180px]" title={log.note}>
                           {log.note || <span className="text-[var(--text-tertiary)] italic">No note</span>}
@@ -1280,11 +1365,21 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
       {/* Row 4: Resolved Issues History */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <History className="h-4.5 w-4.5 text-[var(--success)]" />
             Resolved Issues History
           </CardTitle>
+          {selectedIssueIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs h-8 px-3 rounded-lg"
+              onClick={() => setIsConfirmIssuesOpen(true)}
+            >
+              Clear Selected ({selectedIssueIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {myResolvedIssues.length === 0 ? (
@@ -1296,6 +1391,20 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={myResolvedIssues.length > 0 && selectedIssueIds.length === myResolvedIssues.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIssueIds(myResolvedIssues.map((i) => i._id));
+                          } else {
+                            setSelectedIssueIds([]);
+                          }
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Issue ID</th>
                     <th className="py-2.5 px-3">Title</th>
                     <th className="py-2.5 px-3">Project</th>
@@ -1311,6 +1420,20 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                     const project = typeof issue.project === "object" ? issue.project : null;
                     return (
                       <tr key={issue._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedIssueIds.includes(issue._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIssueIds((prev) => [...prev, issue._id]);
+                              } else {
+                                setSelectedIssueIds((prev) => prev.filter((id) => id !== issue._id));
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)] font-mono">
                           {issue.issueId}
                         </td>
@@ -1416,10 +1539,30 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={isConfirmLogsOpen}
+        onOpenChange={setIsConfirmLogsOpen}
+        title="Clear Selected Time Logs"
+        description={`Are you sure you want to delete the ${selectedLogIds.length} selected time log(s)? This action is permanent and cannot be undone.`}
+        confirmLabel="Clear Logs"
+        variant="destructive"
+        onConfirm={handleClearSelectedLogs}
+        loading={isDeletingLogs}
+      />
+      <ConfirmDialog
+        open={isConfirmIssuesOpen}
+        onOpenChange={setIsConfirmIssuesOpen}
+        title="Clear Selected Resolved Issues"
+        description={`Are you sure you want to permanently delete the ${selectedIssueIds.length} selected resolved issue(s)? This action cannot be undone.`}
+        confirmLabel="Clear Issues"
+        variant="destructive"
+        onConfirm={handleClearSelectedIssues}
+        loading={isDeletingIssues}
+      />
       <IssueDetailsModal
         issue={detailedIssue}
         open={!!detailedIssue}
-        onOpenChange={(open) => !open && setDetailedIssue(null)}
+        onOpenChange={(open: boolean) => !open && setDetailedIssue(null)}
       />
     </div>
   );
