@@ -12,14 +12,14 @@ import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 
 // ── Config ──────────────────────────────────────────────────────
 export const CR_KANBAN_STATUSES: CRStatus[] = [
-  "Submitted", "In Development", "Testing", "Completed",
+  "To Do", "In Progress", "Review", "Done",
 ];
 
 const COL_CONFIG: Record<string, { dot: string; header: string; addBtn: string; card: string; badge: string }> = {
-  "Submitted":      { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
-  "In Development": { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-  "Testing":        { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
-  "Completed":      { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
+  "To Do":       { dot: "bg-blue-400",    header: "bg-blue-50 dark:bg-blue-900/20",        addBtn: "hover:bg-blue-100",    card: "border-blue-200 hover:border-blue-400",      badge: "bg-blue-50 text-blue-700 border-blue-200" },
+  "In Progress": { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",    addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+  "Review":      { dot: "bg-purple-400",  header: "bg-purple-50 dark:bg-purple-900/20",    addBtn: "hover:bg-purple-100",  card: "border-purple-200 hover:border-purple-400",  badge: "bg-purple-50 text-purple-700 border-purple-200" },
+  "Done":        { dot: "bg-green-400",   header: "bg-green-50 dark:bg-green-900/20",      addBtn: "hover:bg-green-100",   card: "border-green-200 hover:border-green-400",    badge: "bg-green-50 text-green-700 border-green-200" },
 };
 
 const PRIORITY_DOT: Record<string, string> = {

@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { TaskFormModal } from "@/components/organisms/taskFormModal/task-form-modal";
-import { KanbanBoard } from "@/components/organisms/kanbanBoard/kanban-board";
+import { KanbanBoard, TaskDetailDrawer } from "@/components/organisms/kanbanBoard/kanban-board";
 import { CRFormModal } from "@/components/organisms/crFormModal/cr-form-modal";
 import { CRDetailDrawer } from "@/components/organisms/crDetailDrawer/cr-detail-drawer";
 import { CRKanbanBoard } from "@/components/organisms/crKanbanBoard/cr-kanban-board";
@@ -114,10 +114,10 @@ function KanbanTaskCard({
 // Task Hierarchy Row
 // ─────────────────────────────────────────────────────────────
 function HierarchyRow({
-  task, depth, children, allTasks, onEdit, onDelete, onAddChild,
+  task, depth, children, allTasks, onEdit, onDelete, onAddChild, onView,
 }: {
   task: Task; depth: number; children: Task[]; allTasks: Task[];
-  onEdit: (t: Task) => void; onDelete: (t: Task) => void; onAddChild: (t: Task) => void;
+  onEdit: (t: Task) => void; onDelete: (t: Task) => void; onAddChild: (t: Task) => void; onView: (t: Task) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = children.length > 0;
@@ -125,37 +125,42 @@ function HierarchyRow({
   return (
     <div>
       <div
-        className="flex items-center gap-2 py-2 px-3 rounded-xl hover:bg-[var(--surface-hover)] transition-colors group"
-        style={{ paddingLeft: `${12 + depth * 24}px` }}
+        onClick={() => onView(task)}
+        className="grid grid-cols-[1fr_120px_100px_80px_110px_88px] items-center py-2 px-3 hover:bg-[var(--surface-hover)] transition-colors group cursor-pointer"
       >
-        <button onClick={() => setExpanded((v) => !v)} className={`shrink-0 text-[var(--text-tertiary)] transition-transform ${!hasChildren ? "invisible" : ""}`}>
-          {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-        </button>
+        {/* Task Name cell — indented by depth */}
+        <div className="flex items-center gap-1.5 min-w-0" style={{ paddingLeft: `${depth * 20}px` }}>
+          <button onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }} className={`shrink-0 text-[var(--text-tertiary)] ${!hasChildren ? "invisible" : ""}`}>
+            {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+          <span className={`h-2 w-2 rounded-full shrink-0 ${STATUS_STYLES[task.status].dot}`} />
+          <span className="text-sm font-medium text-[var(--text-primary)] truncate">{task.name}</span>
+        </div>
 
-        <span className={`h-2 w-2 rounded-full shrink-0 ${STATUS_STYLES[task.status].dot}`} />
+        {/* Status */}
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full w-fit ${STATUS_STYLES[task.status].badge}`}>{task.status}</span>
 
-        <span className="flex-1 text-sm font-medium text-[var(--text-primary)] truncate">{task.name}</span>
-
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLES[task.status].badge}`}>{task.status}</span>
-
-        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0 flex items-center gap-1">
-          <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[task.priority]}`} />{task.priority}
+        {/* Priority */}
+        <span className="text-[10px] text-[var(--text-tertiary)] flex items-center gap-1">
+          <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${PRIORITY_DOT[task.priority]}`} />{task.priority}
         </span>
 
-        {task.assignees.length > 0 && (
-          <div className="flex -space-x-1 shrink-0">
-            {task.assignees.slice(0, 3).map((a) => (
-              <div key={a._id} title={a.name}
-                className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold">
-                {a.name.charAt(0).toUpperCase()}
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Assignees */}
+        <div className="flex -space-x-1 hidden sm:flex">
+          {task.assignees.slice(0, 3).map((a) => (
+            <div key={a._id} title={a.name}
+              className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">
+              {a.name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+          {task.assignees.length === 0 && <span className="text-[10px] text-[var(--text-tertiary)]">—</span>}
+        </div>
 
-        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0 hidden sm:block">{fmtDate(task.endDate)}</span>
+        {/* Due Date */}
+        <span className="text-[10px] text-[var(--text-tertiary)] hidden sm:block">{fmtDate(task.endDate)}</span>
 
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        {/* Actions */}
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity justify-end" onClick={(e) => e.stopPropagation()}>
           <button onClick={() => onAddChild(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-[var(--primary)]" title="Add sub-task"><Plus className="h-3 w-3" /></button>
           <button onClick={() => onEdit(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-[var(--primary)]"><Pencil className="h-3 w-3" /></button>
           <button onClick={() => onDelete(task)} className="p-1 rounded hover:bg-[var(--surface)] text-[var(--text-tertiary)] hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
@@ -166,7 +171,7 @@ function HierarchyRow({
         <HierarchyRow
           key={child._id} task={child} depth={depth + 1}
           children={allTasks.filter((t) => getParentId(t) === child._id)}
-          allTasks={allTasks} onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild}
+          allTasks={allTasks} onEdit={onEdit} onDelete={onDelete} onAddChild={onAddChild} onView={onView}
         />
       ))}
     </div>
@@ -182,13 +187,19 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [parentTask, setParentTask] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [drawerTask, setDrawerTask] = useState<Task | null>(null);
 
   const { data: tasks = [], isLoading } = useGetProjectTasks(projectId);
+
+  const currentDrawerTask = useMemo(
+    () => drawerTask ? tasks.find((t) => t._id === drawerTask._id) ?? drawerTask : null,
+    [drawerTask, tasks]
+  );
   const deleteMutation = useDeleteTask(projectId);
 
   const rootTasks = useMemo(() => tasks.filter((t) => !getParentId(t)), [tasks]);
 
-  const handleEdit = (t: Task) => { setEditingTask(t); setParentTask(null); setShowForm(true); };
+  const handleEdit = (t: Task) => { setEditingTask(t); setParentTask(null); setDrawerTask(null); setShowForm(true); };
   const handleAddChild = (t: Task) => { setEditingTask(null); setParentTask(t); setShowForm(true); };
   const handleDeleteConfirm = async () => {
     if (!taskToDelete) return;
@@ -241,13 +252,13 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
         </div>
       ) : (
         <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex-1 pl-10">Task Name</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-24 shrink-0">Status</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-20 shrink-0">Priority</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-16 shrink-0 hidden sm:block">Assignees</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] w-24 shrink-0 hidden sm:block">Due Date</span>
-            <span className="w-20 shrink-0" />
+          <div className="grid grid-cols-[1fr_120px_100px_80px_110px_88px] items-center px-3 py-2 border-b border-[var(--border)] bg-[var(--background)]">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] pl-10">Task Name</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Status</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Priority</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] hidden sm:block">Assignees</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] hidden sm:block">Due Date</span>
+            <span />
           </div>
           <div className="divide-y divide-[var(--border)]">
             {rootTasks.map((t) => (
@@ -257,10 +268,22 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
                 onEdit={handleEdit}
                 onDelete={(t) => setTaskToDelete(t)}
                 onAddChild={handleAddChild}
+                onView={(t) => setDrawerTask(t)}
               />
             ))}
           </div>
         </div>
+      )}
+
+      {taskView === "hierarchy" && currentDrawerTask && (
+        <TaskDetailDrawer
+          task={currentDrawerTask}
+          projectId={projectId}
+          members={members}
+          onClose={() => setDrawerTask(null)}
+          onEdit={(t) => { setDrawerTask(null); handleEdit(t); }}
+          onDelete={(t) => { setDrawerTask(null); setTaskToDelete(t); }}
+        />
       )}
 
       {taskView === "hierarchy" && (
