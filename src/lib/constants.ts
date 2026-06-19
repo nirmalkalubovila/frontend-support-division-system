@@ -20,26 +20,22 @@ export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 // Issue Statuses (matches backend state machine)
 export const ISSUE_STATUSES = [
-  "Backlog",
-  "Assigned",
-  "Planned Solution",
+  "To Do",
   "In Progress",
-  "Testing",
+  "Review",
+  "Done",
   "On Hold",
   "Pending Client",
-  "Resolved",
   "Closed",
   "Reopened",
 ] as const;
 
 // Kanban column statuses (subset for board display)
 export const KANBAN_COLUMNS = [
-  "Backlog",
-  "Assigned",
-  "Planned Solution",
+  "To Do",
   "In Progress",
-  "Testing",
-  "Resolved",
+  "Review",
+  "Done",
 ] as const;
 
 // Priority levels
@@ -80,12 +76,10 @@ export const CARRY_OVER_POLICIES = [
 
 // Work types for time tracking
 export const WORK_TYPES = [
-  "Backlog",
-  "Assigned",
-  "Planned Solution",
+  "To Do",
   "In Progress",
-  "Testing",
-  "Resolved",
+  "Review",
+  "Done",
   "Closed",
   "Reopened",
   "On Hold",

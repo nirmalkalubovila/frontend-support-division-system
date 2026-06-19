@@ -9,6 +9,7 @@ import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
+import useSessionStore from "@/store/session-store";
 import {
   useUpdateBranding,
   useUploadLogo,
@@ -130,6 +131,17 @@ const formatMinutes = (mins: number) => {
 };
 
 export default function SystemPage() {
+  const userInfo = useSessionStore((s) => s.userInfo);
+  const isManager = userInfo?.role === "super_admin" || userInfo?.role === "manager";
+  const [activeTab, setActiveTab] = useState("notifications");
+
+  useEffect(() => {
+    if (userInfo) {
+      const isMgr = userInfo.role === "super_admin" || userInfo.role === "manager";
+      setActiveTab(isMgr ? "priorities" : "notifications");
+    }
+  }, [userInfo]);
+
   const {
     primaryColor,
     setPrimaryColor,
@@ -419,36 +431,46 @@ export default function SystemPage() {
       </div>
 
       {/* Settings Tabs */}
-      <Tabs defaultValue="priorities" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-[var(--surface)] border border-[var(--border)]">
-          <TabsTrigger value="priorities" className="gap-1">
-            <Shield className="h-3.5 w-3.5" />
-            Priorities
-          </TabsTrigger>
-          <TabsTrigger value="categories" className="gap-1">
-            <Tag className="h-3.5 w-3.5" />
-            Categories
-          </TabsTrigger>
+          {isManager && (
+            <>
+              <TabsTrigger value="priorities" className="gap-1">
+                <Shield className="h-3.5 w-3.5" />
+                Priorities
+              </TabsTrigger>
+              <TabsTrigger value="categories" className="gap-1">
+                <Tag className="h-3.5 w-3.5" />
+                Categories
+              </TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="notifications" className="gap-1">
             <Bell className="h-3.5 w-3.5" />
             Notifications
           </TabsTrigger>
-          <TabsTrigger value="branding" className="gap-1">
-            <Palette className="h-3.5 w-3.5" />
-            Branding
-          </TabsTrigger>
-          <TabsTrigger value="report-schedule" className="gap-1">
-            <Calendar className="h-3.5 w-3.5" />
-            Report Schedule
-          </TabsTrigger>
-          <TabsTrigger value="finance" className="gap-1">
-            <Coins className="h-3.5 w-3.5" />
-            Finance
-          </TabsTrigger>
+          {isManager && (
+            <>
+              <TabsTrigger value="branding" className="gap-1">
+                <Palette className="h-3.5 w-3.5" />
+                Branding
+              </TabsTrigger>
+              <TabsTrigger value="report-schedule" className="gap-1">
+                <Calendar className="h-3.5 w-3.5" />
+                Report Schedule
+              </TabsTrigger>
+              <TabsTrigger value="finance" className="gap-1">
+                <Coins className="h-3.5 w-3.5" />
+                Finance
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
-        {/* Priorities */}
-        <TabsContent value="priorities" className="mt-4 space-y-4">
+        {isManager && (
+          <>
+            {/* Priorities */}
+            <TabsContent value="priorities" className="mt-4 space-y-4">
           <Card className="bg-[var(--surface)] border-[var(--border)] animate-fade-in">
             <CardHeader>
               <CardTitle className="text-base text-[var(--text-primary)]">Service Level Agreements (SLA) Configuration</CardTitle>
@@ -612,6 +634,8 @@ export default function SystemPage() {
             </CardContent>
           </Card>
         </TabsContent>
+          </>
+        )}
 
         {/* Notifications */}
         <TabsContent value="notifications" className="mt-4 space-y-4">
@@ -740,7 +764,9 @@ export default function SystemPage() {
           </Card>
         </TabsContent>
 
-        {/* Branding */}
+        {isManager && (
+          <>
+            {/* Branding */}
         <TabsContent value="branding" className="mt-4">
           <Card className="bg-[var(--surface)] border-[var(--border)]">
             <CardHeader>
@@ -1046,6 +1072,8 @@ export default function SystemPage() {
             </CardContent>
           </Card>
         </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );

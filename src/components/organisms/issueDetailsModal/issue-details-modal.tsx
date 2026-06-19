@@ -19,6 +19,8 @@ import {
   Folder,
   UserCheck,
   ChevronDown,
+  History,
+  Mail,
 } from "lucide-react";
 import {
   Dialog,
@@ -37,18 +39,16 @@ import {
   useNotifyTimeExceeded,
   type Issue,
 } from "@/api/services/issue-management/issue-service";
-import { useStopTimer, useStartTimer } from "@/api/services/time-tracking/time-log-service";
+import { useStopTimer, useStartTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
 import useSessionStore from "@/store/session-store";
 
 const STATUS_SELECT_COLORS: Record<string, string> = {
-  "Backlog":          "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
-  "Assigned":         "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 focus:border-blue-400 focus:ring-blue-400/20",
-  "Planned Solution": "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 focus:border-amber-400 focus:ring-amber-400/20",
+  "To Do":            "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
   "In Progress":      "border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-300 focus:border-indigo-400 focus:ring-indigo-400/20",
-  "Testing":          "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
-  "Resolved":         "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
+  "Review":           "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
+  "Done":             "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
   "Closed":           "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 focus:border-rose-400 focus:ring-rose-400/20",
 };
 
@@ -76,6 +76,8 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const stopTimerMutation = useStopTimer();
   const startTimerMutation = useStartTimer();
   const { data: users = [] } = useGetAllUsers();
+  const { data: issueLogsData } = useGetTimeLogs({ issue: issue?._id || undefined });
+  const issueLogs = useMemo(() => issueLogsData?.data ?? [], [issueLogsData]);
   
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -101,6 +103,36 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [priority, setPriority] = useState<string>("");
   const [assignedTo, setAssignedTo] = useState<string>("");
   const [estimatedHours, setEstimatedHours] = useState<string>("");
+  
+  const estH = estimatedHours ? Number(estimatedHours) : 0;
+  const hoursVal = estimatedHours ? String(Math.floor(estH)) : "";
+  const minutesVal = estimatedHours ? String(Math.round((estH - Math.floor(estH)) * 60)) : "";
+
+  const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const h = e.target.value;
+    const m = minutesVal || "0";
+    if (h === "" && m === "0") {
+      setEstimatedHours("");
+    } else {
+      const dec = Number(h || 0) + Number(m) / 60;
+      setEstimatedHours(String(dec));
+    }
+  };
+
+  const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let mVal = e.target.value;
+    if (mVal !== "") {
+      const mNum = Math.min(59, Math.max(0, Number(mVal)));
+      mVal = String(mNum);
+    }
+    const h = hoursVal || "0";
+    if (h === "0" && mVal === "") {
+      setEstimatedHours("");
+    } else {
+      const dec = Number(h) + Number(mVal || 0) / 60;
+      setEstimatedHours(String(dec));
+    }
+  };
   const [technicalApproach, setTechnicalApproach] = useState<string>("");
   
   const [isUploading, setIsUploading] = useState(false);
@@ -181,6 +213,27 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           if (progressPctRef.current) progressPctRef.current.textContent = `${pct}%`;
           if (progressBarRef.current) progressBarRef.current.style.width = `${Math.min(100, (newTime / (estH * 3600)) * 100)}%`;
           if (loggedMinsRef.current) loggedMinsRef.current.textContent = `${Math.floor(newTime / 60)} mins logged`;
+
+          if (newTime >= estH * 3600) {
+            setIsTicking(false);
+            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+            Promise.resolve().then(async () => {
+              try {
+                await stopTimerMutation.mutateAsync({ issueId: issue._id, note: "[Ended automatically]" });
+                toast.success("Work ended automatically (Allocated estimate reached).");
+              } catch (err: any) {
+                toast.error("Failed to stop timer: " + (err.response?.data?.message || err.message));
+              }
+              timeRef.current = 0;
+              setTime(0);
+              localStorage.removeItem(`timer_time_${issue._id}`);
+              localStorage.removeItem(`timer_ticking_${issue._id}`);
+              localStorage.removeItem(`timer_timestamp_${issue._id}`);
+              localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
+              window.dispatchEvent(new Event("storage"));
+            });
+            return;
+          }
         }
 
         // Write to localStorage every 5 seconds instead of every second
@@ -246,7 +299,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
       await stopTimerMutation.mutateAsync({ issueId: issue._id });
-      toast.success("Work ended. Issue moved to Testing.");
+      toast.success("Work ended. Issue moved to Review.");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to end work session.");
     }
@@ -880,26 +933,44 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               </div>
 
               {/* Estimated Hours */}
-              <div className="space-y-1.5 p-3 rounded-lg bg-[var(--surface-hover)]/20 border border-[var(--border)]/30">
+              <div className="space-y-1.5 p-3 rounded-lg bg-[var(--surface-hover)]/20 border border-[var(--border)]/30 col-span-1 sm:col-span-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="estimatedHoursHoriz" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Est. Hours
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Est. Time
                   </Label>
                   {estimatedHours && (
                     <span className="text-[10px] font-bold text-[var(--text-tertiary)]">
-                      ({Number(estimatedHours) * 60} mins)
+                      ({Math.round(Number(estimatedHours) * 60)} mins)
                     </span>
                   )}
                 </div>
-                <Input
-                  id="estimatedHoursHoriz"
-                  type="number"
-                  placeholder="e.g. 4.5"
-                  value={estimatedHours}
-                  disabled={!isManager}
-                  onChange={(e) => setEstimatedHours(e.target.value)}
-                  className="h-8 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed mt-0.5"
-                />
+                <div className="flex gap-2 mt-0.5">
+                  <div className="flex-1 relative">
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder="Hrs"
+                      value={hoursVal}
+                      disabled={!isManager}
+                      onChange={handleHoursChange}
+                      className="h-8 pl-1.5 pr-6 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[var(--text-tertiary)] pointer-events-none">h</span>
+                  </div>
+                  <div className="flex-1 relative">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={59}
+                      placeholder="Mins"
+                      value={minutesVal}
+                      disabled={!isManager}
+                      onChange={handleMinutesChange}
+                      className="h-8 pl-1.5 pr-6 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed"
+                    />
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[var(--text-tertiary)] pointer-events-none">m</span>
+                  </div>
+                </div>
               </div>
 
               {/* Time Actions */}
@@ -926,9 +997,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                       setRequestReasonInput("");
                       setShowRequestDialog(true);
                     }}
-                    className="flex-1 h-9 text-[11px] font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)]"
+                    className="flex-1 h-9 text-[11px] font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)] flex items-center justify-center gap-1"
                   >
-                    âœ‰ Request
+                    <Mail className="h-3.5 w-3.5" /> Request
                   </Button>
                 </div>
               </div>
@@ -981,6 +1052,72 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Work Session History Table */}
+        <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden mt-6">
+          <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+              <History className="h-4 w-4 text-[var(--primary)]" />
+              Work Session History (Time Logs)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            {issueLogs.length === 0 ? (
+              <div className="text-center py-6 text-xs text-[var(--text-tertiary)] italic">
+                No work sessions recorded for this issue.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                      <th className="py-2.5 px-3">Date</th>
+                      <th className="py-2.5 px-3">Started Time</th>
+                      <th className="py-2.5 px-3">Ended Time</th>
+                      <th className="py-2.5 px-3">Duration</th>
+                      <th className="py-2.5 px-3">Note / Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {issueLogs.map((log: any) => {
+                      const isAutoEnded = log.note && log.note.includes("Ended automatically");
+                      return (
+                        <tr key={log._id} className="hover:bg-[var(--surface-hover)]/40 transition-colors">
+                          <td className="py-2.5 px-3 text-[var(--text-primary)]">
+                            {new Date(log.startTime).toLocaleDateString()}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
+                            {new Date(log.startTime).toLocaleTimeString()}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
+                            {log.endTime ? (
+                              new Date(log.endTime).toLocaleTimeString()
+                            ) : (
+                              <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-[var(--text-primary)]">
+                            {log.duration.toFixed(2)}h
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-[var(--text-secondary)]">{log.note || <span className="text-[var(--text-tertiary)] italic">No note</span>}</span>
+                              {isAutoEnded && (
+                                <span className="text-[10px] font-semibold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded w-fit uppercase tracking-wider">
+                                  Ended automatically
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>
