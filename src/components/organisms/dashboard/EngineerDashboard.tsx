@@ -290,13 +290,43 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         tickCount += 1;
         setTime((prev) => {
           const newTime = prev + 1;
+          
+          // Check for auto-stop based on estimatedHours (only for issues, or task/cr if they have it)
+          const estH = trackingType === 'issue' ? (selectedItemObj as any)?.estimatedHours || 0 : 0;
+          if (estH > 0 && newTime >= estH * 3600) {
+            setIsTicking(false);
+            if (interval) clearInterval(interval);
+            Promise.resolve().then(async () => {
+              try {
+                await stopTimerMutation.mutateAsync({
+                  issueId: trackingType === 'issue' ? selectedItemId : null,
+                  taskId: trackingType === 'task' ? selectedItemId : null,
+                  crId: trackingType === 'cr' ? selectedItemId : null,
+                  note: "[Ended automatically]"
+                });
+                toast.success("Work ended automatically (Allocated estimate reached).");
+              } catch (err: any) {
+                toast.error("Failed to stop timer: " + (err.response?.data?.message || err.message));
+              }
+              setTime(0);
+              localStorage.removeItem(`timer_time_${selectedItemId}`);
+              localStorage.removeItem(`timer_ticking_${selectedItemId}`);
+              localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
+              localStorage.removeItem(`timer_worktype_${selectedItemId}`);
+              localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
+              window.dispatchEvent(new Event("storage"));
+              refetchLogs();
+            });
+            return 0;
+          }
+
           localStorage.setItem(`timer_time_${selectedItemId}`, String(newTime));
           localStorage.setItem(`timer_timestamp_${selectedItemId}`, String(Date.now()));
 
           // SLA estimate alert only for issues
           if (trackingType === 'issue' && tickCount % 10 === 0 && selectedItemObj) {
-            const estH = (selectedItemObj as any).estimatedHours || 0;
-            if (estH > 0 && newTime > estH * 3600) {
+            const estHVal = (selectedItemObj as any).estimatedHours || 0;
+            if (estHVal > 0 && newTime > estHVal * 3600) {
               const notifiedKey = `timer_exceeded_notified_${selectedItemId}`;
               const alreadyNotified = localStorage.getItem(notifiedKey);
               if (!alreadyNotified) {
@@ -316,7 +346,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isTicking, selectedItemId, selectedItemObj, trackingType, notifyTimeExceededMutation]);
+  }, [isTicking, selectedItemId, selectedItemObj, trackingType, notifyTimeExceededMutation, stopTimerMutation, refetchLogs]);
 
   // Auto-select active item when category changes
   useEffect(() => {
@@ -1183,6 +1213,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
                     <th className="py-2.5 px-3">Item / Ticket ID</th>
                     <th className="py-2.5 px-3">Work Type</th>
+                    <th className="py-2.5 px-3">Started Time</th>
+                    <th className="py-2.5 px-3">Ended Time</th>
                     <th className="py-2.5 px-3">Duration (hrs)</th>
                     <th className="py-2.5 px-3">Notes</th>
                     <th className="py-2.5 px-3">Date</th>
@@ -1208,6 +1240,12 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           <Badge variant="outline" className="text-[10px] scale-95 font-medium border-[var(--border)] text-[var(--text-secondary)]">
                             {log.workType}
                           </Badge>
+                        </td>
+                        <td className="py-3 px-3 font-mono">
+                          {new Date(log.startTime).toLocaleTimeString()}
+                        </td>
+                        <td className="py-3 px-3 font-mono">
+                          {log.endTime ? new Date(log.endTime).toLocaleTimeString() : <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium">
                           {log.duration.toFixed(2)}h
