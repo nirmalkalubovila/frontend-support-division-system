@@ -38,6 +38,7 @@ import {
   useDeleteIssue,
   useNotifyTimeExceeded,
   type Issue,
+  type IssueAttachment,
 } from "@/api/services/issue-management/issue-service";
 import { useStopTimer, useStartTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
@@ -50,6 +51,13 @@ const STATUS_SELECT_COLORS: Record<string, string> = {
   "Review":           "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
   "Done":             "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
   "Closed":           "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 focus:border-rose-400 focus:ring-rose-400/20",
+};
+
+const formatDuration = (decimalHours: number): string => {
+  const totalMins = Math.round(decimalHours * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs}h ${mins}m`;
 };
 
 interface IssueDetailsModalProps {
@@ -664,7 +672,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               {/* Attachments List */}
               {issue.attachments && issue.attachments.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {issue.attachments.map((file) => {
+                  {issue.attachments.map((file: IssueAttachment) => {
                     const isImg = file.mimetype.startsWith("image/");
                     const fileUrl = `http://localhost:5001${file.path}`;
 
@@ -1119,7 +1127,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                             )}
                           </td>
                           <td className="py-2.5 px-3 font-mono font-bold text-[var(--text-primary)]">
-                            {log.duration.toFixed(2)}h
+                            {formatDuration(log.duration)}
                           </td>
                           <td className="py-2.5 px-3">
                             <div className="flex flex-col gap-0.5">
