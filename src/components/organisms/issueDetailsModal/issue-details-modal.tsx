@@ -43,12 +43,10 @@ import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } 
 import useSessionStore from "@/store/session-store";
 
 const STATUS_SELECT_COLORS: Record<string, string> = {
-  "Backlog":          "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
-  "Assigned":         "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 focus:border-blue-400 focus:ring-blue-400/20",
-  "Planned Solution": "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 focus:border-amber-400 focus:ring-amber-400/20",
+  "To Do":            "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
   "In Progress":      "border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-300 focus:border-indigo-400 focus:ring-indigo-400/20",
-  "Testing":          "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
-  "Resolved":         "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
+  "Review":           "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
+  "Done":             "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
   "Closed":           "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 focus:border-rose-400 focus:ring-rose-400/20",
 };
 
@@ -246,7 +244,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
       await stopTimerMutation.mutateAsync({ issueId: issue._id });
-      toast.success("Work ended. Issue moved to Testing.");
+      toast.success("Work ended. Issue moved to Review.");
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to end work session.");
     }
