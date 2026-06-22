@@ -6,6 +6,7 @@ import {
   CheckSquare,
   Search,
   ChevronDown,
+  ChevronUp,
   X,
   FolderKanban,
   ArrowLeft,
@@ -14,6 +15,10 @@ import {
   Calendar,
   Eye,
   AlertCircle,
+  Plus,
+  LayoutGrid,
+  List,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button, Input, Select } from "@/components";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
@@ -142,12 +147,22 @@ function ProjectTasksCard({
   onToggle,
   onBack,
   allUsers,
+  viewMode,
+  showAddTask,
+  filterSearch,
+  filterPriority,
+  filterAssignee,
 }: {
   group: ProjectGroup;
   isExpanded: boolean;
   onToggle: () => void;
   onBack?: () => void;
   allUsers: User[];
+  viewMode?: "kanban" | "list";
+  showAddTask?: boolean;
+  filterSearch?: string;
+  filterPriority?: string;
+  filterAssignee?: string;
 }) {
   const { data: tasks = [], isLoading } = useGetProjectTasks(group.id);
   const [subTab, setSubTab] = useState<"active" | "history">("active");
@@ -244,7 +259,7 @@ function ProjectTasksCard({
           </div>
 
           {subTab === "active" ? (
-            <TasksTab projectId={group.id} members={allUsers} />
+            <TasksTab projectId={group.id} members={allUsers} externalViewMode={viewMode} showAddTaskExternal={showAddTask} filterSearch={filterSearch} filterPriority={filterPriority} filterAssignee={filterAssignee} />
           ) : (
             <CompletedTasksHistory tasks={tasks} onTaskClick={(t) => setSelectedTask(t)} />
           )}
@@ -310,9 +325,14 @@ function ProjectTasksCard({
 }
 
 function TasksPageContent() {
-  const [search, setSearch] = useState("");
   const [mounted, setMounted] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterSearch, setFilterSearch] = useState("");
+  const [filterPriority, setFilterPriority] = useState("");
+  const [filterAssignee, setFilterAssignee] = useState("");
+  const [addTaskTrigger, setAddTaskTrigger] = useState(false);
 
   const searchParams = useSearchParams();
   const projectQuery = searchParams.get("project") || searchParams.get("projectId");
@@ -335,7 +355,6 @@ function TasksPageContent() {
   const groupedByProject = useMemo(() => {
     const list: ProjectGroup[] = [];
     projects.forEach((proj) => {
-      if (search && !proj.name.toLowerCase().includes(search.toLowerCase())) return;
       const clientObj = typeof proj.client === "object" ? proj.client : null;
       list.push({
         id: proj._id,
@@ -345,7 +364,7 @@ function TasksPageContent() {
       });
     });
     return list;
-  }, [projects, search]);
+  }, [projects]);
 
   const activeGroup = useMemo(() => {
     if (!activeProjectId) return null;
@@ -373,18 +392,104 @@ function TasksPageContent() {
           </p>
         </div>
 
-        {!activeGroup && (
-          <div className="relative w-full sm:max-w-xs shrink-0">
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          {/* View Switcher Toggle */}
+          <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
+            <button
+              onClick={() => setViewMode("kanban")}
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                viewMode === "kanban"
+                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+              }`}
+              title="Kanban View"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Kanban</span>
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                viewMode === "list"
+                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+              }`}
+              title="List View"
+            >
+              <List className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">List</span>
+            </button>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className={`gap-1.5 font-medium shadow-sm transition-all ${
+              filterSearch || filterPriority || filterAssignee
+                ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20"
+                : showFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
+            }`}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filter
+            {(filterSearch || filterPriority || filterAssignee) && (
+              <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse" />
+            )}
+            {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </Button>
+
+          <Button
+            size="sm"
+            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
+            onClick={() => setAddTaskTrigger((v) => !v)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Task
+          </Button>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      {showFilters && (
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
             <Input
-              placeholder="Search projects..."
-              className="pl-9 h-9.5 bg-[var(--surface)] border-[var(--border)]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
             />
           </div>
-        )}
-      </div>
+          <Select
+            placeholder="All Priorities"
+            value={filterPriority}
+            onChange={(v) => setFilterPriority(v)}
+            options={[
+              { label: "All Priorities", value: "" },
+              ...(["Critical", "High", "Medium", "Low"] as const).map((p) => ({ label: p, value: p })),
+            ]}
+            className="w-44 h-9.5 bg-[var(--background)]"
+          />
+          <Select
+            placeholder="All Assignees"
+            value={filterAssignee}
+            onChange={(v) => setFilterAssignee(v)}
+            options={[
+              { label: "All Assignees", value: "" },
+              ...allUsers.map((u) => ({ label: u.name, value: u._id })),
+            ]}
+            className="w-48 h-9.5 bg-[var(--background)]"
+          />
+          {(filterSearch || filterPriority || filterAssignee) && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterSearch(""); setFilterPriority(""); setFilterAssignee(""); }} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
+              <X className="h-3.5 w-3.5" />
+              Reset Filters
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoadingProjects ? (
@@ -399,6 +504,11 @@ function TasksPageContent() {
             onToggle={() => setActiveProjectId(null)}
             onBack={() => setActiveProjectId(null)}
             allUsers={allUsers}
+            viewMode={viewMode}
+            showAddTask={addTaskTrigger}
+            filterSearch={filterSearch}
+            filterPriority={filterPriority}
+            filterAssignee={filterAssignee}
           />
         ) : groupedByProject.length > 0 ? (
           groupedByProject.map((group) => (
@@ -408,6 +518,10 @@ function TasksPageContent() {
               isExpanded={false}
               onToggle={() => setActiveProjectId(group.id)}
               allUsers={allUsers}
+              viewMode={viewMode}
+              filterSearch={filterSearch}
+              filterPriority={filterPriority}
+              filterAssignee={filterAssignee}
             />
           ))
         ) : (
