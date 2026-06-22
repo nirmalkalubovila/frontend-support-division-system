@@ -913,9 +913,10 @@ function FilterBar({ search, setSearch, filterPriority, setFilterPriority, filte
 interface KanbanBoardProps {
   projectId: string;
   members: User[];
+  hideToolbar?: boolean;
 }
 
-export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, members, hideToolbar }: KanbanBoardProps) {
   const { data: tasks = [], isLoading, isRefetching, refetch } = useGetProjectTasks(projectId, true);
   const updateMutation = useUpdateTask(projectId);
   const deleteMutation = useDeleteTask(projectId);
@@ -1043,6 +1044,7 @@ export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
+      {!hideToolbar && (
       <div className="flex items-center gap-3 flex-wrap justify-between">
         <FilterBar
           search={search} setSearch={setSearch}
@@ -1058,6 +1060,7 @@ export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
           <Plus className="h-3.5 w-3.5" /> New Task
         </Button>
       </div>
+      )}
 
       {/* Board */}
       <div className="grid gap-4 pb-6" style={{ gridTemplateColumns: `repeat(${KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>

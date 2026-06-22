@@ -181,8 +181,8 @@ function HierarchyRow({
 // ─────────────────────────────────────────────────────────────
 // Tasks Tab
 // ─────────────────────────────────────────────────────────────
-export function TasksTab({ projectId, members }: { projectId: string; members: User[] }) {
-  const [taskView, setTaskView] = useState<"hierarchy" | "kanban">("kanban");
+export function TasksTab({ projectId, members, externalViewMode, showAddTaskExternal, filterSearch, filterPriority, filterAssignee }: { projectId: string; members: User[]; externalViewMode?: "kanban" | "list"; showAddTaskExternal?: boolean; filterSearch?: string; filterPriority?: string; filterAssignee?: string }) {
+  const [taskView, setTaskView] = useState<"hierarchy" | "kanban">(externalViewMode === "list" ? "hierarchy" : "kanban");
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [parentTask, setParentTask] = useState<Task | null>(null);
@@ -197,7 +197,13 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
   );
   const deleteMutation = useDeleteTask(projectId);
 
-  const rootTasks = useMemo(() => tasks.filter((t) => !getParentId(t)), [tasks]);
+  const rootTasks = useMemo(() => {
+    let filtered = tasks.filter((t) => !getParentId(t));
+    if (filterSearch) filtered = filtered.filter((t) => t.name.toLowerCase().includes(filterSearch.toLowerCase()));
+    if (filterPriority) filtered = filtered.filter((t) => t.priority === filterPriority);
+    if (filterAssignee) filtered = filtered.filter((t) => t.assignees.some((a) => a._id === filterAssignee));
+    return filtered;
+  }, [tasks, filterSearch, filterPriority, filterAssignee]);
 
   const handleEdit = (t: Task) => { setEditingTask(t); setParentTask(null); setDrawerTask(null); setShowForm(true); };
   const handleAddChild = (t: Task) => { setEditingTask(null); setParentTask(t); setShowForm(true); };
@@ -210,8 +216,22 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
     } catch { toast.error("Failed to delete task."); }
   };
 
+  // Sync external view mode
+  React.useEffect(() => {
+    if (externalViewMode === "list") setTaskView("hierarchy");
+    else if (externalViewMode === "kanban") setTaskView("kanban");
+  }, [externalViewMode]);
+
+  // Open form when triggered externally
+  React.useEffect(() => {
+    if (showAddTaskExternal) { setEditingTask(null); setParentTask(null); setShowForm(true); }
+  }, [showAddTaskExternal]);
+
+
+
   return (
     <div className="space-y-4">
+      {!externalViewMode && (
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
           <button onClick={() => setTaskView("hierarchy")}
@@ -235,9 +255,10 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
           </Button>
         )}
       </div>
+      )}
 
       {taskView === "kanban" ? (
-        <KanbanBoard projectId={projectId} members={members} />
+        <KanbanBoard projectId={projectId} members={members} hideToolbar={!!externalViewMode} />
       ) : isLoading ? (
         <div className="space-y-2">{[1,2,3,4].map((i) => <div key={i} className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />)}</div>
       ) : tasks.length === 0 ? (
@@ -317,18 +338,68 @@ export function TasksTab({ projectId, members }: { projectId: string; members: U
 // ─────────────────────────────────────────────────────────────
 // CR Tab
 // ─────────────────────────────────────────────────────────────
-export function CRTab({ projectId, members }: { projectId: string; members: User[] }) {
-  const [crView, setCRView] = useState<"list" | "kanban">("kanban");
+export function CRTab({
+  projectId,
+  members,
+  viewMode: controlledViewMode,
+  onNewCR,
+  openFormTrigger,
+  filterPriority,
+  filterStatus,
+  filterSearch,
+}: {
+  projectId: string;
+  members: User[];
+  /** When provided (from the CR page), the view toggle is controlled externally */
+  viewMode?: "list" | "kanban";
+  /** Kept for backward compat but not used; use openFormTrigger instead */
+  onNewCR?: () => void;
+  /** Increment this number to open the new CR form from a parent component */
+  openFormTrigger?: number;
+  filterPriority?: string;
+  filterStatus?: string;
+  filterSearch?: string;
+}) {
+  const [internalCRView, setInternalCRView] = useState<"list" | "kanban">("kanban");
+  const crView = controlledViewMode ?? internalCRView;
+  const setCRView = controlledViewMode !== undefined ? () => {} : setInternalCRView;
+
   const [showForm, setShowForm] = useState(false);
   const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
   const [drawerCR, setDrawerCR] = useState<ChangeRequest | null>(null);
   const [crToDelete, setCRToDelete] = useState<ChangeRequest | null>(null);
   const [defaultStatus, setDefaultStatus] = useState<CRStatus>("To Do");
 
+  // Open the new CR form whenever the parent increments openFormTrigger
+  React.useEffect(() => {
+    if (openFormTrigger && openFormTrigger > 0) {
+      setEditingCR(null);
+      setShowForm(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openFormTrigger]);
+
   const { data: crsData, isLoading: crsLoading } = useGetProjectCRs(projectId);
   const deleteMutation = useDeleteCR(projectId);
 
   const crs = crsData?.data ?? [];
+
+  // Apply filters when controlled from outside (CR page)
+  const filteredCRs = useMemo(() => {
+    if (!controlledViewMode) return crs; // no external filters on project-page tab
+    return crs.filter((cr) => {
+      if (filterPriority && cr.priority !== filterPriority) return false;
+      if (filterStatus && cr.status !== filterStatus) return false;
+      if (filterSearch) {
+        const q = filterSearch.toLowerCase();
+        if (
+          !cr.title.toLowerCase().includes(q) &&
+          !(cr.crNumber ?? "").toLowerCase().includes(q)
+        ) return false;
+      }
+      return true;
+    });
+  }, [crs, controlledViewMode, filterPriority, filterStatus, filterSearch]);
 
   // Keep drawer CR in sync with latest data
   const currentDrawerCR = useMemo(
@@ -346,9 +417,13 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
     } catch { toast.error("Failed to delete CR."); }
   };
 
+  // Wire external "New CR" trigger to open the form
+  const handleNewCR = () => { setEditingCR(null); setShowForm(true); };
+
   return (
     <div className="space-y-5">
-      {/* Toolbar */}
+      {/* Toolbar — only shown when NOT controlled from outside (i.e. on the project page) */}
+      {controlledViewMode === undefined && (
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--background)] border border-[var(--border)]">
           <button onClick={() => setCRView("list")}
@@ -366,12 +441,13 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
         </div>
 
         {crView === "list" && (
-          <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
+          <Button size="sm" onClick={handleNewCR}
             className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9">
             <Plus className="h-3.5 w-3.5" /> New Change Request
           </Button>
         )}
       </div>
+      )}
 
       {/* Kanban View */}
       {crView === "kanban" && (
@@ -389,15 +465,21 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
       {crView === "list" && (
         crsLoading ? (
           <div className="space-y-2">{[1,2,3].map((i) => <div key={i} className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />)}</div>
-        ) : crs.length === 0 ? (
+        ) : filteredCRs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <GitPullRequest className="h-10 w-10 text-[var(--text-tertiary)] mb-3" />
-            <p className="text-sm font-semibold text-[var(--text-primary)]">No change requests yet</p>
-            <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">Create your first CR to start tracking changes.</p>
-            <Button size="sm" onClick={() => { setEditingCR(null); setShowForm(true); }}
-              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
-              <Plus className="h-3.5 w-3.5" /> New Change Request
-            </Button>
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              {crs.length === 0 ? "No change requests yet" : "No CRs match the current filters"}
+            </p>
+            <p className="text-xs text-[var(--text-secondary)] mt-1 mb-4">
+              {crs.length === 0 ? "Create your first CR to start tracking changes." : "Try adjusting your filters."}
+            </p>
+            {crs.length === 0 && (
+              <Button size="sm" onClick={handleNewCR}
+                className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
+                <Plus className="h-3.5 w-3.5" /> New Change Request
+              </Button>
+            )}
           </div>
         ) : (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
@@ -408,7 +490,7 @@ export function CRTab({ projectId, members }: { projectId: string; members: User
               ))}
             </div>
             <div className="divide-y divide-[var(--border)]">
-              {crs.map((cr) => {
+              {filteredCRs.map((cr) => {
                 return (
                   <div
                     key={cr._id}

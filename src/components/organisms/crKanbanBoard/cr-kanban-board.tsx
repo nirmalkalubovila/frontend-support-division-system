@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useState, useMemo, useCallback, useEffect } from "react";
-import { Plus, Search, X, RefreshCw, Eye, Pencil, Trash2, Clock, Paperclip, AlertCircle, CheckSquare } from "lucide-react";
+import React, { useState, useMemo, useCallback } from "react";
+import { Plus, Eye, Pencil, Trash2, Clock, Paperclip, AlertCircle, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { useGetProjectCRs, useUpdateCR, type ChangeRequest, type CRStatus } from "@/api/services/project-management/cr-service";
 import type { User } from "@/api/services/user-management/user-service";
@@ -252,7 +251,7 @@ interface CRKanbanBoardProps {
 }
 
 export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete, onAdd }: CRKanbanBoardProps) {
-  const { data, isLoading, isRefetching, refetch } = useGetProjectCRs(projectId);
+  const { data, isLoading } = useGetProjectCRs(projectId);
   const updateMutation = useUpdateCR(projectId);
   const userInfo = useSessionStore((s) => s.userInfo);
   const canEdit = userInfo ? ["super_admin", "manager", "senior_engineer", "engineer"].includes(userInfo.role) : false;
@@ -262,21 +261,14 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
 
   const [draggingCR, setDraggingCR] = useState<ChangeRequest | null>(null);
   const [dragOverStatus, setDragOverStatus] = useState<CRStatus | null>(null);
-  const [search, setSearch] = useState("");
 
   const crs = data?.data ?? [];
 
-  const filtered = useMemo(() => {
-    if (!search.trim()) return crs;
-    const q = search.toLowerCase();
-    return crs.filter((c) => c.title.toLowerCase().includes(q) || c.crNumber.toLowerCase().includes(q));
-  }, [crs, search]);
-
   const crsByStatus = useMemo(() => {
     const map = Object.fromEntries(CR_KANBAN_STATUSES.map((s) => [s, [] as ChangeRequest[]])) as Record<CRStatus, ChangeRequest[]>;
-    filtered.forEach((c) => { if (map[c.status]) map[c.status].push(c); });
+    crs.forEach((c) => { if (map[c.status]) map[c.status].push(c); });
     return map;
-  }, [filtered]);
+  }, [crs]);
 
   const handleDragStart = useCallback((e: React.DragEvent, cr: ChangeRequest) => {
     e.dataTransfer.effectAllowed = "move";
@@ -313,32 +305,6 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap justify-between">
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-tertiary)]" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search CRs..."
-            className="pl-8 h-9 bg-[var(--surface)] border-[var(--border)] text-sm" />
-          {search && (
-            <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => refetch()}
-            className={`h-9 w-9 flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-secondary)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all ${isRefetching ? "animate-spin" : ""}`}>
-            <RefreshCw className="h-3.5 w-3.5" />
-          </button>
-          {canEdit && (
-            <Button size="sm" onClick={() => onAdd()}
-              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9 shrink-0">
-              <Plus className="h-3.5 w-3.5" /> New CR
-            </Button>
-          )}
-        </div>
-      </div>
-
       {/* Board */}
       <div className="overflow-x-auto pb-4">
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${CR_KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>
