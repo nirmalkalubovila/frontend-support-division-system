@@ -6,15 +6,24 @@ import {
   GitPullRequest,
   Search,
   ChevronDown,
+  ChevronUp,
   X,
   FolderKanban,
   ArrowLeft,
+  Plus,
+  LayoutGrid,
+  List,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button, Input, Select } from "@/components";
+import { ValidatePermission } from "@/components/atoms/validatePermission";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { useGetCRStats } from "@/api/services/project-management/cr-service";
 import { CRTab } from "../projects/[projectId]/tabs";
+
+const CR_PRIORITIES = ["Critical", "High", "Medium", "Low"];
+const CR_STATUSES = ["Submitted", "Under Review", "Approved", "Rejected", "In Progress", "Done", "On Hold"];
 
 interface ProjectGroup {
   id: string;
@@ -29,12 +38,22 @@ function ProjectCRCard({
   onToggle,
   onBack,
   allUsers,
+  viewMode,
+  openFormTrigger,
+  filterPriority,
+  filterStatus,
+  filterSearch,
 }: {
   group: ProjectGroup;
   isExpanded: boolean;
   onToggle: () => void;
   onBack?: () => void;
   allUsers: User[];
+  viewMode?: "list" | "kanban";
+  openFormTrigger?: number;
+  filterPriority?: string;
+  filterStatus?: string;
+  filterSearch?: string;
 }) {
   const { data: stats } = useGetCRStats(group.id);
 
@@ -96,7 +115,15 @@ function ProjectCRCard({
         </div>
 
         <div className="p-5 border-t border-[var(--border)] bg-[var(--surface)]/40 dark:bg-[var(--surface)]/5">
-          <CRTab projectId={group.id} members={allUsers} />
+          <CRTab
+            projectId={group.id}
+            members={allUsers}
+            viewMode={viewMode}
+            openFormTrigger={openFormTrigger}
+            filterPriority={filterPriority}
+            filterStatus={filterStatus}
+            filterSearch={filterSearch}
+          />
         </div>
       </div>
     );
@@ -147,6 +174,12 @@ function CRPageContent() {
   const [search, setSearch] = useState("");
   const [mounted, setMounted] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "kanban">("kanban");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterPriority, setFilterPriority] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
+  const [triggerNewCR, setTriggerNewCR] = useState(0);
 
   const searchParams = useSearchParams();
   const projectQuery = searchParams.get("project") || searchParams.get("projectId");
@@ -186,6 +219,14 @@ function CRPageContent() {
     return groupedByProject.find((g) => g.id === activeProjectId) || null;
   }, [activeProjectId, groupedByProject]);
 
+  const hasActiveFilters = !!filterPriority || !!filterStatus || !!filterSearch;
+
+  const clearFilters = () => {
+    setFilterPriority("");
+    setFilterStatus("");
+    setFilterSearch("");
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -207,18 +248,120 @@ function CRPageContent() {
           </p>
         </div>
 
-        {!activeGroup && (
-          <div className="relative w-full sm:max-w-xs shrink-0">
+        <div className="flex items-center gap-2.5 self-end sm:self-auto">
+          {!activeGroup && (
+            <div className="relative w-full sm:max-w-xs shrink-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-9 h-9.5 bg-[var(--surface)] border-[var(--border)]"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          )}
+
+          {activeGroup && (
+            <>
+              {/* View Switcher Toggle */}
+              <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
+                <button
+                  onClick={() => setViewMode("kanban")}
+                  className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                    viewMode === "kanban"
+                      ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                      : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                  }`}
+                  title="Kanban View"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">Kanban</span>
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                    viewMode === "list"
+                      ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                      : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                  }`}
+                  title="List View"
+                >
+                  <List className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline">List</span>
+                </button>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className={`gap-1.5 font-medium shadow-sm transition-all ${
+                  hasActiveFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
+                }`}
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filter
+                {hasActiveFilters && (
+                  <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse" />
+                )}
+                {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+
+              <ValidatePermission permission="projects.cr.create">
+                <Button
+                  size="sm"
+                  className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
+                  onClick={() => setTriggerNewCR((n) => n + 1)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New CR
+                </Button>
+              </ValidatePermission>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Filter Bar — only shown when a project is active */}
+      {activeGroup && showFilters && (
+        <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
+          <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
             <Input
-              placeholder="Search projects..."
-              className="pl-9 h-9.5 bg-[var(--surface)] border-[var(--border)]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by title or CR number..."
+              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+              value={filterSearch}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterSearch(e.target.value)}
             />
           </div>
-        )}
-      </div>
+          <Select
+            placeholder="All Priorities"
+            value={filterPriority}
+            onChange={(v) => setFilterPriority(v)}
+            options={[
+              { label: "All Priorities", value: "" },
+              ...CR_PRIORITIES.map((p) => ({ label: p, value: p })),
+            ]}
+            className="w-44 h-9.5 bg-[var(--background)]"
+          />
+          <Select
+            placeholder="All Statuses"
+            value={filterStatus}
+            onChange={(v) => setFilterStatus(v)}
+            options={[
+              { label: "All Statuses", value: "" },
+              ...CR_STATUSES.map((s) => ({ label: s, value: s })),
+            ]}
+            className="w-48 h-9.5 bg-[var(--background)]"
+          />
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
+              <X className="h-3.5 w-3.5" />
+              Reset Filters
+            </Button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoadingProjects ? (
@@ -233,6 +376,11 @@ function CRPageContent() {
             onToggle={() => setActiveProjectId(null)}
             onBack={() => setActiveProjectId(null)}
             allUsers={allUsers}
+            viewMode={viewMode}
+            openFormTrigger={triggerNewCR}
+            filterPriority={filterPriority}
+            filterStatus={filterStatus}
+            filterSearch={filterSearch}
           />
         ) : groupedByProject.length > 0 ? (
           groupedByProject.map((group) => (

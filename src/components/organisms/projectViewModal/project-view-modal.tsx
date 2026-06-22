@@ -111,34 +111,47 @@ export function ProjectViewModal({ project, open, onOpenChange }: ProjectViewMod
             </div>
           )}
 
-          {/* Main Contact */}
-          {(project.mainContact?.name || project.mainContact?.email || project.mainContact?.phone) && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Main Contact</h4>
-              <div className="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-2">
-                {project.mainContact.name && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <User className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
-                    <span className="font-medium text-[var(--text-primary)]">{project.mainContact.name}</span>
-                  </div>
-                )}
-                {project.mainContact.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
-                    <a href={`mailto:${project.mainContact.email}`} className="text-[var(--primary)] hover:underline font-medium">
-                      {project.mainContact.email}
-                    </a>
-                  </div>
-                )}
-                {project.mainContact.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
-                    <span className="font-medium text-[var(--text-primary)]">{project.mainContact.phone}</span>
-                  </div>
-                )}
+          {/* Contact Points */}
+          {(() => {
+            const contacts = Array.isArray(project.mainContacts) && project.mainContacts.length > 0
+              ? project.mainContacts
+              : project.mainContact && (project.mainContact.name || project.mainContact.email || project.mainContact.phone)
+                ? [project.mainContact]
+                : [];
+            if (contacts.length === 0) return null;
+            return (
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Contact Points</h4>
+                <div className="rounded-xl bg-[var(--background)] border border-[var(--border)] divide-y divide-[var(--border)]">
+                  {contacts.map((c, i) => (
+                    <div key={i} className="p-3.5 space-y-2">
+                      {contacts.length > 1 && (
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">Contact {i + 1}</p>
+                      )}
+                      {c.name && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <User className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
+                          <span className="font-medium text-[var(--text-primary)]">{c.name}</span>
+                        </div>
+                      )}
+                      {c.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
+                          <a href={`mailto:${c.email}`} className="text-[var(--primary)] hover:underline font-medium">{c.email}</a>
+                        </div>
+                      )}
+                      {c.phone && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-3.5 w-3.5 text-[var(--text-tertiary)] shrink-0" />
+                          <span className="font-medium text-[var(--text-primary)]">{c.phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Tech Stack */}
           {project.techStack?.length > 0 && (

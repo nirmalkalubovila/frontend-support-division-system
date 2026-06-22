@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
@@ -150,42 +152,40 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
   const devNames = cr.assignedDevelopers?.map((d) => (typeof d === "object" ? d.name : d)) ?? [];
 
-  const drawer = (
-    <div className="fixed inset-0 top-14 z-[9999] flex justify-end pointer-events-none">
-      <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] cursor-pointer pointer-events-auto" onClick={onClose} aria-hidden="true" />
-      <div
-        className="relative w-full max-w-lg h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 pointer-events-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Dialog open={!!cr} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh] flex flex-col">
+        
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 p-5 border-b border-[var(--border)] shrink-0">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
+        <DialogHeader className="space-y-2.5 border-b border-[var(--border)] pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[10px] font-bold text-[var(--text-tertiary)] font-mono">{cr.crNumber}</span>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${STATUS_BADGE[cr.status] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>{cr.status}</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${PRIORITY_CONFIG[cr.priority]?.badge}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[cr.priority]?.dot}`} />{cr.priority}
+                <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[cr.priority]?.dot}`} />{cr.priority} Priority
               </span>
             </div>
-            <h2 className="text-sm font-bold text-[var(--text-primary)] leading-snug">{cr.title}</h2>
-            <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{cr.crType}</p>
+            <div className="flex items-center gap-1">
+              {canEdit && (
+                <>
+                  <button onClick={() => onEdit(cr)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => onDelete(cr)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {canEdit && (
-              <>
-                <button onClick={() => onEdit(cr)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors"><Pencil className="h-4 w-4" /></button>
-                <button onClick={() => onDelete(cr)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></button>
-              </>
-            )}
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] transition-colors"><X className="h-4 w-4" /></button>
-          </div>
-        </div>
+          <DialogTitle className="text-xl font-bold text-[var(--text-primary)] leading-snug">
+            {cr.title}
+          </DialogTitle>
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5 font-medium">{cr.crType}</p>
+        </DialogHeader>
 
         {/* Tab nav */}
-        <div className="flex border-b border-[var(--border)] px-5 shrink-0 overflow-x-auto">
+        <div className="flex border-b border-[var(--border)] px-1 shrink-0 overflow-x-auto mb-4">
           {tabs.map((t) => (
             <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={`py-2.5 px-3 text-xs font-semibold border-b-2 -mb-px whitespace-nowrap transition-all ${
+              className={`py-2 px-3 text-xs font-semibold border-b-2 -mb-px whitespace-nowrap transition-all ${
                 activeTab === t.key ? "border-[var(--primary)] text-[var(--primary)]" : "border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               }`}>
               {t.label}
@@ -194,7 +194,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 min-h-0">
 
           {/* ── Overview ── */}
           {activeTab === "overview" && (
@@ -294,77 +294,144 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
               {/* Key info grid */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Requested By", value: cr.requestedBy || "—" },
-                  { label: "Requested Date", value: fmtDate(cr.requestedDate) },
-                  { label: "Target Release", value: fmtDate(cr.targetReleaseDate) },
-                  { label: "Est. Hours", value: cr.estimatedHours != null ? `${cr.estimatedHours}h` : "—" },
-                  { label: "Actual Hours", value: cr.actualHours != null ? `${cr.actualHours}h` : "—" },
-                  { label: "Est. Cost", value: cr.estimatedCost != null ? `$${cr.estimatedCost.toLocaleString()}` : "—" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="space-y-0.5">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{label}</p>
-                    <p className="text-sm font-medium text-[var(--text-primary)]">{value}</p>
+                  { label: "Description", value: cr.description },
+                  { label: "Business Justification", value: cr.businessJustification },
+                  { label: "Technical Approach", value: cr.technicalApproach },
+                  { label: "Impact Analysis", value: cr.impactAnalysis },
+                  { label: "Dependencies", value: cr.dependencies },
+                  { label: "Risks", value: cr.risks },
+                ].filter((f) => f.value).map(({ label, value }) => (
+                  <div key={label} className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
+                    <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-xl p-4 border border-[var(--border)]">{value}</p>
                   </div>
                 ))}
+
+                {/* Related Links */}
+                {cr.relatedLinks?.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
+                    {cr.relatedLinks.map((l, i) => (
+                      <a key={i} href={l.url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-[var(--primary)] group transition-all">
+                        <LinkIcon className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
+                        <span className="text-xs text-[var(--primary)] truncate flex-1">{l.label || l.url}</span>
+                        <ExternalLink className="h-3 w-3 text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <Separator className="bg-[var(--border)]" />
-
-              {/* Team */}
-              {(pmName || devNames.length > 0) && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Team</Label>
-                  {pmName && (
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{pmName.charAt(0)}</div>
-                      <div>
-                        <p className="text-xs font-semibold text-[var(--text-primary)]">{pmName}</p>
-                        <p className="text-[10px] text-[var(--text-tertiary)]">Project Manager</p>
-                      </div>
-                    </div>
-                  )}
-                  {devNames.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-1">
-                      {devNames.map((n, i) => (
-                        <span key={i} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.08)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]">
-                          <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />{n}
-                        </span>
+              {/* Right Column */}
+              <div className="lg:col-span-5 space-y-6 flex flex-col justify-start">
+                {/* Status transitions */}
+                {canEdit && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to Status</Label>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {CR_STATUSES.map((s) => (
+                        <button key={s} onClick={() => handleStatusChange(s)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                            cr.status === s
+                              ? (STATUS_BADGE[s] ?? "") + " ring-1 ring-current"
+                              : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                          }`}>
+                          {s}
+                        </button>
                       ))}
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                )}
 
-              {/* Text fields */}
-              {[
-                { label: "Description", value: cr.description },
-                { label: "Business Justification", value: cr.businessJustification },
-                { label: "Technical Approach", value: cr.technicalApproach },
-                { label: "Impact Analysis", value: cr.impactAnalysis },
-                { label: "Dependencies", value: cr.dependencies },
-                { label: "Risks", value: cr.risks },
-              ].filter((f) => f.value).map(({ label, value }) => (
-                <div key={label} className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{label}</Label>
-                  <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">{value}</p>
-                </div>
-              ))}
+                {/* Priority */}
+                {canEdit && (
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Priority</Label>
+                    <div className="flex gap-1.5">
+                      {CR_PRIORITIES.map((p) => (
+                        <button key={p} onClick={() => handlePriorityChange(p)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-all ${
+                            cr.priority === p
+                              ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
+                              : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                          }`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {/* Related Links */}
-              {cr.relatedLinks?.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
-                  {cr.relatedLinks.map((l, i) => (
-                    <a key={i} href={l.url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-2 p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-[var(--primary)] group transition-all">
-                      <LinkIcon className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
-                      <span className="text-xs text-[var(--primary)] truncate flex-1">{l.label || l.url}</span>
-                      <ExternalLink className="h-3 w-3 text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100" />
-                    </a>
+                {/* Task progress quick view */}
+                {(cr.taskProgress?.total ?? 0) > 0 && (
+                  <div className="space-y-2 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                        <CheckSquare className="h-3.5 w-3.5" /> Task Progress
+                      </Label>
+                      <button onClick={() => setActiveTab("tasks")}
+                        className="text-[10px] text-[var(--primary)] font-semibold hover:underline">
+                        View Tasks →
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-2 rounded-full bg-[var(--surface-hover)] overflow-hidden border border-[var(--border)]/30">
+                        <div
+                          className="h-full bg-gradient-to-r from-[var(--primary)] to-emerald-500 transition-all duration-500 rounded-full"
+                          style={{ width: `${cr.taskProgress?.completionPercentage ?? 0}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-bold text-[var(--primary)] shrink-0">
+                        {cr.taskProgress?.done}/{cr.taskProgress?.total} done
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Key info grid */}
+                <div className="grid grid-cols-2 gap-3 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
+                  {[
+                    { label: "Requested By", value: cr.requestedBy || "—" },
+                    { label: "Requested Date", value: fmtDate(cr.requestedDate) },
+                    { label: "Target Release", value: fmtDate(cr.targetReleaseDate) },
+                    { label: "Est. Hours", value: cr.estimatedHours != null ? `${cr.estimatedHours}h` : "—" },
+                    { label: "Actual Hours", value: cr.actualHours != null ? `${cr.actualHours}h` : "—" },
+                    { label: "Est. Cost", value: cr.estimatedCost != null ? `$${cr.estimatedCost.toLocaleString()}` : "—" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="space-y-0.5">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">{label}</p>
+                      <p className="text-sm font-semibold text-[var(--text-primary)]">{value}</p>
+                    </div>
                   ))}
                 </div>
-              )}
-            </>
+
+                {/* Team */}
+                {(pmName || devNames.length > 0) && (
+                  <div className="space-y-2 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Team</Label>
+                    {pmName && (
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{pmName.charAt(0)}</div>
+                        <div>
+                          <p className="text-xs font-semibold text-[var(--text-primary)]">{pmName}</p>
+                          <p className="text-[10px] text-[var(--text-tertiary)]">Project Manager</p>
+                        </div>
+                      </div>
+                    )}
+                    {devNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-1">
+                        {devNames.map((n, i) => (
+                          <span key={i} className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.08)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />{n}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* ── Tasks ── */}
@@ -452,8 +519,8 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 
   const approvalDialog = (

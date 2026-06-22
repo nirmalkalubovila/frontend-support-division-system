@@ -225,7 +225,7 @@ function ProjectCard({
   onAddIssue,
 }: {
   group: ProjectGroup;
-  viewMode: "board" | "list";
+  viewMode: "kanban" | "list";
   isExpanded: boolean;
   onToggle: () => void;
   onIssueClick: (issue: Issue) => void;
@@ -822,7 +822,7 @@ function IssuesPageContent() {
   const [search, setSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterType, setFilterType] = useState("");
-  const [viewMode, setViewMode] = useState<"board" | "list">("board");
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
   const [mounted, setMounted] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
@@ -963,15 +963,15 @@ function IssuesPageContent() {
           {/* View Switcher Toggle */}
           <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
             <button
-              onClick={() => setViewMode("board")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "board"
+              onClick={() => setViewMode("kanban")}
+              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "kanban"
                   ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
                   : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
                 }`}
-              title="Board View"
+              title="Kanban View"
             >
               <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Board</span>
+              <span className="hidden md:inline">Kanban</span>
             </button>
             <button
               onClick={() => setViewMode("list")}

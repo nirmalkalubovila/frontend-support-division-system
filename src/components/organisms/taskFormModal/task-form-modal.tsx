@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  useCreateTask, useUpdateTask,
+  useGetProjectTasks, useCreateTask, useUpdateTask,
   type Task, type CreateTaskPayload, type TaskStatus, type TaskPriority,
 } from "@/api/services/project-management/task-service";
 import type { User } from "@/api/services/user-management/user-service";
@@ -51,6 +51,7 @@ const makeEmpty = (defaultStatus: TaskStatus = "To Do"): CreateTaskPayload => ({
   startDate: null,
   endDate: null,
   assignees: [],
+  dependencies: [],
   relatedLinks: [],
   parent: null,
   cr: null,
@@ -67,6 +68,9 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
   const [linkLabel, setLinkLabel] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
 
+  const { data: allTasks = [] } = useGetProjectTasks(projectId);
+  const eligibleTasks = allTasks.filter((t) => t._id !== task?._id);
+
   useEffect(() => {
     if (!open) return;
     if (task) {
@@ -78,6 +82,7 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
         startDate: task.startDate ? task.startDate.split("T")[0] : null,
         endDate: task.endDate ? task.endDate.split("T")[0] : null,
         assignees: task.assignees.map((a) => a._id),
+        dependencies: task.dependencies ? task.dependencies.map((d: any) => typeof d === "object" ? d._id : d) : [],
         relatedLinks: task.relatedLinks || [],
         parent: typeof task.parent === "string" ? task.parent : null,
       });
@@ -235,6 +240,48 @@ export function TaskFormModal({ open, onOpenChange, projectId, task, parentTask,
               </div>
             </div>
           )}
+
+          {/* Predecessors (Dependencies) */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Predecessor Tasks (Dependencies)</Label>
+            {eligibleTasks.length > 0 ? (
+              <div className="border border-[var(--border)] rounded-lg bg-[var(--background)] p-3 max-h-[140px] overflow-y-auto space-y-2">
+                {eligibleTasks.map((t) => {
+                  const isChecked = form.dependencies?.includes(t._id);
+                  return (
+                    <label key={t._id} className="flex items-start gap-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--surface-hover)] p-1 rounded cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          setForm((prev) => {
+                            const current = prev.dependencies || [];
+                            const next = current.includes(t._id)
+                              ? current.filter((id) => id !== t._id)
+                              : [...current, t._id];
+                            return { ...prev, dependencies: next };
+                          });
+                        }}
+                        className="mt-0.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]/20"
+                      />
+                      <div className="flex flex-col">
+                        <span>{t.name}</span>
+                        {t.endDate && (
+                          <span className="text-[10px] text-[var(--text-tertiary)]">
+                            Ends: {new Date(t.endDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--text-tertiary)] italic p-2 border border-dashed border-[var(--border)] rounded-lg text-center">
+                No other tasks in this project to set as dependencies.
+              </p>
+            )}
+          </div>
 
           {/* Description */}
           <div className="space-y-1.5">

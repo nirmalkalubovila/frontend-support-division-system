@@ -35,7 +35,9 @@ export interface Project extends GlobalRecords {
   endDate?: string | null;
   projectType: ("Development" | "Support")[];
   mainContact?: MainContact;
+  mainContacts: MainContact[];
   techStack: string[];
+  stage?: 'development' | 'support';
 }
 
 export interface CreateProjectPayload {
@@ -50,8 +52,9 @@ export interface CreateProjectPayload {
   startDate?: string | null;
   endDate?: string | null;
   projectType?: string[];
-  mainContact?: MainContact;
+  mainContacts?: MainContact[];
   techStack?: string[];
+  stage?: 'development' | 'support';
 }
 
 export type UpdateProjectPayload = Partial<CreateProjectPayload> & { isActive?: boolean };
@@ -62,7 +65,7 @@ export type UpdateProjectPayload = Partial<CreateProjectPayload> & { isActive?: 
 
 function toFormData(data: CreateProjectPayload | UpdateProjectPayload): FormData {
   const fd = new FormData();
-  const { photo, projectType, techStack, members, mainContact, ...rest } = data as any;
+  const { photo, projectType, techStack, members, mainContact, mainContacts, stage, ...rest } = data as any;
 
   Object.entries(rest).forEach(([k, v]) => {
     if (v !== undefined && v !== null) fd.append(k, String(v));
@@ -72,7 +75,8 @@ function toFormData(data: CreateProjectPayload | UpdateProjectPayload): FormData
   if (projectType) fd.append("projectType", JSON.stringify(projectType));
   if (techStack) fd.append("techStack", JSON.stringify(techStack));
   if (members) fd.append("members", JSON.stringify(members));
-  if (mainContact) fd.append("mainContact", JSON.stringify(mainContact));
+  if (mainContacts) fd.append("mainContacts", JSON.stringify(mainContacts));
+  if (stage) fd.append("stage", stage);
 
   return fd;
 }

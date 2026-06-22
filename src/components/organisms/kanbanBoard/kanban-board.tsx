@@ -8,7 +8,7 @@ import {
   ChevronDown, Link as LinkIcon, Paperclip, MessageSquare,
   CheckSquare, AlertCircle, CheckCircle2,
   FileText, Image as ImageIcon, ExternalLink, RefreshCw, Wifi, WifiOff, ShieldAlert, GitPullRequest,
-  Play, Pause, Square, Loader2,
+  Play, Pause, Square, Loader2, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { TaskFormModal } from "@/components/organisms/taskFormModal/task-form-modal";
 import { WorkflowRejectionDialog } from "./workflow-rejection-dialog";
@@ -29,6 +30,13 @@ import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 import { validateTaskTransition, WORKFLOW_TRANSITIONS } from "@/lib/task-workflow";
 import { useStartTimer, useStopTimer } from "@/api/services/time-tracking/time-log-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { useStartTimer, useStopTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // ──────────────────────────────────────────────────────────────
 // Constants
@@ -38,17 +46,17 @@ export const KANBAN_STATUSES: TaskStatus[] = ["To Do", "In Progress", "Review", 
 const PRIORITIES: TaskPriority[] = ["Critical", "High", "Medium", "Low"];
 
 const COL_CONFIG: Record<TaskStatus, { dot: string; header: string; addBtn: string; card: string; badge: string; glow: string }> = {
-  "To Do":       { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",    addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200",    glow: "shadow-slate-200" },
-  "In Progress": { dot: "bg-yellow-400",  header: "bg-yellow-50 dark:bg-yellow-900/20",  addBtn: "hover:bg-yellow-100",  card: "border-yellow-200 hover:border-yellow-400",  badge: "bg-yellow-50 text-yellow-700 border-yellow-200",  glow: "shadow-yellow-200" },
-  "Review":      { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",  addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200",  glow: "shadow-indigo-200" },
-  "Done":        { dot: "bg-emerald-400", header: "bg-emerald-50 dark:bg-emerald-900/20", addBtn: "hover:bg-emerald-100", card: "border-emerald-200 hover:border-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", glow: "shadow-emerald-200" },
+  "To Do": { dot: "bg-slate-400", header: "bg-slate-50 dark:bg-slate-900/30", addBtn: "hover:bg-slate-100", card: "border-slate-200 hover:border-slate-300", badge: "bg-slate-100 text-slate-600 border-slate-200", glow: "shadow-slate-200" },
+  "In Progress": { dot: "bg-yellow-400", header: "bg-yellow-50 dark:bg-yellow-900/20", addBtn: "hover:bg-yellow-100", card: "border-yellow-200 hover:border-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200", glow: "shadow-yellow-200" },
+  "Review": { dot: "bg-indigo-400", header: "bg-indigo-50 dark:bg-indigo-900/20", addBtn: "hover:bg-indigo-100", card: "border-indigo-200 hover:border-indigo-400", badge: "bg-indigo-50 text-indigo-700 border-indigo-200", glow: "shadow-indigo-200" },
+  "Done": { dot: "bg-emerald-400", header: "bg-emerald-50 dark:bg-emerald-900/20", addBtn: "hover:bg-emerald-100", card: "border-emerald-200 hover:border-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", glow: "shadow-emerald-200" },
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, { dot: string; badge: string }> = {
-  Critical: { dot: "bg-red-500",    badge: "bg-red-50 text-red-600 border-red-200" },
-  High:     { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-600 border-orange-200" },
-  Medium:   { dot: "bg-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  Low:      { dot: "bg-green-500",  badge: "bg-green-50 text-green-700 border-green-200" },
+  Critical: { dot: "bg-red-500", badge: "bg-red-50 text-red-600 border-red-200" },
+  High: { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-600 border-orange-200" },
+  Medium: { dot: "bg-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  Low: { dot: "bg-green-500", badge: "bg-green-50 text-green-700 border-green-200" },
 };
 
 function fmtDate(d?: string | null) {
@@ -136,7 +144,18 @@ interface DrawerProps {
   onDelete: (t: Task) => void;
 }
 
+const formatDuration = (decimalHours: number): string => {
+  const totalMins = Math.round(decimalHours * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs}h ${mins}m`;
+};
+
 export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, onDelete }: DrawerProps) {
+  // Fetch time logs for this task
+  const { data: taskLogsData } = useGetTimeLogs({ task: task?._id || undefined });
+  const taskLogs = useMemo(() => taskLogsData?.data ?? [], [taskLogsData]);
+
   const canEdit = useCanEditTask(task ?? ({} as Task));
   const updateMutation = useUpdateTask(projectId);
   const uploadMutation = useUploadTaskAttachments(projectId);
@@ -284,26 +303,23 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
 
     try {
       if (wasTickingNow) {
-        // Timer is actively running — stopTimer will save the segment AND auto-move to Review
+        // Timer is actively running — stop it and save the segment
         await stopTimerMutation.mutateAsync({ taskId: task._id });
       } else {
-        // Timer was paused — the last segment was already saved by handlePauseTimer.
-        // The backend stopTimer already moved the task to Review on that pause.
-        // We still try to stop any lingering active log (edge-case: resumed briefly then ended)
+        // Timer was paused — handlePauseTimer already saved the last segment.
+        // Try to stop any lingering active log (edge case: re-started briefly then ended)
         try {
           await stopTimerMutation.mutateAsync({ taskId: task._id });
         } catch {
-          // No active log — that's expected when paused. Manually ensure task is in Review.
-          if (task.status !== "Review" && task.status !== "Done") {
-            try {
-              await updateMutation.mutateAsync({ taskId: task._id, data: { status: "Review" } });
-            } catch { /* best-effort */ }
+          // No active log is expected when paused — manually move task to Review
+          if (task.status !== 'Review' && task.status !== 'Done') {
+            try { await updateMutation.mutateAsync({ taskId: task._id, data: { status: 'Review' } }); } catch { /* best-effort */ }
           }
         }
       }
-      toast.success("Work ended. Task moved to Review.");
+      toast.success('Work ended. Task moved to Review.');
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to end work session.");
+      toast.error(err.response?.data?.message || 'Failed to end work session.');
     }
 
     timeRef.current = 0;
@@ -311,8 +327,8 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
     localStorage.removeItem(`timer_time_${task._id}`);
     localStorage.removeItem(`timer_ticking_${task._id}`);
     localStorage.removeItem(`timer_timestamp_${task._id}`);
-    window.dispatchEvent(new Event("storage"));
-  }, [task?._id, task?.status, stopTimerMutation, updateMutation, isTicking]);
+    window.dispatchEvent(new Event('storage'));
+  }, [task?._id, task?.status, isTicking, stopTimerMutation, updateMutation]);
 
   const handleStatusChange = async (toStatus: TaskStatus) => {
     if (!task || !canEdit) return;
@@ -389,21 +405,17 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
 
   const overdue = isOverdue(task.endDate, task.status);
 
-  const drawer = (
+  return (
     <>
-      <div className="fixed inset-0 top-14 z-[9999] flex justify-end pointer-events-none">
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] cursor-pointer pointer-events-auto" onClick={onClose} aria-hidden="true" />
-        <div
-          className="relative w-full max-w-md h-full bg-[var(--surface)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300 pointer-events-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-start justify-between gap-3 p-5 border-b border-[var(--border)] shrink-0">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
+      <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
+
+          <DialogHeader className="space-y-2.5 border-b border-[var(--border)] pb-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${COL_CONFIG[task.status].badge}`}>{task.status}</span>
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border flex items-center gap-1 ${PRIORITY_CONFIG[task.priority].badge}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[task.priority].dot}`} />{task.priority}
+                  <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[task.priority].dot}`} />{task.priority} Priority
                 </span>
                 {overdue && <span className="text-xs font-bold text-red-500 flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Overdue</span>}
                 {task.cr && (
@@ -469,11 +481,131 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                   </>
                 )}
               </div>
-            )}
+            </div>
+            <DialogTitle className="text-xl font-bold text-[var(--text-primary)] leading-snug">
+              {task.name}
+            </DialogTitle>
+          </DialogHeader>
 
-            {/* Time Tracker */}
-            {canEdit && (
-              <>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
+            {/* Left Column */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Description */}
+              {task.description && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
+                  <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-xl p-4 border border-[var(--border)]">{task.description}</p>
+                </div>
+              )}
+
+              {/* Attachments */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Attachments {task.attachments?.length > 0 && `(${task.attachments.length})`}
+                  </Label>
+                  {canEdit && (
+                    <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+                      <Paperclip className="h-3 w-3" /> Attach
+                    </button>
+                  )}
+                </div>
+                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileUpload} />
+                {task.attachments?.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {task.attachments.map((att) => {
+                      const isImg = att.mimetype.startsWith("image/");
+                      const url = `http://localhost:5001${att.path}`;
+                      return (
+                        <div key={att._id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] group">
+                          <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 min-w-0 flex-1 hover:text-[var(--primary)] transition-colors">
+                            {isImg ? <ImageIcon className="h-4 w-4 text-orange-500 shrink-0" /> : <FileText className="h-4 w-4 text-blue-500 shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold truncate text-[var(--text-primary)]">{att.originalName}</p>
+                              <p className="text-[10px] text-[var(--text-tertiary)] font-mono">{(att.size / 1024).toFixed(0)}KB</p>
+                            </div>
+                          </a>
+                          {canEdit && (
+                            <button onClick={() => handleDeleteAttachment(att._id)} className="text-[var(--text-tertiary)] hover:text-red-500 p-1 rounded transition-colors">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-6 border border-dashed border-[var(--border)] rounded-xl text-center bg-[var(--background)]">
+                    <Paperclip className="h-7 w-7 text-[var(--text-tertiary)] mb-1.5 opacity-60" />
+                    <p className="text-xs text-[var(--text-tertiary)] font-medium">No attachments</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Comments */}
+              <div className="space-y-3">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                  <MessageSquare className="h-3.5 w-3.5" /> Comments {comments.length > 0 && `(${comments.length})`}
+                </Label>
+                {comments.length > 0 && (
+                  <div className="space-y-3">
+                    {comments.map((c) => (
+                      <div key={c.id} className="flex gap-2">
+                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{(c.author || "U").charAt(0).toUpperCase()}</div>
+                        <div className="flex-1 bg-[var(--background)] rounded-xl p-2.5 border border-[var(--border)]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-semibold text-[var(--text-primary)]">{c.author || "Unknown"}</span>
+                            <span className="text-[10px] text-[var(--text-tertiary)]">{c.time}</span>
+                          </div>
+                          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{c.text}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <Textarea placeholder="Add a comment..." value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                  className="bg-[var(--background)] border-[var(--border)] text-sm min-h-[64px] resize-none" />
+                <Button size="sm" onClick={handleAddComment} disabled={!newComment.trim()}
+                  className="h-8 text-xs gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white w-full">
+                  <MessageSquare className="h-3.5 w-3.5" /> Post Comment
+                </Button>
+              </div>
+            </div>
+
+            {/* Right Column */}
+            <div className="lg:col-span-5 space-y-6 flex flex-col justify-start">
+              {/* Workflow: allowed transitions */}
+              {canEdit && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to</Label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {KANBAN_STATUSES.map((s) => {
+                      const isCurrent = task.status === s;
+                      const { valid, hints } = validateTaskTransition(task, s, userInfo);
+                      return (
+                        <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
+                              ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
+                              : valid
+                                ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                                : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
+                            }`}>
+                          {s}
+                          {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
+                          {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[10px] text-[var(--text-tertiary)]">
+                    Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
+                  </p>
+                </div>
+              )}
+
+              {/* Time Tracker */}
+              {canEdit && (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] shadow-sm overflow-hidden">
                   <div className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
                     <Label className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center justify-between">
@@ -489,7 +621,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                       )}
                     </Label>
                   </div>
-                  
+
                   <div className="p-4 space-y-4">
                     {/* Digital Clock */}
                     <div className="bg-[var(--surface-hover)]/30 dark:bg-black/10 rounded-xl p-3 text-center border border-[var(--border)]/30">
@@ -558,9 +690,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                     )}
                   </div>
                 </div>
-                <Separator className="bg-[var(--border)]" />
-              </>
-            )}
+              )}
 
             {/* Priority */}
             {canEdit && (
@@ -634,92 +764,145 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                     ))}
                 </div>
               )}
-            </div>
 
-            {/* Related Links */}
-            {task.relatedLinks?.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
-                <div className="space-y-1.5">
-                  {task.relatedLinks.map((link, i) => (
-                    <a key={i} href={link.url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-2 p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-[var(--primary)] group transition-all">
-                      <LinkIcon className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
-                      <span className="text-xs text-[var(--primary)] truncate flex-1">{link.label || link.url}</span>
-                      <ExternalLink className="h-3 w-3 text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </a>
-                  ))}
-                </div>
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                {(["startDate", "endDate"] as const).map((field) => (
+                  <div key={field} className="space-y-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{field === "startDate" ? "Start Date" : "End Date"}</Label>
+                    {canEdit ? (
+                      <Input type="date"
+                        defaultValue={task[field] ? (task[field] as string).split("T")[0] : ""}
+                        onBlur={(e) => handleDateChange(field, e.target.value)}
+                        className={`h-9 bg-[var(--background)] border-[var(--border)] text-xs ${field === "endDate" && overdue ? "border-red-300 text-red-600" : ""}`} />
+                    ) : (
+                      <p className={`text-sm font-medium ${field === "endDate" && overdue ? "text-red-500" : "text-[var(--text-primary)]"}`}>{fmtDate(task[field]) || "—"}</p>
+                    )}
+                  </div>
+                ))}
               </div>
-            )}
 
-            {/* Attachments */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                  Attachments {task.attachments?.length > 0 && `(${task.attachments.length})`}
-                </Label>
-                {canEdit && (
-                  <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-                    <Paperclip className="h-3 w-3" /> Attach
-                  </button>
-                )}
-              </div>
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileUpload} />
-              {task.attachments?.length > 0 ? (
+              {/* Description */}
+              {task.description && (
                 <div className="space-y-1.5">
-                  {task.attachments.map((att) => {
-                    const isImg = att.mimetype.startsWith("image/");
-                    const url = `http://localhost:5001${att.path}`;
-                    return (
-                      <div key={att._id} className="flex items-center gap-2 p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] group">
-                        {isImg ? <ImageIcon className="h-4 w-4 text-orange-500 shrink-0" /> : <FileText className="h-4 w-4 text-blue-500 shrink-0" />}
-                        <a href={url} target="_blank" rel="noreferrer" className="text-xs text-[var(--text-primary)] hover:text-[var(--primary)] flex-1 truncate">{att.originalName}</a>
-                        <span className="text-[10px] text-[var(--text-tertiary)] shrink-0">{(att.size / 1024).toFixed(0)}KB</span>
-                        {canEdit && (
-                          <button onClick={() => handleDeleteAttachment(att._id)} className="text-[var(--text-tertiary)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : <p className="text-xs text-[var(--text-tertiary)]">No attachments</p>}
-            </div>
-
-            {/* Comments */}
-            <div className="space-y-3">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-                <MessageSquare className="h-3.5 w-3.5" /> Comments {comments.length > 0 && `(${comments.length})`}
-              </Label>
-              {comments.length > 0 && (
-                <div className="space-y-3">
-                  {comments.map((c) => (
-                    <div key={c.id} className="flex gap-2">
-                      <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[9px] font-bold shrink-0">{(c.author || "U").charAt(0).toUpperCase()}</div>
-                      <div className="flex-1 bg-[var(--background)] rounded-xl p-2.5 border border-[var(--border)]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-[var(--text-primary)]">{c.author || "Unknown"}</span>
-                          <span className="text-[10px] text-[var(--text-tertiary)]">{c.time}</span>
-                        </div>
-                        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{c.text}</p>
-                      </div>
-                    </div>
-                  ))}
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
+                  <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">{task.description}</p>
                 </div>
               )}
-              <Textarea placeholder="Add a comment..." value={newComment} onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                className="bg-[var(--background)] border-[var(--border)] text-sm min-h-[64px] resize-none" />
-              <Button size="sm" onClick={handleAddComment} disabled={!newComment.trim()}
-                className="h-8 text-xs gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white w-full">
-                <MessageSquare className="h-3.5 w-3.5" /> Post Comment
-              </Button>
+
+              {/* Assignees */}
+              <div className="space-y-2 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Assignees</Label>
+                {task.assignees.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {task.assignees.map((a) => (
+                      <div key={a._id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                        <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">{(a.name || "U").charAt(0).toUpperCase()}</div>
+                        <span className="text-xs font-medium text-[var(--text-primary)]">{a.name || "Unknown"}</span>
+                        {canEdit && <button onClick={() => handleToggleAssignee(a._id)} className="text-[var(--text-tertiary)] hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>}
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="text-xs text-[var(--text-tertiary)]">No assignees</p>}
+                {canEdit && members.filter((m) => !task.assignees.find((a) => a._id === m._id)).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {members.filter((m) => !task.assignees.find((a) => a._id === m._id)).map((m) => (
+                      <button key={m._id} onClick={() => handleToggleAssignee(m._id)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border border-dashed border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all">
+                        <Plus className="h-3 w-3" />{m.name.split(" ")[0]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Related Links */}
+              {task.relatedLinks?.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Related Links</Label>
+                  <div className="space-y-1.5">
+                    {task.relatedLinks.map((link, i) => (
+                      <a key={i} href={link.url} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] hover:border-[var(--primary)] group transition-all">
+                        <LinkIcon className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
+                        <span className="text-xs text-[var(--primary)] truncate flex-1">{link.label || link.url}</span>
+                        <ExternalLink className="h-3 w-3 text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      </div>
+
+          {/* Work Session History Table */}
+          <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden mt-6">
+            <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                <History className="h-4 w-4 text-[var(--primary)]" />
+                Work Session History (Time Logs)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              {taskLogs.length === 0 ? (
+                <div className="text-center py-6 text-xs text-[var(--text-tertiary)] italic">
+                  No work sessions recorded for this task.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                        <th className="py-2.5 px-3">Date</th>
+                        <th className="py-2.5 px-3">Started Time</th>
+                        <th className="py-2.5 px-3">Ended Time</th>
+                        <th className="py-2.5 px-3">Duration</th>
+                        <th className="py-2.5 px-3">Note / Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {taskLogs.map((log: any) => {
+                        const isAutoEnded = log.note && log.note.includes("Ended automatically");
+                        return (
+                          <tr key={log._id} className="hover:bg-[var(--surface-hover)]/40 transition-colors">
+                            <td className="py-2.5 px-3 text-[var(--text-primary)]">
+                              {new Date(log.startTime).toLocaleDateString()}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
+                              {new Date(log.startTime).toLocaleTimeString()}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
+                              {log.endTime ? (
+                                new Date(log.endTime).toLocaleTimeString()
+                              ) : (
+                                <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono font-bold text-[var(--text-primary)]">
+                              {formatDuration(log.duration)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-[var(--text-secondary)]">{log.note || <span className="text-[var(--text-tertiary)] italic">No note</span>}</span>
+                                {isAutoEnded && (
+                                  <span className="text-[10px] font-semibold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded w-fit uppercase tracking-wider">
+                                    Ended automatically
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+        </DialogContent>
+      </Dialog>
 
       {/* Workflow rejection dialog */}
       <WorkflowRejectionDialog
@@ -777,8 +960,6 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
       </Dialog>
     </>
   );
-
-  return typeof document !== "undefined" ? createPortal(drawer, document.body) : null;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -851,7 +1032,7 @@ function KanbanCard({ task, isDragging, isValidDropTarget, onDragStart, onDragEn
         </div>
       )}
 
-      {canEdit && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none">{[0,1,2].map((i) => <div key={i} className="w-1 h-1 rounded-full bg-[var(--text-tertiary)]" />)}</div>}
+      {canEdit && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none">{[0, 1, 2].map((i) => <div key={i} className="w-1 h-1 rounded-full bg-[var(--text-tertiary)]" />)}</div>}
     </div>
   );
 }
@@ -886,13 +1067,12 @@ function KanbanColumn({ status, tasks, dragOverStatus, draggingTask, isValidDrop
     <div
       onDragOver={(e) => onDragOver(e, status)}
       onDrop={(e) => onDrop(e, status)}
-      className={`flex flex-col rounded-xl border transition-all duration-200 min-h-[520px] ${
-        isOver && isValidDropTarget
+      className={`flex flex-col rounded-xl border transition-all duration-200 min-h-[520px] ${isOver && isValidDropTarget
           ? `border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]`
           : isOver && !isValidDropTarget
             ? "border-red-300 shadow-lg shadow-red-100 bg-red-50/30"
             : "border-[var(--border)] bg-[var(--background)]"
-      }`}
+        }`}
     >
       {/* Column Header */}
       <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
@@ -939,11 +1119,10 @@ function KanbanColumn({ status, tasks, dragOverStatus, draggingTask, isValidDrop
           ))
         )}
         {isOver && draggingTask && (
-          <div className={`h-16 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 ${
-            isValidDropTarget
+          <div className={`h-16 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 ${isValidDropTarget
               ? "border-[var(--primary)] bg-[rgba(99,102,241,0.05)]"
               : "border-red-300 bg-red-50/50"
-          }`}>
+            }`}>
             {isValidDropTarget
               ? <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
               : <><ShieldAlert className="h-3.5 w-3.5 text-red-400" /><span className="text-xs font-semibold text-red-500">Blocked by workflow</span></>
@@ -1019,9 +1198,10 @@ function FilterBar({ search, setSearch, filterPriority, setFilterPriority, filte
 interface KanbanBoardProps {
   projectId: string;
   members: User[];
+  hideToolbar?: boolean;
 }
 
-export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, members, hideToolbar }: KanbanBoardProps) {
   const { data: tasks = [], isLoading, isRefetching, refetch } = useGetProjectTasks(projectId, true);
   const updateMutation = useUpdateTask(projectId);
   const deleteMutation = useDeleteTask(projectId);
@@ -1149,21 +1329,23 @@ export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap justify-between">
-        <FilterBar
-          search={search} setSearch={setSearch}
-          filterPriority={filterPriority} setFilterPriority={setFilterPriority}
-          filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
-          members={members} hasFilters={hasFilters}
-          onClear={() => { setSearch(""); setFilterPriority(""); setFilterAssignee(""); }}
-          isRefetching={isRefetching} onRefetch={() => refetch()}
-          connected={connected}
-        />
-        <Button size="sm" onClick={() => handleAddTask("To Do")}
-          className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9 shrink-0">
-          <Plus className="h-3.5 w-3.5" /> New Task
-        </Button>
-      </div>
+      {!hideToolbar && (
+        <div className="flex items-center gap-3 flex-wrap justify-between">
+          <FilterBar
+            search={search} setSearch={setSearch}
+            filterPriority={filterPriority} setFilterPriority={setFilterPriority}
+            filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
+            members={members} hasFilters={hasFilters}
+            onClear={() => { setSearch(""); setFilterPriority(""); setFilterAssignee(""); }}
+            isRefetching={isRefetching} onRefetch={() => refetch()}
+            connected={connected}
+          />
+          <Button size="sm" onClick={() => handleAddTask("To Do")}
+            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9 shrink-0">
+            <Plus className="h-3.5 w-3.5" /> New Task
+          </Button>
+        </div>
+      )}
 
       {/* Board */}
       <div className="grid gap-4 pb-6" style={{ gridTemplateColumns: `repeat(${KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>

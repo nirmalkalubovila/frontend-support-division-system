@@ -15,6 +15,7 @@ import {
   Timer,
   CheckCircle,
   Undo,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   History,
@@ -34,6 +35,12 @@ import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/service
 import { useGetAssignedTasks, useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
 import { useGetAssignedCRs, useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
+import { useUpdateIssue, useNotifyTimeExceeded, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
+import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
+import { useUpdateTask } from "@/api/services/project-management/task-service";
+import { useUpdateCR } from "@/api/services/project-management/cr-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -54,9 +61,88 @@ const VALID_WORK_TYPES: WorkType[] = [
   'To Do', 'Review', 'Done', 'Submitted', 'Rejected', 'In Development', 'Completed',
 ];
 
-/** Returns wt if valid, otherwise falls back to a safe default. */
+const formatDuration = (decimalHours: number): string => {
+  const totalMins = Math.round(decimalHours * 60);
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  return `${hrs}h ${mins}m`;
+};
+
 const sanitizeWorkType = (wt: string | undefined, fallback: WorkType = 'In Progress'): WorkType =>
   (VALID_WORK_TYPES as string[]).includes(wt ?? '') ? (wt as WorkType) : fallback;
+
+function PaginationControl({
+  currentPage,
+  totalPages,
+  totalResults,
+  pageSize,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalResults: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const startResult = (currentPage - 1) * pageSize + 1;
+  const endResult = Math.min(currentPage * pageSize, totalResults);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-[var(--border)] text-xs text-[var(--text-secondary)]">
+      <div>
+        Showing <span className="font-semibold text-[var(--text-primary)]">{startResult}</span> to{" "}
+        <span className="font-semibold text-[var(--text-primary)]">{endResult}</span> of{" "}
+        <span className="font-semibold text-[var(--text-primary)]">{totalResults}</span> results
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="h-8 w-8 p-0 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+          .map((p, index, arr) => {
+            const showEllipsis = index > 0 && p - arr[index - 1] > 1;
+            return (
+              <React.Fragment key={p}>
+                {showEllipsis && <span className="px-1 text-[var(--text-tertiary)] font-medium">...</span>}
+                <Button
+                  variant={p === currentPage ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onPageChange(p)}
+                  className={`h-8 w-8 p-0 rounded-md font-semibold text-xs transition-all ${
+                    p === currentPage
+                      ? "bg-[var(--primary)] text-white"
+                      : "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                >
+                  {p}
+                </Button>
+              </React.Fragment>
+            );
+          })}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="h-8 w-8 p-0 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardProps) {
   const queryClient = useQueryClient();
@@ -65,6 +151,61 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const stopTimerMutation = useStopTimer();
   const notifyTimeExceededMutation = useNotifyTimeExceeded();
   const deleteTimeLogMutation = useDeleteTimeLog();
+  const deleteIssueMutation = useDeleteIssue();
+
+  // Selection states for clearing logs & issues
+  const [selectedLogIds, setSelectedLogIds] = useState<string[]>([]);
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [isConfirmLogsOpen, setIsConfirmLogsOpen] = useState(false);
+  const [isConfirmIssuesOpen, setIsConfirmIssuesOpen] = useState(false);
+  const [isDeletingLogs, setIsDeletingLogs] = useState(false);
+  const [isDeletingIssues, setIsDeletingIssues] = useState(false);
+
+  // Pagination states
+  const [logsPage, setLogsPage] = useState(1);
+  const [resolvedIssuesPage, setResolvedIssuesPage] = useState(1);
+
+  // Detail popup states
+  const [detailedTask, setDetailedTask] = useState<Task | null>(null);
+  const [detailedCR, setDetailedCR] = useState<ChangeRequest | null>(null);
+
+  // Fetch all users for drawer members lists
+  const { data: usersData } = useGetAllUsers();
+  const allUsers = useMemo(() => usersData ?? [], [usersData]);
+
+  const handleClearSelectedLogs = async () => {
+    setIsDeletingLogs(true);
+    try {
+      await Promise.all(
+        selectedLogIds.map((id) => deleteTimeLogMutation.mutateAsync(id))
+      );
+      toast.success("Successfully cleared selected time logs.");
+      setSelectedLogIds([]);
+    } catch (err: any) {
+      toast.error("Failed to clear some time logs.");
+    } finally {
+      setIsDeletingLogs(false);
+      setIsConfirmLogsOpen(false);
+      refetchLogs();
+    }
+  };
+
+  const handleClearSelectedIssues = async () => {
+    setIsDeletingIssues(true);
+    try {
+      await Promise.all(
+        selectedIssueIds.map((id) => deleteIssueMutation.mutateAsync(id))
+      );
+      toast.success("Successfully cleared selected resolved issues.");
+      setSelectedIssueIds([]);
+    } catch (err: any) {
+      toast.error("Failed to clear some resolved issues.");
+    } finally {
+      setIsDeletingIssues(false);
+      setIsConfirmIssuesOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/issues"] });
+    }
+  };
 
   // Fetch assigned and all tasks & CRs, and users
   const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
@@ -112,6 +253,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const { data: logsData, refetch: refetchLogs } = useGetTimeLogs({
     user: currentUserId,
     limit: 10,
+    page: logsPage,
     sortBy: "createdAt:desc",
   });
 
@@ -194,6 +336,19 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       .filter((i) => i.status === "Resolved" || i.status === "Closed" || i.status === "Done")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [myAssignedIssues]);
+
+  const paginatedResolvedIssues = useMemo(() => {
+    const start = (resolvedIssuesPage - 1) * 10;
+    return myResolvedIssues.slice(start, start + 10);
+  }, [myResolvedIssues, resolvedIssuesPage]);
+
+  // Adjust resolvedIssuesPage if length decreases
+  useEffect(() => {
+    const totalPages = Math.ceil(myResolvedIssues.length / 10);
+    if (resolvedIssuesPage > totalPages && totalPages > 0) {
+      setResolvedIssuesPage(totalPages);
+    }
+  }, [myResolvedIssues.length, resolvedIssuesPage]);
 
   // Tasks filtering
   const myActiveTasks = useMemo(() => {
@@ -2013,11 +2168,21 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
       {/* Row 3: Recent Time Logs */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <Clock className="h-4.5 w-4.5 text-[var(--primary-text)]" />
             My Recent Time Logs
           </CardTitle>
+          {selectedLogIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs h-8 px-3 rounded-lg"
+              onClick={() => setIsConfirmLogsOpen(true)}
+            >
+              Clear Selected ({selectedLogIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {recentLogs.length === 0 ? (
@@ -2029,11 +2194,31 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={recentLogs.length > 0 && recentLogs.every((l) => selectedLogIds.includes(l._id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLogIds((prev) => {
+                              const newIds = [...prev];
+                              recentLogs.forEach((l) => {
+                                if (!newIds.includes(l._id)) newIds.push(l._id);
+                              });
+                              return newIds;
+                            });
+                          } else {
+                            setSelectedLogIds((prev) => prev.filter((id) => !recentLogs.some((l) => l._id === id)));
+                          }
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Item / Ticket ID</th>
                     <th className="py-2.5 px-3">Work Type</th>
                     <th className="py-2.5 px-3">Started Time</th>
                     <th className="py-2.5 px-3">Ended Time</th>
-                    <th className="py-2.5 px-3">Duration (hrs)</th>
+                    <th className="py-2.5 px-3">Duration</th>
                     <th className="py-2.5 px-3">Notes</th>
                     <th className="py-2.5 px-3">Date</th>
                     <th className="py-2.5 px-3">Status</th>
@@ -2051,6 +2236,20 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                     }
                     return (
                       <tr key={log._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedLogIds.includes(log._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedLogIds((prev) => [...prev, log._id]);
+                              } else {
+                                setSelectedLogIds((prev) => prev.filter((id) => id !== log._id));
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)]">
                           {code}
                         </td>
@@ -2066,7 +2265,7 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                           {log.endTime ? new Date(log.endTime).toLocaleTimeString() : <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>}
                         </td>
                         <td className="py-3 px-3 font-mono font-medium">
-                          {log.duration.toFixed(2)}h
+                          {formatDuration(log.duration)}
                         </td>
                         <td className="py-3 px-3 truncate max-w-[180px]" title={log.note}>
                           {log.note || <span className="text-[var(--text-tertiary)] italic">No note</span>}
@@ -2091,6 +2290,13 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   })}
                 </tbody>
               </table>
+              <PaginationControl
+                currentPage={logsPage}
+                totalPages={logsData?.totalPages ?? 1}
+                totalResults={logsData?.totalResults ?? 0}
+                pageSize={10}
+                onPageChange={setLogsPage}
+              />
             </div>
           )}
         </CardContent>
@@ -2098,11 +2304,21 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
       {/* Row 4: Resolved Issues History */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <History className="h-4.5 w-4.5 text-[var(--success)]" />
             Resolved Issues History
           </CardTitle>
+          {selectedIssueIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs h-8 px-3 rounded-lg"
+              onClick={() => setIsConfirmIssuesOpen(true)}
+            >
+              Clear Selected ({selectedIssueIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {myResolvedIssues.length === 0 ? (
@@ -2114,6 +2330,26 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={paginatedResolvedIssues.length > 0 && paginatedResolvedIssues.every((i) => selectedIssueIds.includes(i._id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIssueIds((prev) => {
+                              const newIds = [...prev];
+                              paginatedResolvedIssues.forEach((i) => {
+                                if (!newIds.includes(i._id)) newIds.push(i._id);
+                              });
+                              return newIds;
+                            });
+                          } else {
+                            setSelectedIssueIds((prev) => prev.filter((id) => !paginatedResolvedIssues.some((i) => i._id === id)));
+                          }
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Issue ID</th>
                     <th className="py-2.5 px-3">Title</th>
                     <th className="py-2.5 px-3">Project</th>
@@ -2124,11 +2360,25 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   </tr>
                 </thead>
                 <tbody>
-                  {myResolvedIssues.map((issue) => {
+                  {paginatedResolvedIssues.map((issue) => {
                     const client = typeof issue.client === "object" ? issue.client : null;
                     const project = typeof issue.project === "object" ? issue.project : null;
                     return (
                       <tr key={issue._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedIssueIds.includes(issue._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIssueIds((prev) => [...prev, issue._id]);
+                              } else {
+                                setSelectedIssueIds((prev) => prev.filter((id) => id !== issue._id));
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)] font-mono">
                           {issue.issueId}
                         </td>
@@ -2172,6 +2422,13 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
                   })}
                 </tbody>
               </table>
+              <PaginationControl
+                currentPage={resolvedIssuesPage}
+                totalPages={Math.ceil(myResolvedIssues.length / 10)}
+                totalResults={myResolvedIssues.length}
+                pageSize={10}
+                onPageChange={setResolvedIssuesPage}
+              />
             </div>
           )}
         </CardContent>
@@ -2254,10 +2511,30 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={isConfirmLogsOpen}
+        onOpenChange={setIsConfirmLogsOpen}
+        title="Clear Selected Time Logs"
+        description={`Are you sure you want to delete the ${selectedLogIds.length} selected time log(s)? This action is permanent and cannot be undone.`}
+        confirmLabel="Clear Logs"
+        variant="destructive"
+        onConfirm={handleClearSelectedLogs}
+        loading={isDeletingLogs}
+      />
+      <ConfirmDialog
+        open={isConfirmIssuesOpen}
+        onOpenChange={setIsConfirmIssuesOpen}
+        title="Clear Selected Resolved Issues"
+        description={`Are you sure you want to permanently delete the ${selectedIssueIds.length} selected resolved issue(s)? This action cannot be undone.`}
+        confirmLabel="Clear Issues"
+        variant="destructive"
+        onConfirm={handleClearSelectedIssues}
+        loading={isDeletingIssues}
+      />
       <IssueDetailsModal
         issue={detailedIssue}
         open={!!detailedIssue}
-        onOpenChange={(open) => !open && setDetailedIssue(null)}
+        onOpenChange={(open: boolean) => !open && setDetailedIssue(null)}
       />
 
       {detailedTask && (
