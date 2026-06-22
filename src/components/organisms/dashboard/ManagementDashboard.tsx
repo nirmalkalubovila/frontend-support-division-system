@@ -46,11 +46,11 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
   // ──────────────────────────────────────────────────────────────
   const metrics = useMemo(() => {
     const totalOpen = issues.filter(
-      (i) => i.status !== "Resolved" && i.status !== "Closed"
+      (i) => i.status !== "Resolved" && i.status !== "Closed" && i.status !== "Done"
     ).length;
 
     const completed = issues.filter((i) =>
-      ["Resolved", "Closed"].includes(i.status)
+      ["Resolved", "Closed", "Done"].includes(i.status)
     );
 
     // SLA Compliance rate
@@ -69,6 +69,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
       (i) =>
         i.status !== "Resolved" &&
         i.status !== "Closed" &&
+        i.status !== "Done" &&
         new Date(i.dueDate) < new Date()
     ).length;
 
@@ -117,7 +118,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
         foundCreated.created += 1;
       }
 
-      if (["Resolved", "Closed"].includes(issue.status)) {
+      if (["Resolved", "Closed", "Done"].includes(issue.status)) {
         const updateDate = new Date(issue.updatedAt).toDateString();
         const foundResolved = days.find((day) => day.dateKey === updateDate);
         if (foundResolved) {
@@ -166,7 +167,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
       .filter(
         (i) =>
           ["Critical", "High"].includes(i.priority) &&
-          !["Resolved", "Closed"].includes(i.status)
+          !["Resolved", "Closed", "Done"].includes(i.status)
       )
       .slice(0, 5);
   }, [issues]);
@@ -175,7 +176,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
     return issues
       .filter((i) => {
         const isOverdue = new Date(i.dueDate) < new Date();
-        const isActive = !["Resolved", "Closed"].includes(i.status);
+        const isActive = !["Resolved", "Closed", "Done"].includes(i.status);
         return isOverdue && isActive;
       })
       .slice(0, 5);
@@ -183,7 +184,7 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
 
   const resolvedIssues = useMemo(() => {
     return issues
-      .filter((i) => i.status === "Resolved" || i.status === "Closed")
+      .filter((i) => i.status === "Resolved" || i.status === "Closed" || i.status === "Done")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [issues]);
 
