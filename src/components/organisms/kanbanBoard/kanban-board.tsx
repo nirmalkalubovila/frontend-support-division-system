@@ -44,17 +44,17 @@ export const KANBAN_STATUSES: TaskStatus[] = ["To Do", "In Progress", "Review", 
 const PRIORITIES: TaskPriority[] = ["Critical", "High", "Medium", "Low"];
 
 const COL_CONFIG: Record<TaskStatus, { dot: string; header: string; addBtn: string; card: string; badge: string; glow: string }> = {
-  "To Do":       { dot: "bg-slate-400",   header: "bg-slate-50 dark:bg-slate-900/30",    addBtn: "hover:bg-slate-100",   card: "border-slate-200 hover:border-slate-300",   badge: "bg-slate-100 text-slate-600 border-slate-200",    glow: "shadow-slate-200" },
-  "In Progress": { dot: "bg-yellow-400",  header: "bg-yellow-50 dark:bg-yellow-900/20",  addBtn: "hover:bg-yellow-100",  card: "border-yellow-200 hover:border-yellow-400",  badge: "bg-yellow-50 text-yellow-700 border-yellow-200",  glow: "shadow-yellow-200" },
-  "Review":      { dot: "bg-indigo-400",  header: "bg-indigo-50 dark:bg-indigo-900/20",  addBtn: "hover:bg-indigo-100",  card: "border-indigo-200 hover:border-indigo-400",  badge: "bg-indigo-50 text-indigo-700 border-indigo-200",  glow: "shadow-indigo-200" },
-  "Done":        { dot: "bg-emerald-400", header: "bg-emerald-50 dark:bg-emerald-900/20", addBtn: "hover:bg-emerald-100", card: "border-emerald-200 hover:border-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", glow: "shadow-emerald-200" },
+  "To Do": { dot: "bg-slate-400", header: "bg-slate-50 dark:bg-slate-900/30", addBtn: "hover:bg-slate-100", card: "border-slate-200 hover:border-slate-300", badge: "bg-slate-100 text-slate-600 border-slate-200", glow: "shadow-slate-200" },
+  "In Progress": { dot: "bg-yellow-400", header: "bg-yellow-50 dark:bg-yellow-900/20", addBtn: "hover:bg-yellow-100", card: "border-yellow-200 hover:border-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200", glow: "shadow-yellow-200" },
+  "Review": { dot: "bg-indigo-400", header: "bg-indigo-50 dark:bg-indigo-900/20", addBtn: "hover:bg-indigo-100", card: "border-indigo-200 hover:border-indigo-400", badge: "bg-indigo-50 text-indigo-700 border-indigo-200", glow: "shadow-indigo-200" },
+  "Done": { dot: "bg-emerald-400", header: "bg-emerald-50 dark:bg-emerald-900/20", addBtn: "hover:bg-emerald-100", card: "border-emerald-200 hover:border-emerald-400", badge: "bg-emerald-50 text-emerald-700 border-emerald-200", glow: "shadow-emerald-200" },
 };
 
 const PRIORITY_CONFIG: Record<TaskPriority, { dot: string; badge: string }> = {
-  Critical: { dot: "bg-red-500",    badge: "bg-red-50 text-red-600 border-red-200" },
-  High:     { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-600 border-orange-200" },
-  Medium:   { dot: "bg-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  Low:      { dot: "bg-green-500",  badge: "bg-green-50 text-green-700 border-green-200" },
+  Critical: { dot: "bg-red-500", badge: "bg-red-50 text-red-600 border-red-200" },
+  High: { dot: "bg-orange-500", badge: "bg-orange-50 text-orange-600 border-orange-200" },
+  Medium: { dot: "bg-yellow-400", badge: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  Low: { dot: "bg-green-500", badge: "bg-green-50 text-green-700 border-green-200" },
 };
 
 function fmtDate(d?: string | null) {
@@ -385,7 +385,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
     <>
       <Dialog open={!!task} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh]">
-          
+
           <DialogHeader className="space-y-2.5 border-b border-[var(--border)] pb-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
@@ -512,13 +512,12 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                       const { valid, hints } = validateTaskTransition(task, s, userInfo);
                       return (
                         <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                            isCurrent
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
                               ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
                               : valid
                                 ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
                                 : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
-                          }`}>
+                            }`}>
                           {s}
                           {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
                           {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
@@ -549,7 +548,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                       )}
                     </Label>
                   </div>
-                  
+
                   <div className="p-4 space-y-4">
                     {/* Digital Clock */}
                     <div className="bg-[var(--surface-hover)]/30 dark:bg-black/10 rounded-xl p-3 text-center border border-[var(--border)]/30">
@@ -608,11 +607,10 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                   <div className="flex gap-1.5 flex-wrap">
                     {PRIORITIES.map((p) => (
                       <button key={p} onClick={() => handlePriorityChange(p)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${
-                          task.priority === p
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${task.priority === p
                             ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
                             : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
-                        }`}>
+                          }`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
                       </button>
                     ))}
@@ -621,7 +619,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
               )}
 
               {/* Dates */}
-              <div className="grid grid-cols-2 gap-3 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
+              <div className="grid grid-cols-2 gap-3">
                 {(["startDate", "endDate"] as const).map((field) => (
                   <div key={field} className="space-y-1.5">
                     <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{field === "startDate" ? "Start Date" : "End Date"}</Label>
@@ -629,13 +627,21 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                       <Input type="date"
                         defaultValue={task[field] ? (task[field] as string).split("T")[0] : ""}
                         onBlur={(e) => handleDateChange(field, e.target.value)}
-                        className={`h-9 bg-[var(--surface)] border-[var(--border)] text-xs ${field === "endDate" && overdue ? "border-red-300 text-red-600" : ""}`} />
+                        className={`h-9 bg-[var(--background)] border-[var(--border)] text-xs ${field === "endDate" && overdue ? "border-red-300 text-red-600" : ""}`} />
                     ) : (
                       <p className={`text-sm font-medium ${field === "endDate" && overdue ? "text-red-500" : "text-[var(--text-primary)]"}`}>{fmtDate(task[field]) || "—"}</p>
                     )}
                   </div>
                 ))}
               </div>
+
+              {/* Description */}
+              {task.description && (
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
+                  <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">{task.description}</p>
+                </div>
+              )}
 
               {/* Assignees */}
               <div className="space-y-2 bg-[var(--background)] rounded-xl p-3.5 border border-[var(--border)]">
@@ -833,7 +839,7 @@ function KanbanCard({ task, isDragging, isValidDropTarget, onDragStart, onDragEn
         </div>
       )}
 
-      {canEdit && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none">{[0,1,2].map((i) => <div key={i} className="w-1 h-1 rounded-full bg-[var(--text-tertiary)]" />)}</div>}
+      {canEdit && <div className="absolute left-1.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-30 transition-opacity pointer-events-none">{[0, 1, 2].map((i) => <div key={i} className="w-1 h-1 rounded-full bg-[var(--text-tertiary)]" />)}</div>}
     </div>
   );
 }
@@ -868,13 +874,12 @@ function KanbanColumn({ status, tasks, dragOverStatus, draggingTask, isValidDrop
     <div
       onDragOver={(e) => onDragOver(e, status)}
       onDrop={(e) => onDrop(e, status)}
-      className={`flex flex-col rounded-xl border transition-all duration-200 min-h-[520px] ${
-        isOver && isValidDropTarget
+      className={`flex flex-col rounded-xl border transition-all duration-200 min-h-[520px] ${isOver && isValidDropTarget
           ? `border-[var(--primary)] shadow-lg shadow-[var(--primary)]/10 bg-[rgba(99,102,241,0.03)]`
           : isOver && !isValidDropTarget
             ? "border-red-300 shadow-lg shadow-red-100 bg-red-50/30"
             : "border-[var(--border)] bg-[var(--background)]"
-      }`}
+        }`}
     >
       {/* Column Header */}
       <div className={`px-3 pt-3 pb-2 rounded-t-xl ${cfg.header}`}>
@@ -921,11 +926,10 @@ function KanbanColumn({ status, tasks, dragOverStatus, draggingTask, isValidDrop
           ))
         )}
         {isOver && draggingTask && (
-          <div className={`h-16 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 ${
-            isValidDropTarget
+          <div className={`h-16 rounded-xl border-2 border-dashed flex items-center justify-center gap-2 ${isValidDropTarget
               ? "border-[var(--primary)] bg-[rgba(99,102,241,0.05)]"
               : "border-red-300 bg-red-50/50"
-          }`}>
+            }`}>
             {isValidDropTarget
               ? <span className="text-xs font-semibold text-[var(--primary)]">Drop here</span>
               : <><ShieldAlert className="h-3.5 w-3.5 text-red-400" /><span className="text-xs font-semibold text-red-500">Blocked by workflow</span></>
@@ -1001,9 +1005,10 @@ function FilterBar({ search, setSearch, filterPriority, setFilterPriority, filte
 interface KanbanBoardProps {
   projectId: string;
   members: User[];
+  hideToolbar?: boolean;
 }
 
-export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
+export function KanbanBoard({ projectId, members, hideToolbar }: KanbanBoardProps) {
   const { data: tasks = [], isLoading, isRefetching, refetch } = useGetProjectTasks(projectId, true);
   const updateMutation = useUpdateTask(projectId);
   const deleteMutation = useDeleteTask(projectId);
@@ -1131,21 +1136,23 @@ export function KanbanBoard({ projectId, members }: KanbanBoardProps) {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap justify-between">
-        <FilterBar
-          search={search} setSearch={setSearch}
-          filterPriority={filterPriority} setFilterPriority={setFilterPriority}
-          filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
-          members={members} hasFilters={hasFilters}
-          onClear={() => { setSearch(""); setFilterPriority(""); setFilterAssignee(""); }}
-          isRefetching={isRefetching} onRefetch={() => refetch()}
-          connected={connected}
-        />
-        <Button size="sm" onClick={() => handleAddTask("To Do")}
-          className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9 shrink-0">
-          <Plus className="h-3.5 w-3.5" /> New Task
-        </Button>
-      </div>
+      {!hideToolbar && (
+        <div className="flex items-center gap-3 flex-wrap justify-between">
+          <FilterBar
+            search={search} setSearch={setSearch}
+            filterPriority={filterPriority} setFilterPriority={setFilterPriority}
+            filterAssignee={filterAssignee} setFilterAssignee={setFilterAssignee}
+            members={members} hasFilters={hasFilters}
+            onClear={() => { setSearch(""); setFilterPriority(""); setFilterAssignee(""); }}
+            isRefetching={isRefetching} onRefetch={() => refetch()}
+            connected={connected}
+          />
+          <Button size="sm" onClick={() => handleAddTask("To Do")}
+            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white h-9 shrink-0">
+            <Plus className="h-3.5 w-3.5" /> New Task
+          </Button>
+        </div>
+      )}
 
       {/* Board */}
       <div className="grid gap-4 pb-6" style={{ gridTemplateColumns: `repeat(${KANBAN_STATUSES.length}, minmax(0, 1fr))` }}>
