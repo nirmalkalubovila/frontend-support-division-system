@@ -23,6 +23,7 @@ const NEEDS_REF: PaymentMethod[] = ["Bank Transfer", "Online Payment"];
 const EMPTY: CreatePaymentPayload = {
   paymentType: "Advance",
   uom: null,
+  month: null,
   quantity: null,
   pricePerUnit: 0,
   paymentDate: null,
@@ -51,6 +52,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
       setForm({
         paymentType: editing.paymentType,
         uom: editing.uom,
+        month: editing.month,
         quantity: editing.quantity,
         pricePerUnit: editing.pricePerUnit,
         paymentDate: editing.paymentDate,
@@ -85,7 +87,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
     const payload: CreatePaymentPayload = {
       ...form,
       // Clear fields that shouldn't be sent based on current state
-      paymentDate: isPaid ? form.paymentDate : null,
+      paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
       referenceNumber: needsRef ? form.referenceNumber : null,
       attachment: attachmentFile ?? null,
@@ -102,7 +104,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Payment" : "Add Payment"}</DialogTitle>
         </DialogHeader>
@@ -132,26 +134,28 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
           {/* UOM Based: UOM (text) + Quantity */}
           {isUOM && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Unit of Measure</Label>
-                <Input
-                  value={form.uom ?? ""}
-                  onChange={(e) => set("uom", e.target.value || null)}
-                  placeholder="e.g. Hour, Task, Sprint..."
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Quantity</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={form.quantity ?? ""}
-                  onChange={(e) => set("quantity", parseFloat(e.target.value) || null)}
-                  required
-                />
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Unit of Measure</Label>
+                  <Input
+                    value={form.uom ?? ""}
+                    onChange={(e) => set("uom", e.target.value || null)}
+                    placeholder="e.g. Hour, Task, Sprint..."
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Quantity</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={form.quantity ?? ""}
+                    onChange={(e) => set("quantity", parseFloat(e.target.value) || null)}
+                    required
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -208,8 +212,8 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
             </div>
           </div>
 
-          {/* Payment Date — only when Paid */}
-          {isPaid && (
+          {/* Payment Date — only when Paid or Partially Paid */}
+          {(isPaid || isPartiallyPaid) && (
             <div className="space-y-1">
               <Label>Payment Date</Label>
               <Input
@@ -245,7 +249,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
           {/* Reference + Attachment — only for Bank Transfer / Online Payment */}
           {needsRef && (
-            <div className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+            <>
               <div className="space-y-1">
                 <Label>Reference / Invoice Number</Label>
                 <Input
@@ -265,46 +269,53 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                   onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
                 />
                 {attachmentFile ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                    <Paperclip className="h-4 w-4 text-[var(--text-secondary)] shrink-0" />
-                    <span className="flex-1 truncate text-[var(--text-primary)]">{attachmentFile.name}</span>
-                    <button type="button" onClick={() => setAttachmentFile(null)}>
-                      <X className="h-4 w-4 text-[var(--text-secondary)] hover:text-[var(--destructive)]" />
+                  <div className="flex items-center gap-2 h-9 rounded-md border border-[var(--border)] bg-[var(--surface-hover)] px-3 text-sm min-w-0">
+                    <Paperclip className="h-3.5 w-3.5 text-[var(--text-secondary)] shrink-0" />
+                    <span className="flex-1 truncate text-[var(--text-primary)] text-xs min-w-0">
+                      {attachmentFile.name}
+                    </span>
+                    <span className="text-[10px] text-[var(--text-secondary)] shrink-0 whitespace-nowrap">
+                      {(attachmentFile.size / 1024).toFixed(0)} KB
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setAttachmentFile(null)}
+                      className="ml-1 shrink-0 rounded p-0.5 hover:bg-[var(--destructive-light)] transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5 text-[var(--text-secondary)] hover:text-[var(--destructive)]" />
                     </button>
                   </div>
                 ) : editing?.attachment ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                    <Paperclip className="h-4 w-4 text-[var(--text-secondary)] shrink-0" />
+                  <div className="flex items-center gap-2 h-9 rounded-md border border-[var(--border)] bg-[var(--surface-hover)] px-3 text-sm min-w-0">
+                    <Paperclip className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
                     <a
                       href={editing.attachment}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 truncate text-[var(--primary)] underline"
+                      className="flex-1 truncate text-xs text-[var(--primary)] underline underline-offset-2 min-w-0"
                     >
                       View existing attachment
                     </a>
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)]"
+                      className="shrink-0 text-[10px] text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors whitespace-nowrap"
                     >
                       Replace
                     </button>
                   </div>
                 ) : (
-                  <Button
+                  <button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2"
                     onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 w-full h-9 rounded-md border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors"
                   >
-                    <Paperclip className="h-3.5 w-3.5" />
-                    Attach File
-                  </Button>
+                    <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-xs">Attach file…</span>
+                  </button>
                 )}
               </div>
-            </div>
+            </>
           )}
 
           {/* Notes */}
