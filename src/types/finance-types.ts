@@ -10,6 +10,7 @@ export interface Payment extends GlobalRecords {
   paymentId: string;
   paymentType: PaymentType;
   uom: string | null;
+  month: string | null;
   quantity: number | null;
   pricePerUnit: number;
   totalAmount: number;
@@ -21,11 +22,13 @@ export interface Payment extends GlobalRecords {
   notes: string | null;
   partiallyPaidAmount: number | null;
   attachment: string | null;
+  transactions?: PaymentTransaction[];
 }
 
 export interface CreatePaymentPayload {
   paymentType: PaymentType;
   uom?: string | null;
+  month?: string | null;
   quantity?: number | null;
   pricePerUnit: number;
   paymentDate?: string | null;
@@ -38,10 +41,37 @@ export interface CreatePaymentPayload {
   attachment?: File | null;
 }
 
+export interface AllocatePaymentPayload {
+  amount: number;
+  paymentMethod?: PaymentMethod | null;
+  paymentDate?: string | null;
+  referenceNumber?: string | null;
+  notes?: string | null;
+}
+
+export interface PaymentTransaction {
+  _id: string;
+  amount: number;
+  paymentDate: string | null;
+  paymentMethod: PaymentMethod | null;
+  referenceNumber: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentTransactionHistory {
+  paymentId: string;
+  totalAmount: number;
+  partiallyPaidAmount: number;
+  paymentStatus: PaymentStatus;
+  outstanding: number;
+  transactions: PaymentTransaction[];
+}
+
 export interface ProjectFinanceSummary {
   totalBilled: number;
   totalReceived: number;
-  partiallyPaid: number;
   outstanding: number;
   count: number;
 }

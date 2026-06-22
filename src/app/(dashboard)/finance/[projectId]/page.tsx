@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Pencil, Trash2,
-  Search, Paperclip, Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText, TrendingDown,
+  Search, Paperclip, Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText, CreditCard, History,
 } from "lucide-react";
 import { Button, Input, Badge, Select } from "@/components";
 import { StatCard } from "@/components/atoms/statCard/statCard";
@@ -15,6 +15,8 @@ import {
 } from "@/api/services/finance/finance-service";
 import { useGetProjectById } from "@/api/services/project-management/project-service";
 import { PaymentFormModal } from "@/components/organisms/financeModule/payment-form-modal";
+import { AllocatePaymentModal } from "@/components/organisms/financeModule/allocate-payment-modal";
+import { PaymentHistoryDrawer } from "@/components/organisms/financeModule/payment-history-drawer";
 import { PaymentStatusBadge } from "@/components/organisms/financeModule/payment-status-badge";
 import useSessionStore from "@/store/session-store";
 import type { UserRole } from "@/types/global-types";
@@ -40,6 +42,8 @@ export default function ProjectFinanceDetailPage() {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Payment | null>(null);
+  const [allocating, setAllocating] = useState<Payment | null>(null);
+  const [viewingHistory, setViewingHistory] = useState<Payment | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -152,16 +156,15 @@ export default function ProjectFinanceDetailPage() {
       {/* KPI Cards */}
       {canViewFull && (
         summaryLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-24 rounded-xl bg-[var(--surface)] border border-[var(--border)] animate-pulse" />
             ))}
           </div>
         ) : summary ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
             <StatCard icon={Wallet} label="Total Billed" value={fmt(summary.totalBilled)} />
             <StatCard icon={CheckCircle2} label="Total Received" value={fmt(summary.totalReceived)} />
-            <StatCard icon={TrendingDown} label="Partially Received" value={fmt(summary.partiallyPaid)} />
             <StatCard icon={AlertCircle} label="Outstanding" value={fmt(summary.outstanding)} />
           </div>
         ) : null
@@ -244,7 +247,6 @@ export default function ProjectFinanceDetailPage() {
                     >
                       Total{sortIcon("totalAmount")}
                     </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Partial Received</th>
                   </>
                 )}
                 <th
@@ -253,18 +255,17 @@ export default function ProjectFinanceDetailPage() {
                 >
                   Due Date{sortIcon("dueDate")}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Payment Date</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Method</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Ref #</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Status</th>
-                {canEdit && <th className="px-4 py-3 w-20" />}
+                <th className="px-4 py-3 w-32" />
               </tr>
             </thead>
             <tbody>
               {paymentsLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--border)]">
-                    {Array.from({ length: canViewFull ? 11 : 9 }).map((_, j) => (
+                    {Array.from({ length: canViewFull ? 9 : 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 rounded bg-[var(--surface-hover)] animate-pulse" />
                       </td>
@@ -273,7 +274,7 @@ export default function ProjectFinanceDetailPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canViewFull ? 11 : 9} className="px-4 py-16 text-center">
+                  <td colSpan={canViewFull ? 9 : 7} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-[var(--text-secondary)]">
                       <Wallet className="h-8 w-8 opacity-30" />
                       <p className="text-sm">No payment entries found.</p>
@@ -299,16 +300,10 @@ export default function ProjectFinanceDetailPage() {
                     {canViewFull && (
                       <>
                         <td className="px-4 py-3 text-right font-semibold text-[var(--text-primary)]">{fmt(p.totalAmount)}</td>
-                        <td className="px-4 py-3 text-right text-blue-600 text-sm">
-                          {p.partiallyPaidAmount != null ? fmt(p.partiallyPaidAmount) : "—"}
-                        </td>
                       </>
                     )}
                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                       {p.dueDate ? new Date(p.dueDate).toLocaleDateString() : "—"}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm">
-                      {p.paymentDate ? new Date(p.paymentDate).toLocaleDateString() : "—"}
                     </td>
                     <td className="px-4 py-3 text-sm">{p.paymentMethod ?? "—"}</td>
                     <td className="px-4 py-3">
@@ -322,24 +317,42 @@ export default function ProjectFinanceDetailPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><PaymentStatusBadge status={p.paymentStatus} /></td>
-                    {canEdit && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {canEdit && (p.paymentStatus === "Pending" || p.paymentStatus === "Partially Paid") && (
                           <Button
-                            size="icon" variant="ghost" className="h-7 w-7"
-                            onClick={() => { setEditing(p); setModalOpen(true); }}
+                            size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            title="Allocate payment"
+                            onClick={() => setAllocating(p)}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <CreditCard className="h-3.5 w-3.5" />
                           </Button>
-                          <Button
-                            size="icon" variant="ghost" className="h-7 w-7 text-[var(--destructive)]"
-                            onClick={() => handleDelete(p._id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    )}
+                        )}
+                        <Button
+                          size="icon" variant="ghost" className="h-7 w-7 text-[var(--text-secondary)] hover:text-[var(--primary)]"
+                          title="Payment history"
+                          onClick={() => setViewingHistory(p)}
+                        >
+                          <History className="h-3.5 w-3.5" />
+                        </Button>
+                        {canEdit && (
+                          <>
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7"
+                              onClick={() => { setEditing(p); setModalOpen(true); }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7 text-[var(--destructive)]"
+                              onClick={() => handleDelete(p._id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -353,6 +366,20 @@ export default function ProjectFinanceDetailPage() {
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditing(null); }}
         editing={editing}
+      />
+
+      <AllocatePaymentModal
+        projectId={projectId}
+        payment={allocating}
+        open={!!allocating}
+        onClose={() => setAllocating(null)}
+      />
+
+      <PaymentHistoryDrawer
+        projectId={projectId}
+        payment={viewingHistory}
+        open={!!viewingHistory}
+        onClose={() => setViewingHistory(null)}
       />
     </div>
   );
