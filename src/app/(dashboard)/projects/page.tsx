@@ -103,40 +103,45 @@ function ProjectCard({
         <div className="flex-1" />
 
         {/* Footer meta: contact + tech */}
-        {(project.mainContact?.email || project.mainContact?.phone || project.techStack?.length > 0) && (
-          <div className="border-t border-[var(--border)] pt-3 space-y-2">
-            {(project.mainContact?.email || project.mainContact?.phone) && (
-              <div className="text-xs text-[var(--text-secondary)] space-y-1">
-                {project.mainContact.email && (
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Mail className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
-                    <span className="truncate">{project.mainContact.email}</span>
-                  </div>
-                )}
-                {project.mainContact.phone && (
-                  <div className="flex items-center gap-1.5">
-                    <Phone className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
-                    <span>{project.mainContact.phone}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            {project.techStack?.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {project.techStack.slice(0, 4).map((tech) => (
-                  <span key={tech} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-secondary)]">
-                    {tech}
-                  </span>
-                ))}
-                {project.techStack.length > 4 && (
-                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-tertiary)]">
-                    +{project.techStack.length - 4}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        {(() => {
+          const c = Array.isArray(project.mainContacts) && project.mainContacts.length > 0
+            ? project.mainContacts[0]
+            : project.mainContact ?? null;
+          return (c?.email || c?.phone || project.techStack?.length > 0) ? (
+            <div className="border-t border-[var(--border)] pt-3 space-y-2">
+              {(c?.email || c?.phone) && (
+                <div className="text-xs text-[var(--text-secondary)] space-y-1">
+                  {c.email && (
+                    <div className="flex items-center gap-1.5 truncate">
+                      <Mail className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
+                      <span className="truncate">{c.email}</span>
+                    </div>
+                  )}
+                  {c.phone && (
+                    <div className="flex items-center gap-1.5">
+                      <Phone className="h-3 w-3 shrink-0 text-[var(--text-tertiary)]" />
+                      <span>{c.phone}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+              {project.techStack?.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {project.techStack.slice(0, 4).map((tech) => (
+                    <span key={tech} className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-secondary)]">
+                      {tech}
+                    </span>
+                  ))}
+                  {project.techStack.length > 4 && (
+                    <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-[var(--background)] border border-[var(--border)] text-[var(--text-tertiary)]">
+                      +{project.techStack.length - 4}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null;
+        })()}
       </CardContent>
 
       {/* ── Action Bar — always at bottom, buttons stop propagation ── */}
@@ -217,11 +222,16 @@ function ProjectTableRow({
         {fmtDate(project.startDate)} → {fmtDate(project.endDate)}
       </td>
       <td className="py-3 px-4">
-        {project.mainContact?.email ? (
-          <span className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
-            <Mail className="h-3 w-3" />{project.mainContact.email}
-          </span>
-        ) : <span className="text-xs text-[var(--text-tertiary)]">—</span>}
+        {(() => {
+          const c = Array.isArray(project.mainContacts) && project.mainContacts.length > 0
+            ? project.mainContacts[0]
+            : project.mainContact ?? null;
+          return c?.email ? (
+            <span className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
+              <Mail className="h-3 w-3" />{c.email}
+            </span>
+          ) : <span className="text-xs text-[var(--text-tertiary)]">—</span>;
+        })()}
       </td>
       <td className="py-3 px-4">
         <div className="flex flex-wrap gap-1">
