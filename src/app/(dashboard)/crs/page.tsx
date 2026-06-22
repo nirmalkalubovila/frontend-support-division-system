@@ -17,9 +17,10 @@ import {
 } from "lucide-react";
 import { Button, Input, Select } from "@/components";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
+import useSessionStore from "@/store/session-store";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
-import { useGetCRStats } from "@/api/services/project-management/cr-service";
+import { useGetCRStats, useGetAssignedCRs } from "@/api/services/project-management/cr-service";
 import { CRTab } from "../projects/[projectId]/tabs";
 
 const CR_PRIORITIES = ["Critical", "High", "Medium", "Low"];
@@ -56,6 +57,15 @@ function ProjectCRCard({
   filterSearch?: string;
 }) {
   const { data: stats } = useGetCRStats(group.id);
+  const userInfo = useSessionStore((s) => s.userInfo);
+  const { data: assignedCRs = [] } = useGetAssignedCRs(userInfo?._id);
+
+  const hasNewAssignment = useMemo(() => {
+    return assignedCRs.some((cr) => {
+      const projId = typeof cr.project === "object" && cr.project ? cr.project._id : cr.project;
+      return String(projId) === String(group.id) && ["Submitted", "To Do"].includes(cr.status);
+    });
+  }, [assignedCRs, group.id]);
 
   const total = stats?.total ?? 0;
   const open = stats?.open ?? 0;
@@ -135,9 +145,17 @@ function ProjectCRCard({
       className="col-span-1 border border-[var(--border)] rounded-2xl bg-[var(--surface)] hover:border-[var(--border-hover)] hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col p-5 h-full min-h-[180px] cursor-pointer select-none"
     >
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
-          {group.clientCode || "GEN"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+            {group.clientCode || "GEN"}
+          </span>
+          {hasNewAssignment && (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 uppercase tracking-wider animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+              New
+            </span>
+          )}
+        </div>
         <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
       </div>
 

@@ -18,6 +18,7 @@ import { useGetProjectById } from "@/api/services/project-management/project-ser
 import { useGetIssues } from "@/api/services/issue-management/issue-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { useGetProjectTasks } from "@/api/services/project-management/task-service";
+import { useGetProjectCRs } from "@/api/services/project-management/cr-service";
 import type { User } from "@/api/services/user-management/user-service";
 import { TasksTab, CRTab, IssuesTab } from "./tabs";
 import { GanttTab } from "./gantt-tab";
@@ -49,8 +50,10 @@ function DashboardTab({ projectId }: { projectId: string }) {
   const { data: project, isLoading } = useGetProjectById(projectId);
   const { data: issuesData } = useGetIssues({ project: projectId, limit: 200 });
   const { data: tasks = [] } = useGetProjectTasks(projectId);
+  const { data: crsData } = useGetProjectCRs(projectId);
 
   const issues = issuesData?.data ?? [];
+  const crs = crsData?.data ?? [];
 
   const issueStats = useMemo(() => ({
     total: issues.length,
@@ -332,27 +335,80 @@ function DashboardTab({ projectId }: { projectId: string }) {
         </Card>
       )}
 
-      {/* Recent Issues */}
-      {issues.length > 0 && (
+      {/* Recent Issues, Tasks & CRs */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Issues column */}
         <Card className="bg-[var(--surface)] border-[var(--border)]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" /> Recent Issues
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+              <Ticket className="h-4 w-4 text-[var(--primary)]" /> Recent Issues
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0 space-y-2">
-            {issues.slice(0, 5).map((issue) => (
-              <div key={issue._id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${issue.priority === "Critical" ? "bg-red-500" : issue.priority === "High" ? "bg-orange-500" : issue.priority === "Medium" ? "bg-yellow-400" : "bg-green-500"}`} />
-                  <span className="text-sm text-[var(--text-primary)] truncate">{issue.title}</span>
+            {issues.length === 0 ? (
+              <p className="text-xs text-[var(--text-tertiary)] py-4 text-center">No recent issues</p>
+            ) : (
+              issues.slice(0, 5).map((issue) => (
+                <div key={issue._id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${issue.priority === "Critical" ? "bg-red-500" : issue.priority === "High" ? "bg-orange-500" : issue.priority === "Medium" ? "bg-yellow-400" : "bg-green-500"}`} />
+                    <span className="text-sm text-[var(--text-primary)] truncate">{issue.title}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-[var(--text-secondary)] shrink-0 ml-2">{issue.status}</span>
                 </div>
-                <span className="text-xs font-semibold text-[var(--text-secondary)] shrink-0 ml-2">{issue.status}</span>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
-      )}
+
+        {/* Tasks column */}
+        <Card className="bg-[var(--surface)] border-[var(--border)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+              <CheckSquare className="h-4 w-4 text-[var(--primary)]" /> Recent Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {tasks.length === 0 ? (
+              <p className="text-xs text-[var(--text-tertiary)] py-4 text-center">No recent tasks</p>
+            ) : (
+              tasks.slice(0, 5).map((task) => (
+                <div key={task._id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${task.priority === "Critical" ? "bg-red-500" : task.priority === "High" ? "bg-orange-500" : task.priority === "Medium" ? "bg-yellow-400" : "bg-green-500"}`} />
+                    <span className="text-sm text-[var(--text-primary)] truncate">{task.name}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-[var(--text-secondary)] shrink-0 ml-2">{task.status}</span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* CRs column */}
+        <Card className="bg-[var(--surface)] border-[var(--border)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+              <GitPullRequest className="h-4 w-4 text-[var(--primary)]" /> Recent CRs
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {crs.length === 0 ? (
+              <p className="text-xs text-[var(--text-tertiary)] py-4 text-center">No recent CRs</p>
+            ) : (
+              crs.slice(0, 5).map((cr) => (
+                <div key={cr._id} className="flex items-center justify-between py-2 border-b border-[var(--border)] last:border-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${cr.priority === "Critical" ? "bg-red-500" : cr.priority === "High" ? "bg-orange-500" : cr.priority === "Medium" ? "bg-yellow-400" : "bg-green-500"}`} />
+                    <span className="text-sm text-[var(--text-primary)] truncate">{cr.title}</span>
+                  </div>
+                  <span className="text-xs font-semibold text-[var(--text-secondary)] shrink-0 ml-2">{cr.status}</span>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
