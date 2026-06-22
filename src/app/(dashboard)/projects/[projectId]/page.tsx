@@ -20,6 +20,7 @@ import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { useGetProjectTasks } from "@/api/services/project-management/task-service";
 import type { User } from "@/api/services/user-management/user-service";
 import { TasksTab, CRTab, IssuesTab } from "./tabs";
+import { GanttTab } from "./gantt-tab";
 import { API_BASE_URL } from "@/lib/constants";
 
 const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
@@ -370,6 +371,9 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="issues" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <Ticket className="h-4 w-4" /> Issues
           </TabsTrigger>
+          <TabsTrigger value="gantt" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <Calendar className="h-4 w-4" /> Gantt Chart
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="dashboard">
@@ -386,6 +390,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="issues">
           <IssuesTab projectId={projectId} members={members} />
+        </TabsContent>
+
+        <TabsContent value="gantt">
+          <GanttTab projectId={projectId} members={members} />
         </TabsContent>
       </Tabs>
     </div>
