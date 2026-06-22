@@ -48,7 +48,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
   // ──────────────────────────────────────────────────────────────
   const metrics = useMemo(() => {
     const activeIssues = issues.filter(
-      (i) => i.status !== "Resolved" && i.status !== "Closed"
+      (i) => i.status !== "Resolved" && i.status !== "Closed" && i.status !== "Done"
     );
 
     const unassigned = activeIssues.filter((i) => !i.assignedTo).length;
@@ -81,7 +81,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
   // ──────────────────────────────────────────────────────────────
   const triageQueue = useMemo(() => {
     return issues
-      .filter((i) => !i.assignedTo && !["Resolved", "Closed"].includes(i.status))
+      .filter((i) => !i.assignedTo && !["Resolved", "Closed", "Done"].includes(i.status))
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
       .slice(0, 5);
   }, [issues]);
@@ -97,7 +97,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
 
   const resolvedIssues = useMemo(() => {
     return issues
-      .filter((i) => i.status === "Resolved" || i.status === "Closed")
+      .filter((i) => i.status === "Resolved" || i.status === "Closed" || i.status === "Done")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [issues]);
 
@@ -112,7 +112,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     });
 
     issues.forEach((issue) => {
-      if (!["Resolved", "Closed"].includes(issue.status) && issue.assignedTo) {
+      if (!["Resolved", "Closed", "Done"].includes(issue.status) && issue.assignedTo) {
         const name = typeof issue.assignedTo === "object" ? issue.assignedTo.name : issue.assignedTo;
         const matchedUser = users.find(u => u._id === name || u.name === name || u._id === (issue.assignedTo as any)._id);
         if (matchedUser) {

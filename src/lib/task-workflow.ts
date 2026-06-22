@@ -15,7 +15,7 @@ export const WORKFLOW_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
 // Only "Review->Done" and "Done->In Progress" are restricted.
 // All other transitions are open to every authenticated user.
 export const ROLE_GATES: Record<string, string[]> = {
-  "Review->Done":      ["super_admin", "manager", "senior_engineer"],
+  "Review->Done":      ["super_admin", "manager", "senior_engineer", "engineer"],
   "Done->In Progress": ["super_admin", "manager", "senior_engineer"],
 };
 

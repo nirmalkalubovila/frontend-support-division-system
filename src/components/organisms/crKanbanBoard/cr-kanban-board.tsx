@@ -157,12 +157,13 @@ interface ColumnProps {
   onDelete: (cr: ChangeRequest) => void;
   onAdd: (status: CRStatus) => void;
   canEdit: boolean;
+  userInfo: any;
 }
 
 function CRKanbanColumn({
   status, crs, dragOverStatus, draggingCR,
   onDragStart, onDragEnd, onDragOver, onDrop,
-  onCRClick, onEdit, onDelete, onAdd, canEdit,
+  onCRClick, onEdit, onDelete, onAdd, canEdit, userInfo,
 }: ColumnProps) {
   const cfg = COL_CONFIG[status] ?? COL_CONFIG["Draft"];
   const isOver = dragOverStatus === status;
@@ -210,19 +211,25 @@ function CRKanbanColumn({
             )}
           </div>
         ) : (
-          crs.map((cr) => (
-            <CRKanbanCard
-              key={cr._id}
-              cr={cr}
-              isDragging={draggingCR?._id === cr._id}
-              onDragStart={onDragStart}
-              onDragEnd={onDragEnd}
-              onClick={() => onCRClick(cr)}
-              onEdit={() => onEdit(cr)}
-              onDelete={() => onDelete(cr)}
-              canEdit={canEdit}
-            />
-          ))
+          crs.map((cr) => {
+            const hasCardEditAccess = userInfo ? (
+              ["super_admin", "manager", "senior_engineer"].includes(userInfo.role) ||
+              cr.assignedDevelopers?.some((d) => (typeof d === "object" ? d._id : d) === userInfo._id)
+            ) : false;
+            return (
+              <CRKanbanCard
+                key={cr._id}
+                cr={cr}
+                isDragging={draggingCR?._id === cr._id}
+                onDragStart={onDragStart}
+                onDragEnd={onDragEnd}
+                onClick={() => onCRClick(cr)}
+                onEdit={() => onEdit(cr)}
+                onDelete={() => onDelete(cr)}
+                canEdit={hasCardEditAccess}
+              />
+            );
+          })
         )}
         {isOver && draggingCR && (
           <div className="h-16 rounded-xl border-2 border-dashed border-[var(--primary)] bg-[rgba(99,102,241,0.05)] flex items-center justify-center">
@@ -324,6 +331,7 @@ export function CRKanbanBoard({ projectId, members, onCRClick, onEdit, onDelete,
               onDelete={onDelete}
               onAdd={onAdd}
               canEdit={canEdit}
+              userInfo={userInfo}
             />
           ))}
         </div>
