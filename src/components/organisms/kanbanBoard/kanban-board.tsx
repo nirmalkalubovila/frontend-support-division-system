@@ -550,6 +550,31 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
               </div>
             )}
 
+            {/* Dependencies */}
+            {task.dependencies && task.dependencies.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Predecessor Tasks (Dependencies)</Label>
+                <div className="space-y-1.5">
+                  {task.dependencies.map((dep: any) => {
+                    const depId = typeof dep === "object" ? dep._id : dep;
+                    const depName = typeof dep === "object" ? dep.name : "Unknown Task";
+                    const depStatus = typeof dep === "object" ? dep.status : null;
+                    const badgeStyle = depStatus ? (COL_CONFIG[depStatus as TaskStatus]?.badge ?? "") : "";
+                    return (
+                      <div key={depId} className="flex items-center justify-between p-2 rounded-lg bg-[var(--background)] border border-[var(--border)] text-xs">
+                        <span className="font-medium text-[var(--text-primary)] truncate flex-1">{depName}</span>
+                        {depStatus && (
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${badgeStyle}`}>
+                            {depStatus}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Assignees */}
             <div className="space-y-2">
               <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Assignees</Label>

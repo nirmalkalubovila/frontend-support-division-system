@@ -50,6 +50,7 @@ export interface Task extends GlobalRecords {
   startDate: string | null;
   endDate: string | null;
   assignees: TaskAssignee[];
+  dependencies?: any[];
   relatedLinks: RelatedLink[];
   attachments: TaskAttachment[];
   comments?: TaskComment[];
@@ -65,6 +66,7 @@ export interface CreateTaskPayload {
   startDate?: string | null;
   endDate?: string | null;
   assignees?: string[];
+  dependencies?: string[];
   relatedLinks?: RelatedLink[];
   parent?: string | null;
   cr?: string | null;
