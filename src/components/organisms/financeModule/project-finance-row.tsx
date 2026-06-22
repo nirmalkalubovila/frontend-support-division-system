@@ -21,7 +21,12 @@ export function ProjectFinanceRow({ project, userRole }: Props) {
   const router = useRouter();
   const canViewFull = CAN_VIEW_FULL.includes(userRole);
 
-  const mainContactName = project.mainContact?.name ?? "—";
+  const mainContactName = (() => {
+    if (Array.isArray(project.mainContacts) && project.mainContacts.length > 0) {
+      return project.mainContacts[0].name ?? "—";
+    }
+    return project.mainContact?.name ?? "—";
+  })();
 
   const overallStatus: "Paid" | "Pending" | "Overdue" =
     project.finance.count === 0
