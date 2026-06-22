@@ -212,44 +212,105 @@ function DashboardTab({ projectId }: { projectId: string }) {
         <Card className="bg-[var(--surface)] border-[var(--border)]">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
-              <Users className="h-4 w-4" /> Main Contact
+              <Users className="h-4 w-4" /> Contact Points
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            {(project.mainContact?.name || project.mainContact?.email || project.mainContact?.phone) ? (
-              <div className="space-y-3">
-                {project.mainContact.name && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white font-bold shrink-0">
-                      {project.mainContact.name.charAt(0).toUpperCase()}
+            {(() => {
+              // Support both new array (mainContacts) and old single-object (mainContact)
+              const contacts = Array.isArray(project.mainContacts) && project.mainContacts.length > 0
+                ? project.mainContacts
+                : project.mainContact && (project.mainContact.name || project.mainContact.email || project.mainContact.phone)
+                  ? [project.mainContact]
+                  : [];
+              if (contacts.length === 0) {
+                return <p className="text-sm text-[var(--text-tertiary)] py-4 text-center">No contact information set.</p>;
+              }
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {contacts.map((c, i) => (
+                    <div key={i} className="space-y-2 p-3 rounded-xl bg-[var(--background)] border border-[var(--border)]">
+                      {contacts.length > 1 && (
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">Contact {i + 1}</p>
+                      )}
+                      {c.name && (
+                        <div className="flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white font-bold shrink-0">
+                            {c.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--text-primary)]">{c.name}</p>
+                            {contacts.length === 1 && (
+                              <p className="text-xs text-[var(--text-secondary)]">Contact</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      {c.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
+                          <a href={`mailto:${c.email}`} className="text-[var(--primary)] hover:underline truncate text-xs">{c.email}</a>
+                        </div>
+                      )}
+                      {c.phone && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
+                          <span className="text-[var(--text-primary)] text-xs">{c.phone}</span>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">{project.mainContact.name}</p>
-                      <p className="text-xs text-[var(--text-secondary)]">Primary Contact</p>
-                    </div>
-                  </div>
-                )}
-                {project.mainContact.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
-                    <a href={`mailto:${project.mainContact.email}`} className="text-[var(--primary)] hover:underline truncate">
-                      {project.mainContact.email}
-                    </a>
-                  </div>
-                )}
-                {project.mainContact.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-[var(--text-tertiary)] shrink-0" />
-                    <span className="text-[var(--text-primary)]">{project.mainContact.phone}</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--text-tertiary)] py-4 text-center">No contact information set.</p>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
+
+      {/* Assigned Members */}
+      {Array.isArray(project.members) && project.members.length > 0 && (
+        <Card className="bg-[var(--surface)] border-[var(--border)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-2">
+              <Users className="h-4 w-4" /> Assigned Members
+              <span className="ml-auto text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.1)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]">
+                {project.members.length}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {(project.members as any[]).map((m: any, i: number) => {
+                const name: string = typeof m === "object" ? m.name : "—";
+                const email: string = typeof m === "object" ? m.email : "";
+                const role: string = typeof m === "object" ? m.role : "";
+                const initial = name.charAt(0).toUpperCase();
+                return (
+                  <div
+                    key={typeof m === "object" ? m._id : i}
+                    className="flex items-center gap-3 p-2.5 rounded-xl bg-[var(--background)] border border-[var(--border)]"
+                  >
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {initial}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate">{name}</p>
+                      {email && (
+                        <p className="text-[11px] text-[var(--text-secondary)] truncate">{email}</p>
+                      )}
+                    </div>
+                    {role && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] shrink-0 capitalize whitespace-nowrap">
+                        {role.replace(/_/g, " ")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tech Stack */}
       {project.techStack?.length > 0 && (

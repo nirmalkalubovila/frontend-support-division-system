@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Loader2, AlertCircle, FolderKanban, UploadCloud, X, Plus, Code2, Headphones } from "lucide-react";
+import { Loader2, AlertCircle, FolderKanban, UploadCloud, X, Plus, Code2, Headphones, Users, Search } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -11,12 +11,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCreateProject, useUpdateProject,
   type Project, type CreateProjectPayload, type MainContact,
 } from "@/api/services/project-management/project-service";
+import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { API_BASE_URL } from "@/lib/constants";
 
 const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
+
+function formatPhone(value: string): string {
+  const digits = value.replace(/[^\d+]/g, "");
+  if (digits.startsWith("+94")) {
+    const local = digits.slice(3);
+    if (local.length <= 2) return `+94 ${local}`;
+    if (local.length <= 4) return `+94 ${local.slice(0, 2)} ${local.slice(2)}`;
+    return `+94 ${local.slice(0, 2)} ${local.slice(2, 5)} ${local.slice(5, 9)}`;
+  }
+  if (digits.startsWith("0")) {
+    const body = digits.slice(1);
+    if (body.length <= 2) return `0${body}`;
+    if (body.length <= 5) return `0${body.slice(0, 2)} ${body.slice(2)}`;
+    return `0${body.slice(0, 2)} ${body.slice(2, 5)} ${body.slice(5, 9)}`;
+  }
+  return digits;
+}
 
 const TECH_SUGGESTIONS = [
   "React", "Next.js", "Vue.js", "Angular", "Node.js", "Express",
@@ -40,7 +59,7 @@ const makeEmptyForm = () => ({
   endDate: "",
   projectType: [] as string[],
   techStack: [] as string[],
-  mainContact: { name: "", email: "", phone: "" } as MainContact,
+  mainContacts: [{ name: "", email: "", phone: "" }] as MainContact[],
   client: "",
   contractType: "" as any,
   allocatedHours: 0,
@@ -53,6 +72,8 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
   const isPending = createMutation.isPending || updateMutation.isPending;
+  const { data: allUsers = [], isLoading: usersLoading } = useGetAllUsers();
+  const [memberSearch, setMemberSearch] = useState("");
 
   const [form, setForm] = useState(makeEmptyForm());
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -76,11 +97,21 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
         endDate: project.endDate ? project.endDate.split("T")[0] : "",
         projectType: project.projectType || [],
         techStack: project.techStack || [],
-        mainContact: {
-          name: project.mainContact?.name || "",
-          email: project.mainContact?.email || "",
-          phone: project.mainContact?.phone || "",
-        },
+        mainContacts: (() => {
+          // Handle new array format
+          if (Array.isArray(project.mainContacts) && project.mainContacts.length > 0) {
+            return project.mainContacts.map((c: MainContact) => ({
+              name: c.name || "",
+              email: c.email || "",
+              phone: c.phone || "",
+            }));
+          }
+          // Backward-compat: migrate old single mainContact object
+          if (project.mainContact && (project.mainContact.name || project.mainContact.email || project.mainContact.phone)) {
+            return [{ name: project.mainContact.name || "", email: project.mainContact.email || "", phone: project.mainContact.phone || "" }];
+          }
+          return [{ name: "", email: "", phone: "" }];
+        })(),
         client: typeof project.client === "object" && project.client ? project.client._id : (project.client || ""),
         contractType: project.contractType || "",
         allocatedHours: project.allocatedHours || 0,
@@ -95,6 +126,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
     setPhotoFile(null);
     setValidationError(null);
     setTechInput("");
+    setMemberSearch("");
   }, [open, project]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,11 +186,13 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
       endDate: form.endDate || null,
       projectType: form.projectType,
       techStack: form.techStack,
-      mainContact: {
-        name: form.mainContact.name || null,
-        email: form.mainContact.email || null,
-        phone: form.mainContact.phone || null,
-      },
+      mainContacts: form.mainContacts
+        .filter((c) => c.name || c.email || c.phone)
+        .map((c) => ({
+          name: c.name || null,
+          email: c.email || null,
+          phone: c.phone || null,
+        })),
       photo: photoFile,
       client: form.client || null,
       contractType: form.contractType || null,
@@ -367,55 +401,111 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
           </section>
 
 
-          {/* ── Main Contact ─────────────────────────────── */}
+          {/* ── Contact Points ───────────────────────────── */}
           <section className="space-y-3 pt-2 border-t border-[var(--border)]">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-              Main Contact Point
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Name</Label>
-                <Input
-                  placeholder="Contact name"
-                  value={form.mainContact.name || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, mainContact: { ...p.mainContact, name: e.target.value } }))}
-                  className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Email</Label>
-                <Input
-                  type="email"
-                  placeholder="contact@company.com"
-                  value={form.mainContact.email || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, mainContact: { ...p.mainContact, email: e.target.value } }))}
-                  className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Phone</Label>
-                <Input
-                  placeholder="+94 77 123 4567"
-                  value={form.mainContact.phone || ""}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/[^\d+]/g, "");
-                    let formatted = digits;
-                    if (digits.startsWith("+94")) {
-                      const local = digits.slice(3);
-                      if (local.length <= 2) formatted = `+94 ${local}`;
-                      else if (local.length <= 4) formatted = `+94 ${local.slice(0,2)} ${local.slice(2)}`;
-                      else formatted = `+94 ${local.slice(0,2)} ${local.slice(2,5)} ${local.slice(5,9)}`;
-                    } else if (digits.startsWith("0")) {
-                      const body = digits.slice(1);
-                      if (body.length <= 2) formatted = `0${body}`;
-                      else if (body.length <= 5) formatted = `0${body.slice(0,2)} ${body.slice(2)}`;
-                      else formatted = `0${body.slice(0,2)} ${body.slice(2,5)} ${body.slice(5,9)}`;
-                    }
-                    setForm((p) => ({ ...p, mainContact: { ...p.mainContact, phone: formatted } }));
-                  }}
-                  className="h-10 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
-                />
-              </div>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                Contact Points
+              </h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setForm((p) => ({
+                    ...p,
+                    mainContacts: [...p.mainContacts, { name: "", email: "", phone: "" }],
+                  }))
+                }
+                className="h-7 px-2.5 text-xs gap-1 border-[var(--border)] text-[var(--primary)] hover:bg-[rgba(99,102,241,0.08)] hover:border-[var(--primary)]"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add Contact
+              </Button>
+            </div>
+
+            <div className="space-y-3">
+              {form.mainContacts.map((contact, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3.5 space-y-3"
+                >
+                  {/* Contact header */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-tertiary)]">
+                      Contact {idx + 1}
+                    </span>
+                    {form.mainContacts.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((p) => ({
+                            ...p,
+                            mainContacts: p.mainContacts.filter((_, i) => i !== idx),
+                          }))
+                        }
+                        className="text-[var(--text-tertiary)] hover:text-[var(--error)] transition-colors"
+                        aria-label="Remove contact"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Fields */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Name</Label>
+                      <Input
+                        placeholder="Contact name"
+                        value={contact.name || ""}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            mainContacts: p.mainContacts.map((c, i) =>
+                              i === idx ? { ...c, name: e.target.value } : c
+                            ),
+                          }))
+                        }
+                        className="h-10 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Email</Label>
+                      <Input
+                        type="email"
+                        placeholder="contact@company.com"
+                        value={contact.email || ""}
+                        onChange={(e) =>
+                          setForm((p) => ({
+                            ...p,
+                            mainContacts: p.mainContacts.map((c, i) =>
+                              i === idx ? { ...c, email: e.target.value } : c
+                            ),
+                          }))
+                        }
+                        className="h-10 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)]">Phone</Label>
+                      <Input
+                        placeholder="+94 77 123 4567"
+                        value={contact.phone || ""}
+                        onChange={(e) => {
+                          const formatted = formatPhone(e.target.value);
+                          setForm((p) => ({
+                            ...p,
+                            mainContacts: p.mainContacts.map((c, i) =>
+                              i === idx ? { ...c, phone: formatted } : c
+                            ),
+                          }));
+                        }}
+                        className="h-10 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm font-medium"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -470,6 +560,132 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+          </section>
+
+          {/* ── Assign Members ──────────────────────────── */}
+          <section className="space-y-3 pt-2 border-t border-[var(--border)]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                Assign Members
+              </h3>
+              {form.members.length > 0 && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[rgba(99,102,241,0.1)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]">
+                  {form.members.length} selected
+                </span>
+              )}
+            </div>
+
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+              <Input
+                placeholder="Search members..."
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                className="pl-9 h-9 bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-sm"
+              />
+              {memberSearch && (
+                <button
+                  type="button"
+                  onClick={() => setMemberSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Member list */}
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--background)] divide-y divide-[var(--border)]">
+              {usersLoading ? (
+                <div className="flex items-center justify-center py-6 gap-2 text-xs text-[var(--text-secondary)]">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading members...
+                </div>
+              ) : allUsers.filter((u) =>
+                  u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+                  u.email.toLowerCase().includes(memberSearch.toLowerCase())
+                ).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-xs text-[var(--text-secondary)]">
+                  <Users className="h-5 w-5 mb-1 text-[var(--text-tertiary)]" />
+                  {memberSearch ? `No members match "${memberSearch}"` : "No members available"}
+                </div>
+              ) : (
+                allUsers
+                  .filter((u) =>
+                    u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+                    u.email.toLowerCase().includes(memberSearch.toLowerCase())
+                  )
+                  .map((user) => {
+                    const isChecked = form.members.includes(user._id);
+                    return (
+                      <label
+                        key={user._id}
+                        htmlFor={`member-${user._id}`}
+                        className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-[var(--surface-hover)] ${
+                          isChecked ? "bg-[rgba(99,102,241,0.04)]" : ""
+                        }`}
+                      >
+                        <Checkbox
+                          id={`member-${user._id}`}
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            setForm((prev) => ({
+                              ...prev,
+                              members: checked
+                                ? [...prev.members, user._id]
+                                : prev.members.filter((id) => id !== user._id),
+                            }));
+                          }}
+                          className="border-[var(--border)] data-[state=checked]:bg-[var(--primary)] data-[state=checked]:border-[var(--primary)]"
+                        />
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          {/* Avatar */}
+                          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{user.name}</p>
+                            <p className="text-[10px] text-[var(--text-secondary)] truncate">{user.email}</p>
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[var(--surface)] border border-[var(--border)] text-[var(--text-secondary)] shrink-0 capitalize">
+                          {user.role.replace(/_/g, " ")}
+                        </span>
+                      </label>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Selected member chips */}
+            {form.members.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {form.members.map((id) => {
+                  const user = allUsers.find((u) => u._id === id);
+                  if (!user) return null;
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-semibold bg-[rgba(99,102,241,0.1)] text-[var(--primary)] border border-[rgba(99,102,241,0.2)]"
+                    >
+                      {user.name}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            members: prev.members.filter((m) => m !== id),
+                          }))
+                        }
+                        className="hover:text-[var(--error)] transition-colors ml-0.5"
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
             )}
           </section>
