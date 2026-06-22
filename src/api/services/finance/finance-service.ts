@@ -4,6 +4,8 @@ import type { PaginateResult } from "@/types/global-types";
 import type {
   Payment,
   CreatePaymentPayload,
+  AllocatePaymentPayload,
+  PaymentTransactionHistory,
   FinanceKPIs,
   ProjectWithFinance,
 } from "@/types/finance-types";
@@ -121,3 +123,41 @@ export const useDeletePayment = (projectId: string) => {
     },
   });
 };
+
+export const useAllocatePayment = (projectId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      paymentId,
+      data,
+    }: {
+      paymentId: string;
+      data: AllocatePaymentPayload;
+    }): Promise<Payment> => {
+      const res = await axiosInstance.post(
+        `/projects/${projectId}/payments/${paymentId}/allocate`,
+        data
+      );
+      return res.data;
+    },
+    onSuccess: (_, { paymentId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/payments", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/payments/summary", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/payment/transactions", paymentId] });
+      queryClient.invalidateQueries({ queryKey: ["/finance/kpis"] });
+      queryClient.invalidateQueries({ queryKey: ["/finance/projects"] });
+    },
+  });
+};
+
+export const usePaymentTransactions = (projectId: string, paymentId: string | null) =>
+  useQuery({
+    queryKey: ["/payment/transactions", paymentId],
+    queryFn: async (): Promise<PaymentTransactionHistory> => {
+      const res = await axiosInstance.get(
+        `/projects/${projectId}/payments/${paymentId}/transactions`
+      );
+      return res.data;
+    },
+    enabled: !!projectId && !!paymentId,
+  });
