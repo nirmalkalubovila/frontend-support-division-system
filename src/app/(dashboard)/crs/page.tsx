@@ -238,12 +238,13 @@ function CRPageContent() {
     return groupedByProject.find((g) => g.id === activeProjectId) || null;
   }, [activeProjectId, groupedByProject]);
 
-  const hasActiveFilters = !!filterPriority || !!filterStatus || !!filterSearch;
+  const hasActiveFilters = !!filterPriority || !!filterStatus || !!filterSearch || !!search;
 
   const clearFilters = () => {
     setFilterPriority("");
     setFilterStatus("");
     setFilterSearch("");
+    setSearch("");
   };
 
   return (
@@ -269,15 +270,21 @@ function CRPageContent() {
 
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
           {!activeGroup && (
-            <div className="relative w-full sm:max-w-xs shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
-              <Input
-                placeholder="Search projects..."
-                className="pl-9 h-9.5 bg-[var(--surface)] border-[var(--border)]"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`gap-1.5 font-medium shadow-sm transition-all ${
+                hasActiveFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
+              }`}
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filter
+              {hasActiveFilters && (
+                <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse" />
+              )}
+              {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
           )}
 
           {activeGroup && (
@@ -341,38 +348,55 @@ function CRPageContent() {
         </div>
       </div>
 
-      {/* Filter Bar — only shown when a project is active */}
-      {activeGroup && showFilters && (
+      {/* Filter Bar — shown for both project listing and active project */}
+      {showFilters && (
         <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
-            <Input
-              placeholder="Search by title or CR number..."
-              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
-              value={filterSearch}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterSearch(e.target.value)}
-            />
-          </div>
-          <Select
-            placeholder="All Priorities"
-            value={filterPriority}
-            onChange={(v) => setFilterPriority(v)}
-            options={[
-              { label: "All Priorities", value: "" },
-              ...CR_PRIORITIES.map((p) => ({ label: p, value: p })),
-            ]}
-            className="w-44 h-9.5 bg-[var(--background)]"
-          />
-          <Select
-            placeholder="All Statuses"
-            value={filterStatus}
-            onChange={(v) => setFilterStatus(v)}
-            options={[
-              { label: "All Statuses", value: "" },
-              ...CR_STATUSES.map((s) => ({ label: s, value: s })),
-            ]}
-            className="w-48 h-9.5 bg-[var(--background)]"
-          />
+          {!activeGroup && (
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                value={search}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {activeGroup && (
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+              <Input
+                placeholder="Search by title or CR number..."
+                className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                value={filterSearch}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFilterSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {activeGroup && (
+            <>
+              <Select
+                placeholder="All Priorities"
+                value={filterPriority}
+                onChange={(v) => setFilterPriority(v)}
+                options={[
+                  { label: "All Priorities", value: "" },
+                  ...CR_PRIORITIES.map((p) => ({ label: p, value: p })),
+                ]}
+                className="w-44 h-9.5 bg-[var(--background)]"
+              />
+              <Select
+                placeholder="All Statuses"
+                value={filterStatus}
+                onChange={(v) => setFilterStatus(v)}
+                options={[
+                  { label: "All Statuses", value: "" },
+                  ...CR_STATUSES.map((s) => ({ label: s, value: s })),
+                ]}
+                className="w-48 h-9.5 bg-[var(--background)]"
+              />
+            </>
+          )}
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
               <X className="h-3.5 w-3.5" />
