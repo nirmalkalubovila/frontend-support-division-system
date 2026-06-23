@@ -5,7 +5,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   Button, Input, Label, Select, Textarea,
 } from "@/components";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X, Zap } from "lucide-react";
 import { useCreatePayment, useUpdatePayment } from "@/api/services/finance/finance-service";
 import { useGetProjectCRs } from "@/api/services/project-management/cr-service";
 import type { Payment, CreatePaymentPayload, PaymentType, PaymentStatus, PaymentMethod } from "@/types/finance-types";
@@ -98,7 +98,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
     e.preventDefault();
     const payload: CreatePaymentPayload = {
       ...form,
-      uom: null,
+      uom: (isCRBased || isOther || form.paymentType === "UOM Based") ? form.uom : null,
       quantity: null,
       paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
@@ -127,34 +127,52 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
 
-          {/* Payment Type — pill buttons */}
+          {/* Payment Type */}
           <div className="space-y-1.5">
             <Label>Payment Type</Label>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_TYPES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    // Clear uom when switching away from types that use it
-                    const clearsUom = value !== "CR Based" && value !== "Other";
-                    setForm((p) => ({
-                      ...p,
-                      paymentType: value,
-                      uom: clearsUom ? null : p.uom,
-                    }));
-                  }}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.paymentType === value
-                      ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                      : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {editing?.isSystemGenerated ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-[rgba(99,102,241,0.2)] bg-[rgba(99,102,241,0.05)] text-[var(--primary)] w-fit">
+                <Zap className="h-4 w-4" /> UOM Based (System Generated)
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_TYPES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      // Clear uom when switching away from types that use it
+                      const clearsUom = value !== "CR Based" && value !== "Other";
+                      setForm((p) => ({
+                        ...p,
+                        paymentType: value,
+                        uom: clearsUom ? null : p.uom,
+                      }));
+                    }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      form.paymentType === value
+                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                        : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* UOM Snapshot Description (Read-Only) */}
+          {editing?.isSystemGenerated && form.uom && (
+            <div className="space-y-1">
+              <Label>UOM Snapshot</Label>
+              <Input
+                value={form.uom}
+                disabled
+                className="bg-[var(--surface-hover)]"
+              />
+            </div>
+          )}
 
           {/* CR Based — CR reference input */}
           {isCRBased && (

@@ -324,8 +324,8 @@ function PaymentsTab({ projectId }: { projectId: string }) {
                           title="Payment history" onClick={() => setViewingHistory(p)}>
                           <History className="h-3.5 w-3.5" />
                         </Button>
-                        {/* Edit / Delete only for manually created payments */}
-                        {canEdit && !p.isSystemGenerated && (
+                        {/* Edit / Delete for all payments */}
+                        {canEdit && (
                           <>
                             <Button size="icon" variant="ghost" className="h-7 w-7"
                               title="Edit payment"
