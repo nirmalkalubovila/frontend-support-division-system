@@ -56,12 +56,13 @@ function ProjectCard({
   const photoUrl = project.photo ? `${STATIC_BASE}${project.photo}` : null;
 
   return (
-    <Card
-      onClick={() => router.push(`/projects/${project._id}`)}
-      className="bg-[var(--surface)] border-[var(--border)] hover:border-[var(--primary)] hover:shadow-lg transition-all cursor-pointer flex flex-col group"
-    >
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-sm hover:border-[var(--primary)] hover:shadow-lg transition-all flex flex-col group overflow-hidden">
+
       {/* ── Clickable body ── */}
-      <CardContent className="p-5 flex flex-col flex-1 gap-4">
+      <div
+        onClick={() => router.push(`/projects/${project._id}`)}
+        className="p-5 flex flex-col flex-1 gap-4 cursor-pointer"
+      >
         {/* Header */}
         <div className="flex items-start gap-3">
           {photoUrl ? (
@@ -142,13 +143,10 @@ function ProjectCard({
             </div>
           ) : null;
         })()}
-      </CardContent>
+      </div>
 
-      {/* ── Action Bar — always at bottom, buttons stop propagation ── */}
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="flex items-center gap-1 px-5 py-3 border-t border-[var(--border)] bg-[var(--background)] rounded-b-xl"
-      >
+      {/* ── Action Bar — isolated from the clickable body ── */}
+      <div className="flex items-center gap-1 px-5 py-3 border-t border-[var(--border)] bg-[var(--background)]">
         <Button
           variant="ghost" size="sm"
           onClick={() => router.push(`/projects/${project._id}`)}
@@ -158,7 +156,8 @@ function ProjectCard({
         </Button>
         <ValidatePermission permission="projects.project.update">
           <Button
-            variant="ghost" size="sm" onClick={onEdit}
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); onEdit(e); }}
             className="flex-1 h-8 text-xs gap-1.5 text-[var(--text-secondary)] hover:text-[var(--primary)] hover:bg-[var(--surface-hover)]"
           >
             <Pencil className="h-3.5 w-3.5" /> Edit
@@ -166,14 +165,15 @@ function ProjectCard({
         </ValidatePermission>
         <ValidatePermission permission="projects.project.delete">
           <Button
-            variant="ghost" size="sm" onClick={onDelete}
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); onDelete(e); }}
             className="flex-1 h-8 text-xs gap-1.5 text-[var(--text-secondary)] hover:text-red-500 hover:bg-[var(--surface-hover)]"
           >
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </Button>
         </ValidatePermission>
       </div>
-    </Card>
+    </div>
   );
 }
 

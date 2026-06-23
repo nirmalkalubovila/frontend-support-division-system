@@ -3,10 +3,12 @@
 import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, Plus, Pencil, Trash2,
-  Search, Paperclip, Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText, CreditCard, History, RotateCcw,
+  ArrowLeft, Plus, Pencil, Trash2, Search, Paperclip,
+  Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText,
+  CreditCard, History, RotateCcw, Layers, Zap, ExternalLink,
 } from "lucide-react";
 import { Button, Input, Badge, Select } from "@/components";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatCard } from "@/components/atoms/statCard/statCard";
 import {
   useProjectPayments,
@@ -19,6 +21,7 @@ import { AllocatePaymentModal } from "@/components/organisms/financeModule/alloc
 import { PaymentHistoryDrawer } from "@/components/organisms/financeModule/payment-history-drawer";
 import { PaymentStatusBadge } from "@/components/organisms/financeModule/payment-status-badge";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
+import { UomBillingTab } from "@/components/organisms/uomModule/uom-billing-tab";
 import useSessionStore from "@/store/session-store";
 import type { UserRole } from "@/types/global-types";
 import type { Payment, PaymentStatus, PaymentType } from "@/types/finance-types";
@@ -26,16 +29,20 @@ import type { Payment, PaymentStatus, PaymentType } from "@/types/finance-types"
 const CAN_EDIT: UserRole[] = ["super_admin", "manager"];
 const CAN_VIEW_FULL: UserRole[] = ["super_admin", "manager", "senior_engineer"];
 const STATUSES: PaymentStatus[] = ["Pending", "Paid", "Partially Paid", "Overdue", "Cancelled"];
-const PAYMENT_TYPES: PaymentType[] = ["Advance", "UOM Based"];
+const PAYMENT_TYPES: PaymentType[] = ["Advance", "Project Fixed Price", "CR Based", "UOM Based", "Other"];
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("si-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("si-LK", {
+    style: "currency",
+    currency: "LKR",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
-export default function ProjectFinanceDetailPage() {
-  const { projectId } = useParams<{ projectId: string }>();
-  const router = useRouter();
-
+// ─────────────────────────────────────────────────────────────
+// Payments Tab — extracted so the page stays clean
+// ─────────────────────────────────────────────────────────────
+function PaymentsTab({ projectId }: { projectId: string }) {
   const userInfo = useSessionStore((s) => s.userInfo);
   const userRole = (userInfo?.role ?? "intern") as UserRole;
   const canEdit = CAN_EDIT.includes(userRole);
@@ -54,7 +61,6 @@ export default function ProjectFinanceDetailPage() {
   const [sortBy, setSortBy] = useState<"dueDate" | "totalAmount" | "createdAt">("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
-  const { data: project, isLoading: projectLoading } = useGetProjectById(projectId);
   const { data: summary, isLoading: summaryLoading } = useProjectFinanceSummary(projectId);
   const { data: paymentsData, isLoading: paymentsLoading } = useProjectPayments(projectId, { limit: 200 });
   const deletePayment = useDeletePayment(projectId);
@@ -66,13 +72,14 @@ export default function ProjectFinanceDetailPage() {
     if (statusFilter !== "all") list = list.filter((p) => p.paymentStatus === statusFilter);
     if (typeFilter !== "all") list = list.filter((p) => p.paymentType === typeFilter);
     if (fromDate) list = list.filter((p) => p.dueDate && new Date(p.dueDate) >= new Date(fromDate));
-    if (toDate)   list = list.filter((p) => p.dueDate && new Date(p.dueDate) <= new Date(toDate + "T23:59:59"));
+    if (toDate) list = list.filter((p) => p.dueDate && new Date(p.dueDate) <= new Date(toDate + "T23:59:59"));
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter((p) =>
-        p.paymentId.toLowerCase().includes(q) ||
-        (p.referenceNumber ?? "").toLowerCase().includes(q) ||
-        (p.notes ?? "").toLowerCase().includes(q)
+      list = list.filter(
+        (p) =>
+          p.paymentId.toLowerCase().includes(q) ||
+          (p.referenceNumber ?? "").toLowerCase().includes(q) ||
+          (p.notes ?? "").toLowerCase().includes(q)
       );
     }
     return [...list].sort((a, b) => {
@@ -89,81 +96,30 @@ export default function ProjectFinanceDetailPage() {
     });
   }, [allPayments, statusFilter, typeFilter, search, sortBy, sortOrder, fromDate, toDate]);
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Delete this payment entry?")) await deletePayment.mutateAsync(id);
-  };
-
   const confirmDelete = async () => {
     if (!deletingId) return;
     await deletePayment.mutateAsync(deletingId);
     setDeletingId(null);
   };
+
   const toggleSort = (col: typeof sortBy) => {
     if (sortBy === col) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
     else { setSortBy(col); setSortOrder("desc"); }
   };
-
   const sortIcon = (col: typeof sortBy) =>
     sortBy === col ? (sortOrder === "asc" ? " ↑" : " ↓") : "";
 
-  const mainContactName = project?.mainContact?.name ?? "—";
-
-  const statusCounts = useMemo(() =>
-    STATUSES.reduce((acc, s) => {
-      acc[s] = allPayments.filter((p) => p.paymentStatus === s).length;
-      return acc;
-    }, {} as Record<PaymentStatus, number>),
+  const statusCounts = useMemo(
+    () =>
+      STATUSES.reduce((acc, s) => {
+        acc[s] = allPayments.filter((p) => p.paymentStatus === s).length;
+        return acc;
+      }, {} as Record<PaymentStatus, number>),
     [allPayments]
   );
 
-  if (projectLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 rounded bg-[var(--surface)] animate-pulse" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-24 rounded-xl bg-[var(--surface)] animate-pulse" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 shrink-0"
-            onClick={() => router.push("/finance")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl font-bold text-[var(--text-primary)]">{project?.name ?? "Project Finance"}</h1>
-              <Badge variant="secondary" className="text-xs">
-                {project?.isActive ? "Active" : "Inactive"}
-              </Badge>
-            </div>
-            <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-              {mainContactName}
-              {project?.startDate && ` · Started ${new Date(project.startDate).toLocaleDateString()}`}
-            </p>
-          </div>
-        </div>
-
-        {canEdit && (
-          <Button size="sm" className="gap-1.5 shrink-0" onClick={() => { setEditing(null); setModalOpen(true); }}>
-            <Plus className="h-3.5 w-3.5" />
-            Add Payment
-          </Button>
-        )}
-      </div>
-
+    <div className="space-y-5">
       {/* KPI Cards */}
       {canViewFull && (
         summaryLoading ? (
@@ -181,26 +137,33 @@ export default function ProjectFinanceDetailPage() {
         ) : null
       )}
 
-      {/* Project info strip */}
-      <div className="flex flex-wrap gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-sm">
-        <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-          <Clock className="h-3.5 w-3.5" />
-          <span>Allocated: <strong className="text-[var(--text-primary)]">{project?.allocatedHours ?? 0}h</strong></span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-          <Clock className="h-3.5 w-3.5" />
-          <span>Used: <strong className="text-[var(--text-primary)]">{project?.usedHours ?? 0}h</strong></span>
-        </div>
-        <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
-          <ReceiptText className="h-3.5 w-3.5" />
-          <span>Total Entries: <strong className="text-[var(--text-primary)]">{allPayments.length}</strong></span>
-        </div>
-        {STATUSES.map((s) => statusCounts[s] > 0 && (
-          <div key={s} className="flex items-center gap-1.5">
-            <PaymentStatusBadge status={s} />
-            <span className="text-[var(--text-secondary)]">×{statusCounts[s]}</span>
+      {/* Info strip + Add button */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-sm flex-1">
+          <div className="flex items-center gap-1.5 text-[var(--text-secondary)]">
+            <ReceiptText className="h-3.5 w-3.5" />
+            <span>Total Entries: <strong className="text-[var(--text-primary)]">{allPayments.length}</strong></span>
           </div>
-        ))}
+          {STATUSES.map(
+            (s) =>
+              statusCounts[s] > 0 && (
+                <div key={s} className="flex items-center gap-1.5">
+                  <PaymentStatusBadge status={s} />
+                  <span className="text-[var(--text-secondary)]">×{statusCounts[s]}</span>
+                </div>
+              )
+          )}
+        </div>
+        {canEdit && (
+          <Button
+            size="sm"
+            className="gap-1.5 shrink-0 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white"
+            onClick={() => { setEditing(null); setModalOpen(true); }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add Payment
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -230,28 +193,12 @@ export default function ProjectFinanceDetailPage() {
           value={typeFilter}
           onChange={setTypeFilter}
         />
-        <Input
-          type="date"
-          className="h-9 text-sm w-36"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          title="Due date from"
-        />
-        <Input
-          type="date"
-          className="h-9 text-sm w-36"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          title="Due date to"
-        />
+        <Input type="date" className="h-9 text-sm w-36" value={fromDate} onChange={(e) => setFromDate(e.target.value)} title="Due date from" />
+        <Input type="date" className="h-9 text-sm w-36" value={toDate} onChange={(e) => setToDate(e.target.value)} title="Due date to" />
         <Button
           variant="ghost"
           size="icon"
-          className={`h-9 w-9 shrink-0 transition-opacity ${
-            search || statusFilter !== "all" || typeFilter !== "all" || fromDate || toDate
-              ? "opacity-100"
-              : "opacity-40"
-          }`}
+          className={`h-9 w-9 shrink-0 transition-opacity ${search || statusFilter !== "all" || typeFilter !== "all" || fromDate || toDate ? "opacity-100" : "opacity-40"}`}
           title="Reset filters"
           onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setFromDate(""); setToDate(""); }}
         >
@@ -270,16 +217,14 @@ export default function ProjectFinanceDetailPage() {
               <tr className="border-b border-[var(--border)] bg-[var(--surface-hover)]">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Payment ID</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">UOM / Qty</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide">Reference</th>
                 {canViewFull && (
-                  <>
-                    <th
-                      className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide cursor-pointer select-none hover:text-[var(--primary)]"
-                      onClick={() => toggleSort("totalAmount")}
-                    >
-                      Total{sortIcon("totalAmount")}
-                    </th>
-                  </>
+                  <th
+                    className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide cursor-pointer select-none hover:text-[var(--primary)]"
+                    onClick={() => toggleSort("totalAmount")}
+                  >
+                    Total{sortIcon("totalAmount")}
+                  </th>
                 )}
                 <th
                   className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wide cursor-pointer select-none hover:text-[var(--primary)]"
@@ -297,7 +242,7 @@ export default function ProjectFinanceDetailPage() {
               {paymentsLoading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--border)]">
-                    {Array.from({ length: canViewFull ? 9 : 7 }).map((_, j) => (
+                    {Array.from({ length: canViewFull ? 9 : 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
                         <div className="h-4 rounded bg-[var(--surface-hover)] animate-pulse" />
                       </td>
@@ -306,7 +251,7 @@ export default function ProjectFinanceDetailPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canViewFull ? 9 : 7} className="px-4 py-16 text-center">
+                  <td colSpan={canViewFull ? 9 : 8} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-2 text-[var(--text-secondary)]">
                       <Wallet className="h-8 w-8 opacity-30" />
                       <p className="text-sm">No payment entries found.</p>
@@ -321,18 +266,34 @@ export default function ProjectFinanceDetailPage() {
                 </tr>
               ) : (
                 filtered.map((p) => (
-                  <tr key={p._id} className="border-b border-[var(--border)] hover:bg-[var(--surface-hover)] transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-secondary)]">{p.paymentId}</td>
+                  <tr key={p._id} className={`border-b border-[var(--border)] hover:bg-[var(--surface-hover)] transition-colors ${p.isSystemGenerated ? "bg-[rgba(99,102,241,0.02)]" : ""}`}>
+                    {/* Payment ID + Auto badge */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono text-xs text-[var(--text-secondary)]">{p.paymentId}</span>
+                        {p.isSystemGenerated && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-[rgba(99,102,241,0.1)] border border-[rgba(99,102,241,0.2)] text-[var(--primary)] whitespace-nowrap">
+                            <Zap className="h-2.5 w-2.5" /> Auto
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <Badge variant="outline" className="text-xs">{p.paymentType}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)] text-xs">
-                      {p.uom ? `${p.uom}${p.quantity != null ? ` × ${p.quantity}` : ""}` : "—"}
+                    {/* UOM / billing period */}
+                    <td className="px-4 py-3 text-xs">
+                      {p.isSystemGenerated && p.month
+                        ? <span className="font-semibold text-[var(--primary)]">UOM · {p.month}</span>
+                        : p.uom
+                          ? <span className="text-[var(--text-secondary)]">{p.uom}</span>
+                          : <span className="text-[var(--text-tertiary)]">—</span>
+                      }
                     </td>
                     {canViewFull && (
-                      <>
-                        <td className="px-4 py-3 text-right font-semibold text-[var(--text-primary)]">{fmt(p.totalAmount)}</td>
-                      </>
+                      <td className="px-4 py-3 text-right font-semibold text-[var(--text-primary)]">
+                        {fmt(p.totalAmount)}
+                      </td>
                     )}
                     <td className="px-4 py-3 whitespace-nowrap text-sm">
                       {p.dueDate ? new Date(p.dueDate).toLocaleDateString() : "—"}
@@ -351,34 +312,29 @@ export default function ProjectFinanceDetailPage() {
                     <td className="px-4 py-3"><PaymentStatusBadge status={p.paymentStatus} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
+                        {/* Allocate — works for both system and manual payments */}
                         {canEdit && (p.paymentStatus === "Pending" || p.paymentStatus === "Partially Paid") && (
-                          <Button
-                            size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
-                            title="Allocate payment"
-                            onClick={() => setAllocating(p)}
-                          >
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+                            title="Allocate payment" onClick={() => setAllocating(p)}>
                             <CreditCard className="h-3.5 w-3.5" />
                           </Button>
                         )}
-                        <Button
-                          size="icon" variant="ghost" className="h-7 w-7 text-[var(--text-secondary)] hover:text-[var(--primary)]"
-                          title="Payment history"
-                          onClick={() => setViewingHistory(p)}
-                        >
+                        {/* Transaction history — always available */}
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-[var(--text-secondary)] hover:text-[var(--primary)]"
+                          title="Payment history" onClick={() => setViewingHistory(p)}>
                           <History className="h-3.5 w-3.5" />
                         </Button>
-                        {canEdit && (
+                        {/* Edit / Delete only for manually created payments */}
+                        {canEdit && !p.isSystemGenerated && (
                           <>
-                            <Button
-                              size="icon" variant="ghost" className="h-7 w-7"
-                              onClick={() => { setEditing(p); setModalOpen(true); }}
-                            >
+                            <Button size="icon" variant="ghost" className="h-7 w-7"
+                              title="Edit payment"
+                              onClick={() => { setEditing(p); setModalOpen(true); }}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              size="icon" variant="ghost" className="h-7 w-7 text-[var(--destructive)]"
-                              onClick={() => setDeletingId(p._id)}
-                            >
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-[var(--destructive)]"
+                              title="Delete payment"
+                              onClick={() => setDeletingId(p._id)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </>
@@ -393,27 +349,25 @@ export default function ProjectFinanceDetailPage() {
         </div>
       </div>
 
+      {/* Modals */}
       <PaymentFormModal
         projectId={projectId}
         open={modalOpen}
         onClose={() => { setModalOpen(false); setEditing(null); }}
         editing={editing}
       />
-
       <AllocatePaymentModal
         projectId={projectId}
         payment={allocating}
         open={!!allocating}
         onClose={() => setAllocating(null)}
       />
-
       <PaymentHistoryDrawer
         projectId={projectId}
         payment={viewingHistory}
         open={!!viewingHistory}
         onClose={() => setViewingHistory(null)}
       />
-
       <ConfirmDialog
         open={!!deletingId}
         onOpenChange={(o) => { if (!o) setDeletingId(null); }}
@@ -424,6 +378,84 @@ export default function ProjectFinanceDetailPage() {
         onConfirm={confirmDelete}
         loading={deletePayment.isPending}
       />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main Page
+// ─────────────────────────────────────────────────────────────
+export default function ProjectFinanceDetailPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const router = useRouter();
+
+  const { data: project, isLoading: projectLoading } = useGetProjectById(projectId);
+
+  if (projectLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="h-8 w-48 rounded bg-[var(--surface)] animate-pulse" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-[var(--surface)] animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const mainContactName =
+    Array.isArray(project?.mainContacts) && project.mainContacts.length > 0
+      ? project.mainContacts[0]?.name ?? "—"
+      : project?.mainContact?.name ?? "—";
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 shrink-0"
+          onClick={() => router.push("/finance")}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-bold text-[var(--text-primary)]">
+              {project?.name ?? "Project Finance"}
+            </h1>
+            <Badge variant="secondary" className="text-xs">
+              {project?.isActive ? "Active" : "Inactive"}
+            </Badge>
+          </div>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">
+            {mainContactName}
+            {project?.startDate && ` · Started ${new Date(project.startDate).toLocaleDateString()}`}
+          </p>
+        </div>
+      </div>
+
+      {/* Tabbed layout */}
+      <Tabs defaultValue="payments" className="space-y-4">
+        <TabsList className="bg-[var(--background)] border border-[var(--border)]">
+          <TabsTrigger value="payments" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <Wallet className="h-4 w-4" /> Payments
+          </TabsTrigger>
+          <TabsTrigger value="uom" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <Layers className="h-4 w-4" /> UOM Billing
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="payments">
+          <PaymentsTab projectId={projectId} />
+        </TabsContent>
+
+        <TabsContent value="uom">
+          <UomBillingTab projectId={projectId} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
