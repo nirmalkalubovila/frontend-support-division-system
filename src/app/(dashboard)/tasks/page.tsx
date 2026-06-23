@@ -160,7 +160,7 @@ function ProjectTasksCard({
   onBack?: () => void;
   allUsers: User[];
   viewMode?: "kanban" | "list";
-  showAddTask?: boolean;
+  showAddTask?: number;
   filterSearch?: string;
   filterPriority?: string;
   filterAssignee?: string;
@@ -352,7 +352,8 @@ function TasksPageContent() {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterAssignee, setFilterAssignee] = useState("");
-  const [addTaskTrigger, setAddTaskTrigger] = useState(false);
+  const [addTaskTrigger, setAddTaskTrigger] = useState(0);
+  const [projectSearch, setProjectSearch] = useState("");
 
   const searchParams = useSearchParams();
   const projectQuery = searchParams.get("project") || searchParams.get("projectId");
@@ -391,6 +392,17 @@ function TasksPageContent() {
     return groupedByProject.find((g) => g.id === activeProjectId) || null;
   }, [activeProjectId, groupedByProject]);
 
+  const filteredProjects = useMemo(() => {
+    if (!projectSearch.trim()) return groupedByProject;
+    const q = projectSearch.toLowerCase();
+    return groupedByProject.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.clientCode.toLowerCase().includes(q) ||
+        p.clientName.toLowerCase().includes(q)
+    );
+  }, [groupedByProject, projectSearch]);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -414,38 +426,40 @@ function TasksPageContent() {
 
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
           {/* View Switcher Toggle */}
-          <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-                viewMode === "kanban"
-                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-              }`}
-              title="Kanban View"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
-                viewMode === "list"
-                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-              }`}
-              title="List View"
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">List</span>
-            </button>
-          </div>
+          {activeGroup && (
+            <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                  viewMode === "kanban"
+                    ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                }`}
+                title="Kanban View"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Kanban</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${
+                  viewMode === "list"
+                    ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                }`}
+                title="List View"
+              >
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">List</span>
+              </button>
+            </div>
+          )}
 
           <Button
             variant="outline"
             size="sm"
             className={`gap-1.5 font-medium shadow-sm transition-all ${
-              filterSearch || filterPriority || filterAssignee
+              (activeGroup ? (filterSearch || filterPriority || filterAssignee) : projectSearch)
                 ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20"
                 : showFilters ? "border-[var(--primary)] text-[var(--primary-text)] bg-[var(--primary-light)]/20" : ""
             }`}
@@ -453,60 +467,84 @@ function TasksPageContent() {
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filter
-            {(filterSearch || filterPriority || filterAssignee) && (
+            {(activeGroup ? (filterSearch || filterPriority || filterAssignee) : projectSearch) && (
               <span className="h-2 w-2 rounded-full bg-[var(--primary)] animate-pulse" />
             )}
             {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
 
-          <Button
-            size="sm"
-            className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
-            onClick={() => setAddTaskTrigger((v) => !v)}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New Task
-          </Button>
+          {activeGroup && (
+            <Button
+              size="sm"
+              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
+              onClick={() => setAddTaskTrigger((v) => v + 1)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New Task
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Filters Bar */}
       {showFilters && (
         <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
-            <Input
-              placeholder="Search tasks..."
-              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-            />
-          </div>
-          <Select
-            placeholder="All Priorities"
-            value={filterPriority}
-            onChange={(v) => setFilterPriority(v)}
-            options={[
-              { label: "All Priorities", value: "" },
-              ...(["Critical", "High", "Medium", "Low"] as const).map((p) => ({ label: p, value: p })),
-            ]}
-            className="w-44 h-9.5 bg-[var(--background)]"
-          />
-          <Select
-            placeholder="All Assignees"
-            value={filterAssignee}
-            onChange={(v) => setFilterAssignee(v)}
-            options={[
-              { label: "All Assignees", value: "" },
-              ...allUsers.map((u) => ({ label: u.name, value: u._id })),
-            ]}
-            className="w-48 h-9.5 bg-[var(--background)]"
-          />
-          {(filterSearch || filterPriority || filterAssignee) && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterSearch(""); setFilterPriority(""); setFilterAssignee(""); }} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
-              <X className="h-3.5 w-3.5" />
-              Reset Filters
-            </Button>
+          {activeGroup ? (
+            <>
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+                <Input
+                  placeholder="Search tasks..."
+                  className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                placeholder="All Priorities"
+                value={filterPriority}
+                onChange={(v) => setFilterPriority(v)}
+                options={[
+                  { label: "All Priorities", value: "" },
+                  ...(["Critical", "High", "Medium", "Low"] as const).map((p) => ({ label: p, value: p })),
+                ]}
+                className="w-44 h-9.5 bg-[var(--background)]"
+              />
+              <Select
+                placeholder="All Assignees"
+                value={filterAssignee}
+                onChange={(v) => setFilterAssignee(v)}
+                options={[
+                  { label: "All Assignees", value: "" },
+                  ...allUsers.map((u) => ({ label: u.name, value: u._id })),
+                ]}
+                className="w-48 h-9.5 bg-[var(--background)]"
+              />
+              {(filterSearch || filterPriority || filterAssignee) && (
+                <Button variant="ghost" size="sm" onClick={() => { setFilterSearch(""); setFilterPriority(""); setFilterAssignee(""); }} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
+                  <X className="h-3.5 w-3.5" />
+                  Reset Filters
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+                <Input
+                  placeholder="Search projects..."
+                  className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                  value={projectSearch}
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                />
+              </div>
+              {projectSearch && (
+                <Button variant="ghost" size="sm" onClick={() => setProjectSearch("")} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
+                  <X className="h-3.5 w-3.5" />
+                  Clear Search
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -530,8 +568,8 @@ function TasksPageContent() {
             filterPriority={filterPriority}
             filterAssignee={filterAssignee}
           />
-        ) : groupedByProject.length > 0 ? (
-          groupedByProject.map((group) => (
+        ) : filteredProjects.length > 0 ? (
+          filteredProjects.map((group) => (
             <ProjectTasksCard
               key={group.id}
               group={group}

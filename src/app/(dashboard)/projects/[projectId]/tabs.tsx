@@ -181,7 +181,7 @@ function HierarchyRow({
 // ─────────────────────────────────────────────────────────────
 // Tasks Tab
 // ─────────────────────────────────────────────────────────────
-export function TasksTab({ projectId, members, externalViewMode, showAddTaskExternal, filterSearch, filterPriority, filterAssignee }: { projectId: string; members: User[]; externalViewMode?: "kanban" | "list"; showAddTaskExternal?: boolean; filterSearch?: string; filterPriority?: string; filterAssignee?: string }) {
+export function TasksTab({ projectId, members, externalViewMode, showAddTaskExternal, filterSearch, filterPriority, filterAssignee }: { projectId: string; members: User[]; externalViewMode?: "kanban" | "list"; showAddTaskExternal?: number; filterSearch?: string; filterPriority?: string; filterAssignee?: string }) {
   const [taskView, setTaskView] = useState<"hierarchy" | "kanban">(externalViewMode === "list" ? "hierarchy" : "kanban");
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -224,7 +224,7 @@ export function TasksTab({ projectId, members, externalViewMode, showAddTaskExte
 
   // Open form when triggered externally
   React.useEffect(() => {
-    if (showAddTaskExternal) { setEditingTask(null); setParentTask(null); setShowForm(true); }
+    if (showAddTaskExternal && showAddTaskExternal > 0) { setEditingTask(null); setParentTask(null); setShowForm(true); }
   }, [showAddTaskExternal]);
 
 
@@ -307,9 +307,7 @@ export function TasksTab({ projectId, members, externalViewMode, showAddTaskExte
         />
       )}
 
-      {taskView === "hierarchy" && (
-        <>
-          {showForm && (
+      {showForm && (
             <TaskFormModal
               open={showForm}
               onOpenChange={(v) => { setShowForm(v); if (!v) { setEditingTask(null); setParentTask(null); } }}
@@ -329,8 +327,6 @@ export function TasksTab({ projectId, members, externalViewMode, showAddTaskExte
             onConfirm={handleDeleteConfirm}
             loading={deleteMutation.isPending}
           />
-        </>
-      )}
     </div>
   );
 }
