@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, FolderKanban, LayoutDashboard, CheckSquare,
   Calendar, Mail, Phone, Tag, Users, BarChart3,
-  AlertCircle, CheckCircle2, GitPullRequest, Ticket, Clock,
+  AlertCircle, CheckCircle2, GitPullRequest, Ticket, Clock, Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { useGetProjectTasks } from "@/api/services/project-management/task-servi
 import type { User } from "@/api/services/user-management/user-service";
 import { TasksTab, CRTab, IssuesTab } from "./tabs";
 import { GanttTab } from "./gantt-tab";
+import { UomBillingTab } from "@/components/organisms/uomModule/uom-billing-tab";
 import { API_BASE_URL } from "@/lib/constants";
 
 const STATIC_BASE = API_BASE_URL.replace(/\/api\/v\d+\/?$/, "");
@@ -419,7 +420,7 @@ export default function ProjectDetailPage() {
 
       {/* Tabbed Layout */}
       <Tabs defaultValue="dashboard" className="space-y-4">
-        <TabsList className="bg-[var(--background)] border border-[var(--border)] h-10">
+        <TabsList className="bg-[var(--background)] border border-[var(--border)]">
           <TabsTrigger value="dashboard" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <LayoutDashboard className="h-4 w-4" /> Dashboard
           </TabsTrigger>
@@ -434,6 +435,9 @@ export default function ProjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="gantt" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
             <Calendar className="h-4 w-4" /> Gantt Chart
+          </TabsTrigger>
+          <TabsTrigger value="uom" className="gap-2 text-sm data-[state=active]:text-[var(--primary)]">
+            <Wallet className="h-4 w-4" /> UOM Billing
           </TabsTrigger>
         </TabsList>
 
@@ -455,6 +459,10 @@ export default function ProjectDetailPage() {
 
         <TabsContent value="gantt">
           <GanttTab projectId={projectId} members={members} />
+        </TabsContent>
+
+        <TabsContent value="uom">
+          <UomBillingTab projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>
