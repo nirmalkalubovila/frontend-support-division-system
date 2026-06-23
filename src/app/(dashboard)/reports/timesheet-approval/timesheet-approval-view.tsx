@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { 
   Check, X, Edit2, Trash2, Calendar, Clock, User, 
-  Briefcase, Search, Filter, RefreshCw, AlertCircle, FileText
+  Briefcase, Search, Filter, RefreshCw, AlertCircle, FileText,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from "lucide-react";
 import { 
   Card, CardContent, CardHeader, CardTitle, Badge, Button, 
@@ -37,6 +38,24 @@ export function TimesheetApprovalView({
   const [selectedWorkType, setSelectedWorkType] = useState<string>("all");
   const [selectedProjectType, setSelectedProjectType] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("all"); // default all search
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    selectedProjectId,
+    selectedDeveloperId,
+    selectedStatus,
+    selectedWorkType,
+    selectedProjectType,
+    searchQuery,
+    startDate,
+    endDate
+  ]);
 
   // Editing state
   const [editingLog, setEditingLog] = useState<any | null>(null);
@@ -145,6 +164,51 @@ export function TimesheetApprovalView({
 
     return list;
   }, [logsData, startDate, endDate, selectedProjectId, selectedDeveloperId, selectedStatus, selectedWorkType, selectedProjectType, searchQuery]);
+
+  // Paginate logs
+  const totalPages = Math.ceil(logs.length / pageSize) || 1;
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return logs.slice(start, start + pageSize);
+  }, [logs, currentPage, pageSize]);
+
+  // Adjust current page if it is out of range (e.g. after filters change or item deletions)
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const pageNumbers = useMemo(() => {
+    const range = [];
+    const maxVisible = 5;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        range.push(i);
+      }
+    } else {
+      range.push(1);
+      
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(totalPages - 1, currentPage + 1);
+      
+      if (start > 2) {
+        range.push('...');
+      }
+      
+      for (let i = start; i <= end; i++) {
+        range.push(i);
+      }
+      
+      if (end < totalPages - 1) {
+        range.push('...');
+      }
+      
+      range.push(totalPages);
+    }
+    return range;
+  }, [currentPage, totalPages]);
 
   // Totals calculations
   const summary = useMemo(() => {
@@ -462,7 +526,8 @@ export function TimesheetApprovalView({
               <span>No timesheet records match the selected filters or range.</span>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+              <div className="overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="bg-[var(--surface)] border-b border-[var(--border)] text-[var(--text-secondary)] uppercase tracking-wider text-[10px] font-semibold">
@@ -476,7 +541,7 @@ export function TimesheetApprovalView({
                   </tr>
                 </thead>
                 <tbody>
-                  {logs.map((log: any) => {
+                  {paginatedLogs.map((log: any) => {
                     const devName = typeof log.user === 'object' && log.user ? log.user.name : "Developer";
                     const devEmail = typeof log.user === 'object' && log.user ? log.user.email : "";
                     const projName = typeof log.project === 'object' && log.project ? log.project.name : "N/A";
@@ -617,6 +682,102 @@ export function TimesheetApprovalView({
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls */}
+            {logs.length > 0 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-[var(--border)] bg-[var(--surface)]">
+                <div className="text-xs text-[var(--text-secondary)] font-medium">
+                  Showing <span className="font-semibold text-[var(--text-primary)]">{(currentPage - 1) * pageSize + 1}</span> to{" "}
+                  <span className="font-semibold text-[var(--text-primary)]">{Math.min(currentPage * pageSize, logs.length)}</span> of{" "}
+                  <span className="font-semibold text-[var(--text-primary)]">{logs.length}</span> results
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[var(--text-secondary)] font-medium">Rows per page:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="text-xs h-8 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                  
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    
+                    {pageNumbers.map((num, idx) => {
+                      if (num === '...') {
+                        return (
+                          <span key={`ellipsis-${idx}`} className="px-2 text-xs text-[var(--text-tertiary)]">
+                            ...
+                          </span>
+                        );
+                      }
+                      return (
+                        <Button
+                          key={`page-${num}`}
+                          variant={currentPage === num ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(num as number)}
+                          className={`h-8 w-8 p-0 text-xs font-semibold ${
+                            currentPage === num
+                              ? "bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90"
+                              : ""
+                          }`}
+                        >
+                          {num}
+                        </Button>
+                      );
+                    })}
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="h-8 w-8 p-0"
+                    >
+                      <ChevronsRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

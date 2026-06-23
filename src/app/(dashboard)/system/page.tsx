@@ -66,6 +66,7 @@ const notificationsSchema = z.object({
     tasks: moduleNotifPrefSchema,
     "time-tracking": moduleNotifPrefSchema,
     system: moduleNotifPrefSchema,
+    finance: moduleNotifPrefSchema,
   }),
 });
 
@@ -78,6 +79,7 @@ const DEFAULT_MODULE_PREFERENCES = {
   tasks: { email: true, inApp: true },
   "time-tracking": { email: true, inApp: true },
   system: { email: true, inApp: true },
+  finance: { email: true, inApp: true },
 };
 
 const MODULE_LABELS: { key: keyof typeof DEFAULT_MODULE_PREFERENCES; label: string; description: string }[] = [
@@ -87,6 +89,7 @@ const MODULE_LABELS: { key: keyof typeof DEFAULT_MODULE_PREFERENCES; label: stri
   { key: "tasks", label: "Tasks Management", description: "Task assignments, progress updates, completions" },
   { key: "time-tracking", label: "Time Tracking", description: "Time log submissions, overtime alerts" },
   { key: "system", label: "User & System Settings", description: "System config changes, user role updates" },
+  { key: "finance", label: "Finance & UOM Billing", description: "Snapshot generation, baseline setup, payment allocations" },
 ];
 
 const reportScheduleSchema = z.object({
@@ -246,7 +249,10 @@ export default function SystemPage() {
     values: notificationsData
       ? {
           ...notificationsData,
-          modulePreferences: notificationsData.modulePreferences || DEFAULT_MODULE_PREFERENCES,
+          modulePreferences: {
+            ...DEFAULT_MODULE_PREFERENCES,
+            ...(notificationsData.modulePreferences || {}),
+          },
         }
       : {
           emailCritical: true,

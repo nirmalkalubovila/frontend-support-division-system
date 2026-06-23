@@ -19,10 +19,10 @@ interface Props {
 
 // Manual payment types only — UOM Based is system-generated (auto-created on snapshot finalisation)
 const PAYMENT_TYPES: { value: PaymentType; label: string }[] = [
-  { value: "Advance",            label: "Advance" },
+  { value: "Advance", label: "Advance" },
   { value: "Project Fixed Price", label: "Project Fixed Price" },
-  { value: "CR Based",           label: "CR Based" },
-  { value: "Other",              label: "Other" },
+  { value: "CR Based", label: "CR Based" },
+  { value: "Other", label: "Other" },
 ];
 
 const STATUSES: PaymentStatus[] = ["Pending", "Paid", "Partially Paid", "Overdue", "Cancelled"];
@@ -98,7 +98,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
     e.preventDefault();
     const payload: CreatePaymentPayload = {
       ...form,
-      uom: (isCRBased || isOther || form.paymentType === "UOM Based") ? form.uom : null,
+      uom: null,
       quantity: null,
       paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
@@ -130,49 +130,30 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
           {/* Payment Type */}
           <div className="space-y-1.5">
             <Label>Payment Type</Label>
-            {editing?.isSystemGenerated ? (
-              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-[rgba(99,102,241,0.2)] bg-[rgba(99,102,241,0.05)] text-[var(--primary)] w-fit">
-                <Zap className="h-4 w-4" /> UOM Based (System Generated)
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {PAYMENT_TYPES.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      // Clear uom when switching away from types that use it
-                      const clearsUom = value !== "CR Based" && value !== "Other";
-                      setForm((p) => ({
-                        ...p,
-                        paymentType: value,
-                        uom: clearsUom ? null : p.uom,
-                      }));
-                    }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      form.paymentType === value
-                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                        : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
+            <div className="flex flex-wrap gap-2">
+              {PAYMENT_TYPES.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    // Clear uom when switching away from types that use it
+                    const clearsUom = value !== "CR Based" && value !== "Other";
+                    setForm((p) => ({
+                      ...p,
+                      paymentType: value,
+                      uom: clearsUom ? null : p.uom,
+                    }));
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${form.paymentType === value
+                      ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                      : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
                     }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* UOM Snapshot Description (Read-Only) */}
-          {editing?.isSystemGenerated && form.uom && (
-            <div className="space-y-1">
-              <Label>UOM Snapshot</Label>
-              <Input
-                value={form.uom}
-                disabled
-                className="bg-[var(--surface-hover)]"
-              />
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* CR Based — CR reference input */}
           {isCRBased && (
@@ -222,11 +203,15 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 step="any"
                 value={form.pricePerUnit || ""}
                 onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
-                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 className="pl-10"
                 required
               />
             </div>
+            {editing?.isSystemGenerated && (
+              <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
+                Amount is synchronized with the UOM billing snapshot grand total.
+              </p>
+            )}
           </div>
 
           {/* Total preview */}

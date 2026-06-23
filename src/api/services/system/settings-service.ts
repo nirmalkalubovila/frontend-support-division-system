@@ -117,6 +117,7 @@ export interface ModulePreferences {
   tasks: ModuleNotificationPref;
   "time-tracking": ModuleNotificationPref;
   system: ModuleNotificationPref;
+  finance: ModuleNotificationPref;
 }
 
 export interface NotificationSettings {
