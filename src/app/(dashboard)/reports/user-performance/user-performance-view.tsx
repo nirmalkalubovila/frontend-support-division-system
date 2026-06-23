@@ -143,7 +143,7 @@ export function UserPerformanceView({
                 <div className="flex justify-between items-center text-[10px] text-[var(--text-secondary)] font-semibold uppercase tracking-wider border-b border-[var(--border)] pb-2 mb-2">
                   <span className="w-28 shrink-0">Engineer</span>
                   <span className="flex-1 text-center">Speed Distribution (Hours)</span>
-                  <span className="w-48 shrink-0 text-right">Summary Values</span>
+                  <span className="w-[320px] shrink-0 text-right">Summary Values</span>
                 </div>
                 <div className="space-y-4">
                   {(() => {
@@ -206,7 +206,7 @@ export function UserPerformanceView({
                                   );
                                 })}
                               </div>
-                              <div className="w-48 text-[10px] text-[var(--text-secondary)] font-mono text-right truncate">
+                              <div className="w-[320px] shrink-0 text-[10px] text-[var(--text-secondary)] font-mono text-right truncate">
                                 min:{s.min}h | Q1:{s.q1}h | med:{s.median}h | Q3:{s.q3}h | max:{s.max}h
                               </div>
                             </div>
@@ -222,7 +222,7 @@ export function UserPerformanceView({
                             <span className="absolute" style={{ left: '75%' }}>{(globalMax * 0.75).toFixed(1)}h</span>
                             <span className="absolute right-0">{globalMax.toFixed(1)}h</span>
                           </div>
-                          <div className="w-48 shrink-0" />
+                          <div className="w-[320px] shrink-0" />
                         </div>
                       </>
                     );

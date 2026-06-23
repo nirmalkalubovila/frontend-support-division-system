@@ -51,6 +51,16 @@ export interface Issue extends GlobalRecords {
     reason: string;
     requestedBy: IssueAssignee | null;
   } | null;
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: {
+    requestedTo: any;
+    reason: string | null;
+    requestedBy: any;
+    status: 'Pending' | 'Approved' | 'Rejected' | null;
+    requestedAt: string | null;
+  } | null;
 }
 
 export interface CreateIssue {
@@ -78,6 +88,10 @@ export interface UpdateIssue {
     hours: number;
     reason: string;
   } | null;
+  isReopened?: boolean;
+  submittedForReview?: boolean;
+  reopenReason?: string | null;
+  reassignRequest?: any;
 }
 
 export interface IssueQueryParams {

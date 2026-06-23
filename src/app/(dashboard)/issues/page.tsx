@@ -828,6 +828,10 @@ function ProjectCard({
   );
 }
 
+const DEFAULT_CATEGORIES: string[] = [];
+const DEFAULT_ISSUES: Issue[] = [];
+const DEFAULT_PROJECTS: Project[] = [];
+
 // ──────────────────────────────────────────────────────────────
 // Main Issues Page Content
 // ──────────────────────────────────────────────────────────────
@@ -843,7 +847,8 @@ function IssuesPageContent() {
   const [mounted, setMounted] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-  const { data: categories = [] } = useGetCategories();
+  const { data: categoriesData } = useGetCategories();
+  const categories = categoriesData ?? DEFAULT_CATEGORIES;
   const issueTypes = categories.length > 0 ? categories : ISSUE_TYPES;
   const searchParams = useSearchParams();
   const projectQuery = searchParams.get("project") || searchParams.get("projectId");
@@ -870,8 +875,8 @@ function IssuesPageContent() {
   // Fetch all projects
   const { data: projectsData, isLoading: isLoadingProjects } = useGetAllProjects();
 
-  const issues: Issue[] = issuesData?.data ?? [];
-  const projects: Project[] = projectsData?.data ?? [];
+  const issues = issuesData?.data ?? DEFAULT_ISSUES;
+  const projects = projectsData?.data ?? DEFAULT_PROJECTS;
 
   const isLoading = isLoadingIssues || isLoadingProjects;
 

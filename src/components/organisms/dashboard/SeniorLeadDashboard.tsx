@@ -14,6 +14,7 @@ import {
   HelpCircle,
   History,
   Clock,
+  RotateCcw,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -22,6 +23,8 @@ import { StatCard } from "@/components/atoms/statCard";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
 import { toast } from "sonner";
 import { useUpdateIssue, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
 import type { UserInfo } from "@/types/global-types";
 import {
   ResponsiveContainer,
@@ -32,6 +35,10 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
+import axiosInstance from "@/lib/axios";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 interface SeniorLeadDashboardProps {
   issues: Issue[];
@@ -142,6 +149,41 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     }
   };
 
+  // Fetch all tasks & CRs
+  const { data: allTasksData, refetch: refetchAllTasks } = useGetAllTasks();
+  const { data: allCRsData, refetch: refetchAllCRs } = useGetAllCRs();
+
+  const allTasks = useMemo(() => allTasksData ?? [], [allTasksData]);
+  const allCRs = useMemo(() => allCRsData ?? [], [allCRsData]);
+
+  // Task & CR Update Mutations
+  const updateTaskMutation = useMutation({
+    mutationFn: async ({ projectId, taskId, data }: { projectId: string; taskId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/tasks/${taskId}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/tasks/all"] });
+      refetchAllTasks();
+    }
+  });
+
+  const updateCRMutation = useMutation({
+    mutationFn: async ({ projectId, crId, data }: { projectId: string; crId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/crs/${crId}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/crs/all"] });
+      refetchAllCRs();
+    }
+  });
+
+  // Rejection dialog state
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [itemToReject, setItemToReject] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; projectId?: string } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   // Filter staff engineers
   const engineersList = useMemo(() => {
     return users.filter((u) => u.role === "engineer" || u.role === "senior_engineer" || u.role === "intern");
@@ -161,9 +203,17 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
       (i) => i.priority === "Critical"
     ).length;
 
-    const testingQueue = activeIssues.filter(
-      (i) => i.status === "Testing"
+    // Unified verification queue count
+    const issueReviewCount = issues.filter(
+      (i) => i.status === "Review" && i.submittedForReview === true
     ).length;
+    const taskReviewCount = allTasks.filter(
+      (t) => t.status === "Review" && t.submittedForReview === true
+    ).length;
+    const crReviewCount = allCRs.filter(
+      (c) => c.status === "Review" && c.submittedForReview === true
+    ).length;
+    const verificationQueueCount = issueReviewCount + taskReviewCount + crReviewCount;
 
     const myAssigned = activeIssues.filter((i) => {
       if (typeof i.assignedTo === "object" && i.assignedTo !== null) {
@@ -175,10 +225,10 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     return {
       unassigned,
       escalations,
-      testingQueue,
+      verificationQueueCount,
       myAssigned,
     };
-  }, [issues, currentUserId]);
+  }, [issues, allTasks, allCRs, currentUserId]);
 
   // ──────────────────────────────────────────────────────────────
   // Triage: Oldest Unassigned Issues
@@ -191,13 +241,77 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
   }, [issues]);
 
   // ──────────────────────────────────────────────────────────────
-  // Verification Queue: Issues in Testing Status
+  // Unified Verification Queue: items with submittedForReview === true
   // ──────────────────────────────────────────────────────────────
-  const testingQueueList = useMemo(() => {
-    return issues.filter(
-      (i) => i.status === "Testing"
-    ).slice(0, 5);
-  }, [issues]);
+  const verificationQueue = useMemo(() => {
+    const list: Array<{
+      id: string;
+      type: 'issue' | 'task' | 'cr';
+      title: string;
+      code: string;
+      priority: string;
+      projectId?: string;
+      assigneeName: string;
+      technicalApproach?: string | null;
+      isReopened?: boolean;
+    }> = [];
+
+    // Issues
+    issues.forEach((i) => {
+      if (i.status === "Review" && i.submittedForReview === true) {
+        const assignee = typeof i.assignedTo === "object" && i.assignedTo !== null ? i.assignedTo.name : "Unassigned";
+        list.push({
+          id: i._id,
+          type: 'issue',
+          title: i.title,
+          code: i.issueId,
+          priority: i.priority,
+          assigneeName: assignee,
+          technicalApproach: i.technicalApproach,
+          isReopened: i.isReopened,
+        });
+      }
+    });
+
+    // Tasks
+    allTasks.forEach((t) => {
+      if (t.status === "Review" && t.submittedForReview === true) {
+        const projId = typeof t.project === "object" && t.project ? (t.project as any)._id : t.project;
+        const firstAssignee = t.assignees && t.assignees.length > 0 ? t.assignees[0].name : "Unassigned";
+        list.push({
+          id: t._id,
+          type: 'task',
+          title: t.name,
+          code: "Task",
+          priority: t.priority,
+          projectId: projId,
+          assigneeName: firstAssignee,
+          isReopened: t.isReopened,
+        });
+      }
+    });
+
+    // CRs
+    allCRs.forEach((c) => {
+      if (c.status === "Review" && c.submittedForReview === true) {
+        const projId = typeof c.project === "object" && c.project ? (c.project as any)._id : c.project;
+        const firstDev = c.assignedDevelopers && c.assignedDevelopers.length > 0 ? c.assignedDevelopers[0].name : "Unassigned";
+        list.push({
+          id: c._id,
+          type: 'cr',
+          title: c.title,
+          code: c.crNumber || "CR",
+          priority: c.priority,
+          projectId: projId,
+          assigneeName: firstDev,
+          technicalApproach: c.technicalApproach,
+          isReopened: c.isReopened,
+        });
+      }
+    });
+
+    return list;
+  }, [issues, allTasks, allCRs]);
 
   const resolvedIssues = useMemo(() => {
     return issues
@@ -218,7 +332,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
   }, [resolvedIssues.length, resolvedIssuesPage]);
 
   // ──────────────────────────────────────────────────────────────
-  // Workload Balance Data
+  // Workload Balance Data (Issues + Tasks + CRs combined)
   // ──────────────────────────────────────────────────────────────
   const workloadData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -227,13 +341,40 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
       counts[e.name] = 0;
     });
 
+    // Count Issues
     issues.forEach((issue) => {
       if (!["Resolved", "Closed", "Done"].includes(issue.status) && issue.assignedTo) {
-        const name = typeof issue.assignedTo === "object" ? issue.assignedTo.name : issue.assignedTo;
-        const matchedUser = users.find(u => u._id === name || u.name === name || u._id === (issue.assignedTo as any)._id);
-        if (matchedUser) {
-          counts[matchedUser.name] = (counts[matchedUser.name] || 0) + 1;
+        const assigneeObj = typeof issue.assignedTo === "object" ? issue.assignedTo : null;
+        const matchedUser = assigneeObj ? users.find(u => u._id === assigneeObj._id) : null;
+        if (matchedUser && counts[matchedUser.name] !== undefined) {
+          counts[matchedUser.name] += 1;
         }
+      }
+    });
+
+    // Count Tasks
+    allTasks.forEach((task) => {
+      if (task.status !== "Done" && task.assignees) {
+        task.assignees.forEach((a) => {
+          const userId = typeof a === "object" && a !== null ? a._id : a;
+          const matchedUser = users.find(u => u._id === userId);
+          if (matchedUser && counts[matchedUser.name] !== undefined) {
+            counts[matchedUser.name] += 1;
+          }
+        });
+      }
+    });
+
+    // Count CRs
+    allCRs.forEach((cr) => {
+      if (!["Done", "Closed", "Rejected"].includes(cr.status) && cr.assignedDevelopers) {
+        cr.assignedDevelopers.forEach((d) => {
+          const userId = typeof d === "object" && d !== null ? d._id : d;
+          const matchedUser = users.find(u => u._id === userId);
+          if (matchedUser && counts[matchedUser.name] !== undefined) {
+            counts[matchedUser.name] += 1;
+          }
+        });
       }
     });
 
@@ -241,7 +382,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
       name,
       count,
     })).sort((a, b) => b.count - a.count);
-  }, [issues, engineersList, users]);
+  }, [issues, allTasks, allCRs, engineersList, users]);
 
   // ──────────────────────────────────────────────────────────────
   // Action Handlers
@@ -249,7 +390,7 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
   const handleAssign = (issueId: string, userId: string) => {
     if (!userId) return;
     updateIssueMutation.mutate(
-      { id: issueId, data: { assignedTo: userId, status: "Assigned" } },
+      { id: issueId, data: { assignedTo: userId, status: "In Progress" } },
       {
         onSuccess: () => {
           toast.success("Ticket successfully assigned.");
@@ -261,18 +402,83 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     );
   };
 
-  const handleUpdateStatus = (issueId: string, status: string, feedback: string) => {
-    updateIssueMutation.mutate(
-      { id: issueId, data: { status } },
-      {
-        onSuccess: () => {
-          toast.success(`Ticket status updated to ${status}.`);
-        },
-        onError: () => {
-          toast.error("Failed to update ticket status.");
-        },
+  // Approve/Done handler for verification queue
+  const handleApproveDone = async (item: typeof verificationQueue[0]) => {
+    try {
+      if (item.type === 'issue') {
+        await updateIssueMutation.mutateAsync({
+          id: item.id,
+          data: { status: 'Done', submittedForReview: false },
+        });
+        toast.success("Issue approved and marked as Done.");
+        queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      } else if (item.type === 'task') {
+        await updateTaskMutation.mutateAsync({
+          projectId: item.projectId!,
+          taskId: item.id,
+          data: { status: 'Done', submittedForReview: false },
+        });
+        toast.success("Task approved and marked as Done.");
+      } else if (item.type === 'cr') {
+        await updateCRMutation.mutateAsync({
+          projectId: item.projectId!,
+          crId: item.id,
+          data: { status: 'Done', submittedForReview: false },
+        });
+        toast.success("CR approved and marked as Done.");
       }
-    );
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to approve item.");
+    }
+  };
+
+  // Open rejection dialog
+  const handleOpenRejectDialog = (item: typeof verificationQueue[0]) => {
+    setItemToReject({ id: item.id, type: item.type, projectId: item.projectId });
+    setRejectReason("");
+    setRejectDialogOpen(true);
+  };
+
+  // Submit rejection
+  const handleRejectSubmit = async () => {
+    if (!itemToReject) return;
+
+    const data = {
+      status: 'In Progress',
+      isReopened: true,
+      submittedForReview: false,
+      reopenReason: rejectReason || "Rejected by Senior SE",
+    };
+
+    try {
+      if (itemToReject.type === 'issue') {
+        await updateIssueMutation.mutateAsync({
+          id: itemToReject.id,
+          data,
+        });
+        toast.success("Issue reopened and sent back to developer.");
+        queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      } else if (itemToReject.type === 'task') {
+        await updateTaskMutation.mutateAsync({
+          projectId: itemToReject.projectId!,
+          taskId: itemToReject.id,
+          data,
+        });
+        toast.success("Task reopened and sent back to developer.");
+      } else if (itemToReject.type === 'cr') {
+        await updateCRMutation.mutateAsync({
+          projectId: itemToReject.projectId!,
+          crId: itemToReject.id,
+          data,
+        });
+        toast.success("CR reopened and sent back to developer.");
+      }
+      setRejectDialogOpen(false);
+      setItemToReject(null);
+      setRejectReason("");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to reject/reopen item.");
+    }
   };
 
   return (
@@ -300,8 +506,8 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
         <StatCard
           icon={ClipboardCheck}
           label="Verification Queue"
-          value={metrics.testingQueue}
-          trend="Tickets awaiting review"
+          value={metrics.verificationQueueCount}
+          trend="Awaiting your review"
           className="hover:scale-[1.01] transition-transform duration-200"
         />
         <StatCard
@@ -427,74 +633,92 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
         </Card>
       </div>
 
-      {/* Row 3: Testing Queue Reviews */}
+      {/* Row 3: Unified Verification Queue */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
         <CardHeader>
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <ClipboardCheck className="h-4.5 w-4.5 text-[var(--success)]" />
-            Testing / Verification Queue
+            Verification Queue ({verificationQueue.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {testingQueueList.length === 0 ? (
+          {verificationQueue.length === 0 ? (
             <div className="text-center py-10 text-sm text-[var(--text-tertiary)]">
-              No tickets awaiting validation.
+              No items awaiting verification.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {testingQueueList.map((issue) => {
-                const assignee = typeof issue.assignedTo === "object" ? issue.assignedTo : null;
-                return (
-                  <div
-                    key={issue._id}
-                    className="flex flex-col justify-between p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:shadow-xs transition-all gap-4"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                            {issue.issueId}
-                          </span>
-                          <span className="text-xs text-[var(--text-secondary)]">•</span>
-                          <Badge variant="outline" className="text-[9px] text-[var(--accent)] border-[var(--accent)] bg-[rgba(6,182,212,0.02)] uppercase">
-                            Testing
-                          </Badge>
-                        </div>
-                        <span className="text-[10px] text-[var(--text-secondary)]">
-                          Assignee: <span className="font-semibold text-[var(--text-primary)]">{assignee?.name ?? "Unassigned"}</span>
+              {verificationQueue.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex flex-col justify-between p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:shadow-xs transition-all gap-4"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge
+                          className={`text-[9px] uppercase tracking-wide py-0.5 ${
+                            item.type === "issue"
+                              ? "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                              : item.type === "task"
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                          }`}
+                        >
+                          {item.type}
+                        </Badge>
+                        <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                          {item.code}
                         </span>
+                        <span className="text-xs text-[var(--text-secondary)]">•</span>
+                        <Badge
+                          variant={item.priority === "Critical" ? "destructive" : "default"}
+                          className="text-[9px] uppercase tracking-wide"
+                        >
+                          {item.priority}
+                        </Badge>
+                        {item.isReopened && (
+                          <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide">
+                            Reopened
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-2">
-                        {issue.title}
+                      <span className="text-[10px] text-[var(--text-secondary)] shrink-0">
+                        Dev: <span className="font-semibold text-[var(--text-primary)]">{item.assigneeName}</span>
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-2">
+                      {item.title}
+                    </p>
+                    {item.technicalApproach && (
+                      <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 italic bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
+                        Approach: {item.technicalApproach}
                       </p>
-                      {issue.technicalApproach && (
-                        <p className="text-xs text-[var(--text-secondary)] mt-1.5 line-clamp-2 italic bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
-                          "Approach: {issue.technicalApproach}"
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleUpdateStatus(issue._id, "Resolved", "")}
-                        className="flex-1 bg-[var(--success)] hover:bg-[var(--success)]/90 text-white text-xs gap-1.5 h-8.5 rounded-lg"
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Approve / Resolve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleUpdateStatus(issue._id, "Reopened", "")}
-                        className="flex-1 border-amber-500 text-amber-500 hover:bg-amber-500/5 text-xs gap-1.5 h-8.5 rounded-lg"
-                      >
-                        <HelpCircle className="h-3.5 w-3.5" />
-                        Reject / Reopen
-                      </Button>
-                    </div>
+                    )}
                   </div>
-                );
-              })}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleApproveDone(item)}
+                      disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+                      className="flex-1 bg-[var(--success)] hover:bg-[var(--success)]/90 text-white text-xs gap-1.5 h-8.5 rounded-lg"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve / Done
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenRejectDialog(item)}
+                      disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+                      className="flex-1 border-amber-500 text-amber-500 hover:bg-amber-500/5 text-xs gap-1.5 h-8.5 rounded-lg"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Reject / Reopen
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </CardContent>
@@ -636,6 +860,62 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
           )}
         </CardContent>
       </Card>
+
+      {/* Reject / Reopen Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={(open) => {
+        setRejectDialogOpen(open);
+        if (!open) {
+          setItemToReject(null);
+          setRejectReason("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Reject / Reopen Work Item
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              This will reopen the item and send it back to the developer as &quot;Reopened&quot;. 
+              The status will be set to &quot;In Progress&quot; so they can continue work.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="rejectReason" className="text-xs font-medium text-[var(--text-secondary)]">
+                Rejection Feedback / Reason
+              </Label>
+              <Textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Explain what needs to be fixed or improved..."
+                className="text-xs bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectDialogOpen(false);
+                setItemToReject(null);
+                setRejectReason("");
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRejectSubmit}
+              disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+              className="bg-amber-500 hover:bg-amber-600 text-white text-xs h-9 rounded-lg"
+            >
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={isConfirmIssuesOpen}
         onOpenChange={setIsConfirmIssuesOpen}
@@ -649,3 +929,4 @@ export function SeniorLeadDashboard({ issues, users, currentUserId }: SeniorLead
     </div>
   );
 }
+

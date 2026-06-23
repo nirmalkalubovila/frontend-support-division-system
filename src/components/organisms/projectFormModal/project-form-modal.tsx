@@ -87,7 +87,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
     if (!open) return;
     if (project) {
       const inferredStage: "development" | "support" =
-        project.stage === 'support' ? 'support' : (project.allocatedHours && project.allocatedHours > 0) ? "support" : "development";
+        (project.projectType && project.projectType.includes("Support")) ? "support" : "development";
       setForm({
         name: project.name || "",
         description: project.description || "",
@@ -353,7 +353,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
               <div className="flex items-center gap-1 p-1 rounded-xl border border-[var(--border)] bg-[var(--background)] w-fit">
                 <button
                   type="button"
-                  onClick={() => setForm((p) => ({ ...p, stage: "development", allocatedHours: 0 }))}
+                  onClick={() => setForm((p) => ({ ...p, stage: "development", projectType: ["Development"], allocatedHours: 0 }))}
                   className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     form.stage === "development"
                       ? "bg-[var(--primary)] text-white shadow-sm"
@@ -364,7 +364,7 @@ export function ProjectFormModal({ open, onOpenChange, project }: ProjectFormMod
                 </button>
                 <button
                   type="button"
-                  onClick={() => setForm((p) => ({ ...p, stage: "support" }))}
+                  onClick={() => setForm((p) => ({ ...p, stage: "support", projectType: ["Support"] }))}
                   className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     form.stage === "support"
                       ? "bg-[var(--primary)] text-white shadow-sm"

@@ -13,13 +13,20 @@ import {
   Users,
   TrendingUp,
   ShieldAlert,
+  UserCheck,
+  UserX,
   History,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { Badge, Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { StatCard } from "@/components/atoms/statCard";
+import { TimesheetApprovalView } from "@/app/(dashboard)/reports/timesheet-approval/timesheet-approval-view";
+import { useGetProjectsMonthlyUsage } from "@/api/services/project-management/project-service";
 import { Progress } from "@/components/ui/progress";
+import { useGetAllTasks } from "@/api/services/project-management/task-service";
+import { useGetAllCRs } from "@/api/services/project-management/cr-service";
+import axiosInstance from "@/lib/axios";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
 import { toast } from "sonner";
 import {
@@ -35,7 +42,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useUpdateIssue, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
 import type { Project } from "@/api/services/project-management/project-service";
 import type { UserInfo } from "@/types/global-types";
 
@@ -120,6 +127,219 @@ function PaginationControl({
 
 export function ManagementDashboard({ issues, projects, users }: ManagementDashboardProps) {
   const queryClient = useQueryClient();
+  const updateIssueMutation = useUpdateIssue();
+
+  // Fetch all tasks & CRs
+  const { data: allTasksData, refetch: refetchAllTasks } = useGetAllTasks();
+  const { data: allCRsData, refetch: refetchAllCRs } = useGetAllCRs();
+
+  const allTasks = useMemo(() => allTasksData ?? [], [allTasksData]);
+  const allCRs = useMemo(() => allCRsData ?? [], [allCRsData]);
+
+  // Task & CR Update Mutations
+  const updateTaskMutation = useMutation({
+    mutationFn: async ({ projectId, taskId, data }: { projectId: string; taskId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/tasks/${taskId}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/tasks/all"] });
+      refetchAllTasks();
+    }
+  });
+
+  const updateCRMutation = useMutation({
+    mutationFn: async ({ projectId, crId, data }: { projectId: string; crId: string; data: any }) => {
+      const res = await axiosInstance.patch(`/projects/${projectId}/crs/${crId}`, data);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/crs/all"] });
+      refetchAllCRs();
+    }
+  });
+
+  // Filter pending re-assignment requests
+  const pendingReassignments = useMemo(() => {
+    const list: Array<{
+      id: string;
+      type: "issue" | "task" | "cr";
+      title: string;
+      code: string;
+      projectId?: string;
+      requestedBy: any;
+      requestedTo: any;
+      reason: string;
+      requestedAt: string;
+    }> = [];
+
+    // Filter Issues
+    issues.forEach((i) => {
+      if (i.reassignRequest && i.reassignRequest.status === "Pending") {
+        list.push({
+          id: i._id,
+          type: "issue",
+          title: i.title,
+          code: i.issueId,
+          requestedBy: i.reassignRequest.requestedBy,
+          requestedTo: i.reassignRequest.requestedTo,
+          reason: i.reassignRequest.reason || "No reason provided",
+          requestedAt: i.reassignRequest.requestedAt || "",
+        });
+      }
+    });
+
+    // Filter Tasks
+    allTasks.forEach((t) => {
+      if (t.reassignRequest && t.reassignRequest.status === "Pending") {
+        const projId = typeof t.project === "object" && t.project ? (t.project as any)._id : t.project;
+        list.push({
+          id: t._id,
+          type: "task",
+          title: t.name,
+          code: "Task",
+          projectId: projId,
+          requestedBy: t.reassignRequest.requestedBy,
+          requestedTo: t.reassignRequest.requestedTo,
+          reason: t.reassignRequest.reason || "No reason provided",
+          requestedAt: t.reassignRequest.requestedAt || "",
+        });
+      }
+    });
+
+    // Filter CRs
+    allCRs.forEach((c) => {
+      if (c.reassignRequest && c.reassignRequest.status === "Pending") {
+        const projId = typeof c.project === "object" && c.project ? (c.project as any)._id : c.project;
+        list.push({
+          id: c._id,
+          type: "cr",
+          title: c.title,
+          code: c.crNumber || "CR",
+          projectId: projId,
+          requestedBy: c.reassignRequest.requestedBy,
+          requestedTo: c.reassignRequest.requestedTo,
+          reason: c.reassignRequest.reason || "No reason provided",
+          requestedAt: c.reassignRequest.requestedAt || "",
+        });
+      }
+    });
+
+    return list;
+  }, [issues, allTasks, allCRs]);
+
+  // Handle Approve/Decline
+  const handleApproveReassignment = async (item: any) => {
+    const targetUserId = typeof item.requestedTo === "object" && item.requestedTo ? item.requestedTo._id : item.requestedTo;
+    
+    const data = {
+      reassignRequest: null, // clear request block
+    };
+
+    try {
+      if (item.type === "issue") {
+        await updateIssueMutation.mutateAsync({
+          id: item.id,
+          data: {
+            ...data,
+            assignedTo: targetUserId || null,
+          },
+        });
+        toast.success("Issue re-assignment approved and updated.");
+        queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      } else if (item.type === "task") {
+        await updateTaskMutation.mutateAsync({
+          projectId: item.projectId!,
+          taskId: item.id,
+          data: {
+            ...data,
+            assignees: targetUserId ? [targetUserId] : [],
+          },
+        });
+        toast.success("Task re-assignment approved and updated.");
+      } else if (item.type === "cr") {
+        await updateCRMutation.mutateAsync({
+          projectId: item.projectId!,
+          crId: item.id,
+          data: {
+            ...data,
+            assignedDevelopers: targetUserId ? [targetUserId] : [],
+          },
+        });
+        toast.success("CR re-assignment approved and updated.");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to approve re-assignment.");
+    }
+  };
+
+  const handleDeclineReassignment = async (item: any) => {
+    const targetUserId = typeof item.requestedTo === "object" && item.requestedTo ? item.requestedTo._id : item.requestedTo;
+    const requestedByUserId = typeof item.requestedBy === "object" && item.requestedBy ? item.requestedBy._id : item.requestedBy;
+
+    const data = {
+      reassignRequest: {
+        requestedTo: targetUserId || null,
+        reason: item.reason,
+        requestedBy: requestedByUserId || null,
+        status: 'Rejected',
+        requestedAt: item.requestedAt || new Date().toISOString()
+      }
+    };
+
+    try {
+      if (item.type === "issue") {
+        await updateIssueMutation.mutateAsync({
+          id: item.id,
+          data,
+        });
+        toast.success("Issue re-assignment request declined.");
+        queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      } else if (item.type === "task") {
+        await updateTaskMutation.mutateAsync({
+          projectId: item.projectId!,
+          taskId: item.id,
+          data,
+        });
+        toast.success("Task re-assignment request declined.");
+      } else if (item.type === "cr") {
+        await updateCRMutation.mutateAsync({
+          projectId: item.projectId!,
+          crId: item.id,
+          data,
+        });
+        toast.success("CR re-assignment request declined.");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to decline re-assignment.");
+    }
+  };
+
+  // Compute default date range (last 30 days) and current month string YYYY-MM
+  const defaultDates = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - 30);
+    return {
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
+      currentMonthStr: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}`
+    };
+  }, []);
+
+  // Fetch monthly usage of all projects for the current month
+  const { data: monthlyUsageData } = useGetProjectsMonthlyUsage(defaultDates.currentMonthStr);
+
+  const monthlyUsageMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    if (monthlyUsageData) {
+      monthlyUsageData.forEach((item) => {
+        map[item.projectId] = item.monthlyUsedHours;
+      });
+    }
+    return map;
+  }, [monthlyUsageData]);
+
   const deleteIssueMutation = useDeleteIssue();
 
   // Selection states for clearing issues
@@ -252,11 +472,14 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
 
   // Status colors matching application CSS tokens
   const STATUS_COLORS: Record<string, string> = {
+    "To Do": "#64748b",
     Backlog: "#9ca3af",
     Assigned: "#3b82f6",
     "Planned Solution": "#8b5cf6",
     "In Progress": "#f59e0b",
+    Review: "#6366f1",
     Testing: "#06b6d4",
+    Done: "#10b981",
     "On Hold": "#ef4444",
     "Pending Client": "#f97316",
     Resolved: "#22c55e",
@@ -494,35 +717,60 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
             ) : (
               projects.slice(0, 5).map((project) => {
                 const allocated = project.allocatedHours || 0;
-                const usedDecimal = project.usedHours || 0;
-                const totalSecs = Math.round(usedDecimal * 3600);
-                const usedH = Math.floor(totalSecs / 3600);
-                const usedM = Math.floor((totalSecs % 3600) / 60);
-                const usedS = totalSecs % 60;
-                const usedLabel = `${usedH}h ${usedM}m ${usedS}s`;
-                const ratio = allocated > 0 ? (usedDecimal / allocated) * 100 : 0;
-                const percent = Math.min(Math.round(ratio), 100);
+                const used = project.usedHours || 0;
+                const isSupport = project.projectType && project.projectType.includes('Support');
+                const monthlyUsed = isSupport ? (monthlyUsageMap[project._id] || 0) : 0;
+                const actualRatio = allocated > 0 ? (monthlyUsed / allocated) * 100 : 0;
+                const percent = Math.min(Math.round(actualRatio), 100);
 
                 return (
                   <div key={project._id} className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-[var(--text-primary)] truncate max-w-[170px]">
-                        {project.name}
-                      </span>
-                      <span className="text-[var(--text-secondary)] font-mono">
-                        {usedLabel} / {allocated}h ({percent}%)
-                      </span>
+                    <div className="flex justify-between items-start gap-2 text-xs font-semibold">
+                      <div className="flex flex-col gap-1 min-w-0 flex-1">
+                        <span className="text-[var(--text-primary)] truncate font-semibold">
+                          {project.name}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className={`text-[8px] py-0 px-1 font-bold ${
+                            isSupport 
+                              ? "bg-amber-500/10 text-amber-600 border-amber-500/20 dark:text-amber-400" 
+                              : "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400"
+                          }`}>
+                            {isSupport ? "Support" : "Development"}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        {isSupport ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[var(--text-secondary)] font-mono whitespace-nowrap">
+                              {monthlyUsed.toFixed(1)}/{allocated}h this month
+                            </span>
+                            {monthlyUsed > allocated && (
+                              <Badge variant="destructive" className="text-[8px] scale-90 origin-right py-0 px-1 font-bold">
+                                Exceeded
+                              </Badge>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-[var(--text-secondary)] font-mono whitespace-nowrap">
+                            {used.toFixed(1)}h used
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <Progress
-                      value={percent}
-                      indicatorClassName={
-                        percent > 90
-                          ? "bg-[var(--destructive)]"
-                          : percent > 75
-                          ? "bg-amber-500"
-                          : "bg-[var(--primary)]"
-                      }
-                    />
+                    {isSupport && (
+                      <Progress
+                        value={percent}
+                        indicatorClassName={
+                          actualRatio > 100
+                            ? "bg-[var(--destructive)]"
+                            : actualRatio > 80
+                            ? "bg-amber-500"
+                            : "bg-[var(--primary)]"
+                        }
+                      />
+                    )}
                   </div>
                 );
               })
@@ -623,12 +871,87 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
         </Card>
       </div>
 
-      {/* Row 4: Resolved Issues History */}
+      {/* Row 3: Pending Re-assignments */}
+      {pendingReassignments.length > 0 && (
+        <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
+              <Users className="h-4.5 w-4.5 text-[var(--primary-text)]" />
+              Pending Re-assignments ({pendingReassignments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pendingReassignments.map((item) => {
+                const requestedByName = typeof item.requestedBy === "object" && item.requestedBy ? item.requestedBy.name : "N/A";
+                const requestedToName = typeof item.requestedTo === "object" && item.requestedTo ? item.requestedTo.name : (item.requestedTo ? item.requestedTo : "Anyone");
+                return (
+                  <div
+                    key={item.id}
+                    className="flex flex-col md:flex-row md:items-center justify-between p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] gap-4"
+                  >
+                    <div className="space-y-1.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge
+                          className={`text-[9px] uppercase tracking-wide py-0.5 ${
+                            item.type === "issue"
+                              ? "bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                              : item.type === "task"
+                              ? "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              : "bg-purple-500/10 text-purple-500 border border-purple-500/20"
+                          }`}
+                        >
+                          {item.type}
+                        </Badge>
+                        <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                          {item.code}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-secondary)]">
+                          Requested: <span className="font-semibold text-[var(--text-primary)]">{requestedByName}</span> → <span className="font-semibold text-[var(--text-primary)]">{requestedToName}</span>
+                        </span>
+                      </div>
+                      <p className="text-sm font-semibold text-[var(--text-primary)] truncate">
+                        {item.title}
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] bg-[var(--surface-hover)]/30 p-2.5 rounded-lg border border-[var(--border)]/50 italic leading-relaxed">
+                        Reason: {item.reason}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0 md:self-center">
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveReassignment(item)}
+                        disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-9 px-3 rounded-lg font-semibold flex items-center gap-1.5 shadow-sm"
+                      >
+                        <UserCheck className="h-4 w-4" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDeclineReassignment(item)}
+                        disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+                        className="text-xs h-9 px-3 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-lg font-semibold flex items-center gap-1.5"
+                      >
+                        <UserX className="h-4 w-4" />
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Row 4: Timesheet Approval Queue */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
-            <History className="h-4.5 w-4.5 text-[var(--success)]" />
-            Resolved Issues History (Division-wide)
+            <Clock className="h-4.5 w-4.5 text-[var(--primary-text)]" />
+            Timesheet Approval Queue
           </CardTitle>
           {selectedIssueIds.length > 0 && (
             <Button
@@ -642,6 +965,11 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
           )}
         </CardHeader>
         <CardContent>
+          <TimesheetApprovalView
+            startDate={defaultDates.startDate}
+            endDate={defaultDates.endDate}
+            isManagerOrAdmin={true}
+          />
           {resolvedIssues.length === 0 ? (
             <div className="text-center py-8 text-sm text-[var(--text-tertiary)]">
               No resolved issues in history.
