@@ -160,7 +160,7 @@ function ProjectTasksCard({
   onBack?: () => void;
   allUsers: User[];
   viewMode?: "kanban" | "list";
-  showAddTask?: boolean;
+  showAddTask?: number;
   filterSearch?: string;
   filterPriority?: string;
   filterAssignee?: string;
@@ -352,7 +352,7 @@ function TasksPageContent() {
   const [filterSearch, setFilterSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterAssignee, setFilterAssignee] = useState("");
-  const [addTaskTrigger, setAddTaskTrigger] = useState(false);
+  const [addTaskTrigger, setAddTaskTrigger] = useState(0);
   const [projectSearch, setProjectSearch] = useState("");
 
   const searchParams = useSearchParams();
@@ -477,7 +477,7 @@ function TasksPageContent() {
             <Button
               size="sm"
               className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
-              onClick={() => setAddTaskTrigger((v) => !v)}
+              onClick={() => setAddTaskTrigger((v) => v + 1)}
             >
               <Plus className="h-3.5 w-3.5" />
               New Task
