@@ -19,6 +19,7 @@ interface Props {
 
 export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
   const [pricePerUnit, setPricePerUnit] = useState(0);
+  const [defaultCount, setDefaultCount] = useState(0);
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
   useEffect(() => {
     if (!open || !uomType) return;
     setPricePerUnit(uomType.baselinePrice);
+    setDefaultCount(uomType.defaultCount);
     // Default to current month
     const now = new Date();
     setEffectiveFrom(
@@ -44,12 +46,21 @@ export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
       setError("Price cannot be negative.");
       return;
     }
+    if (defaultCount < 0) {
+      setError("Quantity cannot be negative.");
+      return;
+    }
     try {
-      await update.mutateAsync({ pricePerUnit, effectiveFrom: effectiveFrom || undefined, notes: notes || null });
-      toast.success("Price updated. A new versioned record has been created.");
+      await update.mutateAsync({
+        pricePerUnit,
+        defaultCount,
+        effectiveFrom: effectiveFrom || undefined,
+        notes: notes || null,
+      });
+      toast.success("Price and quantity updated. Baseline reconfigured.");
       onClose();
     } catch (err: any) {
-      const msg = err?.response?.data?.message ?? "Failed to update price.";
+      const msg = err?.response?.data?.message ?? "Failed to update baseline.";
       setError(msg);
       toast.error(msg);
     }
@@ -70,12 +81,20 @@ export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
           </p>
         </DialogHeader>
 
-        {/* Current price strip */}
-        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3 flex justify-between text-sm">
-          <span className="text-[var(--text-secondary)]">Current price</span>
-          <span className="font-semibold text-[var(--text-primary)]">
-            LKR {uomType.baselinePrice.toLocaleString()}
-          </span>
+        {/* Current baseline strip */}
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] px-4 py-3 grid grid-cols-2 gap-4 text-sm">
+          <div className="flex justify-between">
+            <span className="text-[var(--text-secondary)] font-medium">Current price</span>
+            <span className="font-semibold text-[var(--text-primary)]">
+              LKR {uomType.baselinePrice.toLocaleString()}
+            </span>
+          </div>
+          <div className="flex justify-between border-l border-[var(--border)] pl-4">
+            <span className="text-[var(--text-secondary)] font-medium">Current qty</span>
+            <span className="font-semibold text-[var(--text-primary)]">
+              {uomType.defaultCount}
+            </span>
+          </div>
         </div>
 
         {error && (
@@ -86,16 +105,28 @@ export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>New Price per Unit (LKR) *</Label>
-            <Input
-              type="number"
-              min={0}
-              step="any"
-              value={pricePerUnit}
-              onChange={(e) => setPricePerUnit(Number(e.target.value))}
-              required
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>New Price per Unit (LKR) *</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={pricePerUnit}
+                onChange={(e) => setPricePerUnit(Number(e.target.value))}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>New Default Quantity *</Label>
+              <Input
+                type="number"
+                min={0}
+                value={defaultCount}
+                onChange={(e) => setDefaultCount(Number(e.target.value))}
+                required
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">

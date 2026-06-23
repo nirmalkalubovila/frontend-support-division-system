@@ -8,6 +8,7 @@ import {
   Plus, Settings2, RefreshCw, Lock, LockOpen, Eye,
   Pencil, Trash2, Loader2, TrendingUp, CalendarDays,
   CheckCircle2, AlertCircle, ReceiptText, Layers, Zap,
+  CreditCard, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,12 +23,17 @@ import { UpdatePriceModal } from "./update-price-modal";
 import { PricingHistoryDrawer } from "./pricing-history-drawer";
 import { SnapshotCountsEditor } from "./snapshot-counts-editor";
 import { SnapshotDetailDrawer } from "./snapshot-detail-drawer";
+import { AllocatePaymentModal } from "@/components/organisms/financeModule/allocate-payment-modal";
+import { PaymentHistoryDrawer } from "@/components/organisms/financeModule/payment-history-drawer";
+import { PaymentStatusBadge } from "@/components/organisms/financeModule/payment-status-badge";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import { StatCard } from "@/components/atoms/statCard/statCard";
 import { ValidatePermission } from "@/components/atoms/validatePermission";
 import type { UomSnapshot, UomType } from "@/types/uom-types";
+import type { Payment } from "@/types/finance-types";
 import type { UserRole } from "@/types/global-types";
 import useSessionStore from "@/store/session-store";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Props {
   projectId: string;
@@ -70,7 +76,7 @@ function RefreshPricesButton({ projectId, snapshotId }: { projectId: string; sna
         try {
           const result = await refresh.mutateAsync();
           const lastEntry = result?.auditLog?.slice().reverse().find((e: any) => e.action === "count_updated");
-          const changed = lastEntry?.changes?.pricesRefreshed?.length > 0;
+          const changed = ((lastEntry?.changes as any)?.pricesRefreshed?.length ?? 0) > 0;
           if (changed) {
             toast.success("Prices updated from current baseline.");
           } else {
@@ -93,6 +99,8 @@ export function UomBillingTab({ projectId }: Props) {
   const userRole = (userInfo?.role ?? "intern") as UserRole;
   const canManage = CAN_MANAGE.includes(userRole);
 
+  const queryClient = useQueryClient();
+
   // Modal states
   const [baselineModalOpen, setBaselineModalOpen] = useState(false);
   const [pricingUomType, setPricingUomType] = useState<UomType | null>(null);
@@ -100,6 +108,8 @@ export function UomBillingTab({ projectId }: Props) {
   const [editingSnapshot, setEditingSnapshot] = useState<UomSnapshot | null>(null);
   const [detailSnapshot, setDetailSnapshot] = useState<UomSnapshot | null>(null);
   const [deletingSnapshotId, setDeletingSnapshotId] = useState<string | null>(null);
+  const [allocatePayment, setAllocatePayment] = useState<Payment | null>(null);
+  const [historyPayment, setHistoryPayment] = useState<Payment | null>(null);
 
   // Data
   const { data: baseline, isLoading: baselineLoading } = useGetUomBaseline(projectId);
@@ -340,7 +350,14 @@ export function UomBillingTab({ projectId }: Props) {
                         })} LKR
                       </td>
                       <td className="px-4 py-3">
-                        {snap.linkedPayment ? (
+                        {snap.linkedPayment && typeof snap.linkedPayment === "object" ? (
+                          <div className="flex flex-col gap-1">
+                            <span className="flex items-center gap-1 text-[10px] text-green-600 font-semibold">
+                              <CheckCircle2 className="h-3 w-3" /> Auto-created
+                            </span>
+                            <PaymentStatusBadge status={(snap.linkedPayment as Payment).paymentStatus} />
+                          </div>
+                        ) : snap.linkedPayment ? (
                           <span className="flex items-center gap-1 text-[10px] text-green-600 font-semibold">
                             <CheckCircle2 className="h-3 w-3" /> Auto-created
                           </span>
@@ -365,6 +382,33 @@ export function UomBillingTab({ projectId }: Props) {
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
+
+                          {/* Finalized payment actions */}
+                          {snap.status === "finalized" && snap.linkedPayment && typeof snap.linkedPayment === "object" && (
+                            <>
+                              {(snap.linkedPayment as Payment).paymentStatus !== "Paid" &&
+                               (snap.linkedPayment as Payment).paymentStatus !== "Cancelled" && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-green-600"
+                                  title="Allocate payment"
+                                  onClick={() => setAllocatePayment(snap.linkedPayment as Payment)}
+                                >
+                                  <CreditCard className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-[var(--text-secondary)]"
+                                title="Payment history"
+                                onClick={() => setHistoryPayment(snap.linkedPayment as Payment)}
+                              >
+                                <Clock className="h-3.5 w-3.5" />
+                              </Button>
+                            </>
+                          )}
 
                           <ValidatePermission permission="finance.uom.snapshot.update">
                             {snap.status === "draft" && (
@@ -458,6 +502,23 @@ export function UomBillingTab({ projectId }: Props) {
         variant="destructive"
         onConfirm={handleDeleteConfirm}
         loading={deleteSnapshot.isPending}
+      />
+
+      <AllocatePaymentModal
+        projectId={projectId}
+        payment={allocatePayment}
+        open={!!allocatePayment}
+        onClose={() => {
+          setAllocatePayment(null);
+          queryClient.invalidateQueries({ queryKey: ["/uom/snapshots", projectId], exact: false });
+        }}
+      />
+
+      <PaymentHistoryDrawer
+        projectId={projectId}
+        payment={historyPayment}
+        open={!!historyPayment}
+        onClose={() => setHistoryPayment(null)}
       />
     </div>
   );

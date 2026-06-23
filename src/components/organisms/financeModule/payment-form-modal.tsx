@@ -7,6 +7,7 @@ import {
 } from "@/components";
 import { Paperclip, X } from "lucide-react";
 import { useCreatePayment, useUpdatePayment } from "@/api/services/finance/finance-service";
+import { useGetProjectCRs } from "@/api/services/project-management/cr-service";
 import type { Payment, CreatePaymentPayload, PaymentType, PaymentStatus, PaymentMethod } from "@/types/finance-types";
 
 interface Props {
@@ -58,6 +59,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const create = useCreatePayment(projectId);
   const update = useUpdatePayment(projectId);
+  const { data: crsData } = useGetProjectCRs(projectId);
 
   useEffect(() => {
     if (editing) {
@@ -70,8 +72,8 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
         paymentDate: editing.paymentDate,
         dueDate: editing.dueDate,
         paymentStatus: editing.paymentStatus,
-        paymentMethod: editing.paymentMethod,
-        referenceNumber: editing.referenceNumber,
+        paymentMethod: editing.paymentStatus === "Pending" ? null : editing.paymentMethod,
+        referenceNumber: editing.paymentStatus === "Pending" ? null : editing.referenceNumber,
         notes: editing.notes,
         partiallyPaidAmount: editing.partiallyPaidAmount,
         attachment: null,
@@ -158,13 +160,20 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
           {isCRBased && (
             <div className="space-y-1">
               <Label>CR Reference *</Label>
-              <Input
+              <Select
+                options={[
+                  { label: "Select CR...", value: "" },
+                  ...(crsData?.data || []).map((cr) => ({
+                    label: `${cr.crNumber} - ${cr.title}`,
+                    value: cr.crNumber,
+                  })),
+                ]}
                 value={form.uom ?? ""}
-                onChange={(e) => set("uom", e.target.value || null)}
-                placeholder="e.g. CR-00012 or CR title…"
+                onChange={(v) => set("uom", v || null)}
+                placeholder="Select CR..."
                 required
               />
-              <p className="text-[10px] text-[var(--text-tertiary)]">Enter the CR number or title this payment relates to.</p>
+              <p className="text-[10px] text-[var(--text-tertiary)]">Select the CR this payment relates to.</p>
             </div>
           )}
 
@@ -224,7 +233,17 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
               <Select
                 options={STATUSES.map((s) => ({ label: s, value: s }))}
                 value={form.paymentStatus ?? "Pending"}
-                onChange={(v) => set("paymentStatus", v as PaymentStatus)}
+                onChange={(v) => {
+                  if (v === "Pending") {
+                    setForm((p) => ({
+                      ...p,
+                      paymentStatus: "Pending",
+                      paymentMethod: null,
+                    }));
+                  } else {
+                    set("paymentStatus", v as PaymentStatus);
+                  }
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -236,6 +255,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 ]}
                 value={form.paymentMethod ?? ""}
                 onChange={(v) => set("paymentMethod", (v as PaymentMethod) || null)}
+                disabled={form.paymentStatus === "Pending"}
               />
             </div>
           </div>

@@ -20,7 +20,7 @@ import { ValidatePermission } from "@/components/atoms/validatePermission";
 import useSessionStore from "@/store/session-store";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
-import { useGetCRStats, useGetAssignedCRs } from "@/api/services/project-management/cr-service";
+import { useGetCRStats, useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
 import { CRTab } from "../projects/[projectId]/tabs";
 
 const CR_PRIORITIES = ["Critical", "High", "Medium", "Low"];
@@ -61,8 +61,9 @@ function ProjectCRCard({
   const { data: assignedCRs = [] } = useGetAssignedCRs(userInfo?._id);
 
   const hasNewAssignment = useMemo(() => {
-    return assignedCRs.some((cr) => {
-      const projId = typeof cr.project === "object" && cr.project ? cr.project._id : cr.project;
+    return ((assignedCRs || []) as ChangeRequest[]).some((cr) => {
+      const proj = cr.project as any;
+      const projId = typeof proj === "object" && proj ? proj._id : proj;
       return String(projId) === String(group.id) && ["Submitted", "To Do"].includes(cr.status);
     });
   }, [assignedCRs, group.id]);

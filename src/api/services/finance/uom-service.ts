@@ -56,6 +56,8 @@ export const useConfigureBaseline = (projectId: string) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.baseline(projectId) });
+      queryClient.invalidateQueries({ queryKey: ["/uom/snapshots", projectId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/uom/snapshot"], exact: false });
     },
   });
 };
@@ -76,6 +78,8 @@ export const useUpdateUomPrice = (projectId: string, uomTypeId: string) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: keys.baseline(projectId) });
       queryClient.invalidateQueries({ queryKey: keys.pricingHistory(projectId, uomTypeId) });
+      queryClient.invalidateQueries({ queryKey: ["/uom/snapshots", projectId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ["/uom/snapshot"], exact: false });
     },
   });
 };
@@ -104,7 +108,7 @@ export const useGetPricingHistory = (projectId: string, uomTypeId: string | null
  */
 export const useGetUomSnapshots = (
   projectId: string,
-  params?: { status?: string; billingMonth?: string; limit?: number; page?: number }
+  params?: { status?: string; billingMonth?: string; limit?: number; page?: number; sortBy?: string }
 ) =>
   useQuery({
     queryKey: keys.snapshots(projectId, params),
@@ -188,7 +192,7 @@ export const useUpdateSnapshotCounts = (projectId: string, snapshotId: string) =
 export const useFinalizeSnapshot = (projectId: string, snapshotId: string) => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data?: { notes?: string }): Promise<UomSnapshot> => {
+    mutationFn: async (data?: any): Promise<UomSnapshot> => {
       const res = await axiosInstance.post(
         `/projects/${projectId}/uom/snapshots/${snapshotId}/finalize`,
         data ?? {}
