@@ -204,6 +204,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 step="any"
                 value={form.pricePerUnit || ""}
                 onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 className="pl-10"
                 required
               />
@@ -284,6 +285,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 max={totalAmount}
                 value={form.partiallyPaidAmount ?? ""}
                 onChange={(e) => set("partiallyPaidAmount", parseFloat(e.target.value) || null)}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 placeholder="Amount paid so far"
                 required
               />
