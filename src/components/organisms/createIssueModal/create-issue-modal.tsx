@@ -318,7 +318,7 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="issue-title" className="text-sm font-semibold">
-              Title <span className="text-[var(--error)]">*</span>
+              Title <span className="text-[var(--destructive)]">*</span>
             </Label>
             <Input
               id="issue-title"
@@ -327,10 +327,10 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
               onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 handleChange("title", e.target.value)
               }
-              className={`h-11 text-sm ${errors.title ? "border-[var(--error)]" : ""}`}
+              className={`h-11 text-sm ${errors.title ? "border-[var(--destructive)]" : ""}`}
             />
             {errors.title && (
-              <p className="text-xs text-[var(--error)] flex items-center gap-1">
+              <p className="text-xs text-[var(--destructive)] flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" /> {errors.title}
               </p>
             )}
@@ -354,17 +354,17 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
                     value: c._id,
                   })),
                 ]}
-                className={`h-11 text-sm ${errors.client ? "border-[var(--error)]" : ""}`}
+                className={`h-11 text-sm ${errors.client ? "border-[var(--destructive)]" : ""}`}
               />
               {errors.client && (
-                <p className="text-xs text-[var(--error)] flex items-center gap-1">
+                <p className="text-xs text-[var(--destructive)] flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> {errors.client}
                 </p>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="issue-project" className="text-sm font-semibold">
-                Project <span className="text-[var(--error)]">*</span>
+                Project <span className="text-[var(--destructive)]">*</span>
               </Label>
               <Select
                 id="issue-project"
@@ -378,10 +378,10 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
                     return projClient === form.client;
                   })
                   .map((p) => ({ label: p.name, value: p._id }))}
-                className={`h-11 text-sm ${errors.project ? "border-[var(--error)]" : ""}`}
+                className={`h-11 text-sm ${errors.project ? "border-[var(--destructive)]" : ""}`}
               />
               {errors.project && (
-                <p className="text-xs text-[var(--error)] flex items-center gap-1">
+                <p className="text-xs text-[var(--destructive)] flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> {errors.project}
                 </p>
               )}
@@ -479,7 +479,7 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="issue-description" className="text-sm font-semibold">
-              Description <span className="text-[var(--error)]">*</span>
+              Description <span className="text-[var(--destructive)]">*</span>
             </Label>
             <Textarea
               id="issue-description"
@@ -489,17 +489,17 @@ export function CreateIssueModal({ open, onOpenChange, defaultProjectId }: Creat
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                 handleChange("description", e.target.value)
               }
-              className={`text-sm ${errors.description ? "border-[var(--error)]" : ""}`}
+              className={`text-sm ${errors.description ? "border-[var(--destructive)] font-medium bg-[rgba(239,68,68,0.01)]" : ""}`}
             />
             {errors.description && (
-              <p className="text-xs text-[var(--error)] flex items-center gap-1">
+              <p className="text-xs text-[var(--destructive)] flex items-center gap-1">
                 <AlertCircle className="h-3 w-3" /> {errors.description}
               </p>
             )}
           </div>
 
           {/* Attachments Section */}
-          <div className="space-y-2">
+          <div className="space-y-2 opacity-65 hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200">
             <Label className="text-sm font-semibold flex items-center gap-1.5">
               <Paperclip className="h-4 w-4" />
               Attachments
