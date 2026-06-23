@@ -21,9 +21,10 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { Button, Input, Select } from "@/components";
+import useSessionStore from "@/store/session-store";
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
-import { useGetProjectTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetProjectTasks, useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
 import { TasksTab } from "../projects/[projectId]/tabs";
 import { TaskDetailDrawer } from "@/components/organisms/kanbanBoard/kanban-board";
 
@@ -165,6 +166,17 @@ function ProjectTasksCard({
   filterAssignee?: string;
 }) {
   const { data: tasks = [], isLoading } = useGetProjectTasks(group.id);
+  const userInfo = useSessionStore((s) => s.userInfo);
+  const { data: assignedTasks = [] } = useGetAssignedTasks(userInfo?._id);
+
+  const hasNewAssignment = useMemo(() => {
+    return ((assignedTasks || []) as Task[]).some((t) => {
+      const proj = t.project as any;
+      const projId = typeof proj === "object" && proj ? proj._id : proj;
+      return String(projId) === String(group.id) && t.status === "To Do";
+    });
+  }, [assignedTasks, group.id]);
+
   const [subTab, setSubTab] = useState<"active" | "history">("active");
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
@@ -285,9 +297,17 @@ function ProjectTasksCard({
       className="col-span-1 border border-[var(--border)] rounded-2xl bg-[var(--surface)] hover:border-[var(--border-hover)] hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col p-5 h-full min-h-[180px] cursor-pointer select-none"
     >
       <div className="flex items-center justify-between">
-        <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
-          {group.clientCode || "GEN"}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+            {group.clientCode || "GEN"}
+          </span>
+          {hasNewAssignment && (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 uppercase tracking-wider animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+              New
+            </span>
+          )}
+        </div>
         <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
       </div>
 

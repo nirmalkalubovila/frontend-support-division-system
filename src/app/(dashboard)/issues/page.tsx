@@ -33,6 +33,7 @@ import { useGetIssues, useUpdateIssue, type Issue } from "@/api/services/issue-m
 import { useGetAllProjects, type Project } from "@/api/services/project-management/project-service";
 import { useGetCategories } from "@/api/services/system/settings-service";
 import { useIssuesSocket } from "@/hooks/use-issues-socket";
+import useSessionStore from "@/store/session-store";
 
 // ──────────────────────────────────────────────────────────────
 // Priority color mapping
@@ -233,6 +234,18 @@ function ProjectCard({
   onAddIssue: () => void;
 }) {
   const updateMutation = useUpdateIssue();
+  const userInfo = useSessionStore((s) => s.userInfo);
+
+  const hasNewAssignment = useMemo(() => {
+    if (!userInfo) return false;
+    return group.issues.some((issue) => {
+      const assigneeId = typeof issue.assignedTo === "object" && issue.assignedTo !== null
+        ? issue.assignedTo._id
+        : issue.assignedTo;
+      return assigneeId === userInfo._id && issue.status === "To Do";
+    });
+  }, [group.issues, userInfo]);
+
   const [draggingIssue, setDraggingIssue] = useState<Issue | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [subTab, setSubTab] = useState<"active" | "history">("active");
@@ -741,15 +754,23 @@ function ProjectCard({
     >
       {/* Top Header Row */}
       <div className="flex items-center justify-between">
-        {group.clientCode ? (
-          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
-            {group.clientCode}
-          </span>
-        ) : (
-          <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
-            GEN
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {group.clientCode ? (
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--primary-light)] text-[var(--primary-text)] uppercase tracking-wider shadow-sm">
+              {group.clientCode}
+            </span>
+          ) : (
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-[var(--surface-hover)] text-[var(--text-tertiary)] uppercase tracking-wider shadow-sm">
+              GEN
+            </span>
+          )}
+          {hasNewAssignment && (
+            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 uppercase tracking-wider animate-pulse">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping" />
+              New
+            </span>
+          )}
+        </div>
 
         <ChevronDown className="h-4 w-4 text-[var(--text-tertiary)]" />
       </div>

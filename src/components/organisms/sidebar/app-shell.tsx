@@ -126,7 +126,7 @@ function NavItem({
             : "justify-start"
         }`}
       >
-        <Link href={href} className="flex items-center gap-3">
+        <Link href={href} className="flex items-center gap-3" prefetch={false}>
           {isChildOfProjects && !collapsed && (
             <>
               {/* Vertical line connecting children */}
@@ -544,7 +544,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/profile" className="flex items-center gap-2 w-full cursor-pointer">
+                  <Link href="/profile" className="flex items-center gap-2 w-full cursor-pointer" prefetch={false}>
                     <User className="h-4 w-4" />
                     Profile
                   </Link>

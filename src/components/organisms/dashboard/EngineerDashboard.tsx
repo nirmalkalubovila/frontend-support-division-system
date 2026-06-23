@@ -751,14 +751,18 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     if (!selectedItemId) return;
     const itemId = selectedItemId; // capture current value to avoid stale closure
 
-
+    // Coerce To Do / Backlog / Submitted status to In Progress
+    let targetWorkType = selectedWorkType;
+    if (["To Do", "Backlog", "Submitted"].includes(targetWorkType)) {
+      targetWorkType = "In Progress";
+    }
 
     // Trigger backend start
     const startPayload = {
       issueId: trackingType === 'issue' ? itemId : null,
       taskId: trackingType === 'task' ? itemId : null,
       crId: trackingType === 'cr' ? itemId : null,
-      workType: selectedWorkType,
+      workType: targetWorkType,
     };
 
     startTimerMutation.mutate(
@@ -771,9 +775,58 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           localStorage.setItem(`timer_time_${itemId}`, "0");
           localStorage.setItem(`timer_ticking_${itemId}`, "true");
           localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-          localStorage.setItem(`timer_worktype_${itemId}`, selectedWorkType);
+          localStorage.setItem(`timer_worktype_${itemId}`, targetWorkType);
+          setSelectedWorkType(targetWorkType);
           window.dispatchEvent(new Event("storage"));
-          toast.success("Timer started on server.");
+
+          // Auto-sync status to the selected status on the server
+          if (trackingType === 'issue') {
+            updateIssueMutation.mutate(
+              { id: itemId, data: { status: targetWorkType } },
+              {
+                onSuccess: () => {
+                  toast.success(`Timer started & issue status updated to ${targetWorkType}`);
+                },
+                onError: () => {
+                  toast.success("Timer started, but failed to update status on server.");
+                }
+              }
+            );
+          } else if (trackingType === 'task') {
+            const t = myActiveTasks.find(x => x._id === itemId);
+            if (t) {
+              const projId = typeof t.project === 'object' ? (t.project as any)._id : t.project;
+              updateTaskMutation.mutate(
+                { projectId: projId, taskId: itemId, data: { status: targetWorkType } },
+                {
+                  onSuccess: () => {
+                    toast.success(`Timer started & task status updated to ${targetWorkType}`);
+                  },
+                  onError: () => {
+                    toast.success("Timer started, but failed to update status on server.");
+                  }
+                }
+              );
+            }
+          } else if (trackingType === 'cr') {
+            const c = myActiveCRs.find(x => x._id === itemId);
+            if (c) {
+              const projId = typeof c.project === 'object' ? (c.project as any)._id : c.project;
+              updateCRMutation.mutate(
+                { projectId: projId, crId: itemId, data: { status: targetWorkType } },
+                {
+                  onSuccess: () => {
+                    toast.success(`Timer started & CR status updated to ${targetWorkType}`);
+                  },
+                  onError: () => {
+                    toast.success("Timer started, but failed to update status on server.");
+                  }
+                }
+              );
+            }
+          } else {
+            toast.success("Timer started on server.");
+          }
         },
         onError: (err: any) => {
           const msg = err?.response?.data?.message || "Failed to start timer on server.";

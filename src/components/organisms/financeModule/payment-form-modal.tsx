@@ -5,8 +5,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   Button, Input, Label, Select, Textarea,
 } from "@/components";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X, Zap } from "lucide-react";
 import { useCreatePayment, useUpdatePayment } from "@/api/services/finance/finance-service";
+import { useGetProjectCRs } from "@/api/services/project-management/cr-service";
 import type { Payment, CreatePaymentPayload, PaymentType, PaymentStatus, PaymentMethod } from "@/types/finance-types";
 
 interface Props {
@@ -16,6 +17,14 @@ interface Props {
   editing?: Payment | null;
 }
 
+// Manual payment types only — UOM Based is system-generated (auto-created on snapshot finalisation)
+const PAYMENT_TYPES: { value: PaymentType; label: string }[] = [
+  { value: "Advance",            label: "Advance" },
+  { value: "Project Fixed Price", label: "Project Fixed Price" },
+  { value: "CR Based",           label: "CR Based" },
+  { value: "Other",              label: "Other" },
+];
+
 const STATUSES: PaymentStatus[] = ["Pending", "Paid", "Partially Paid", "Overdue", "Cancelled"];
 const METHODS: PaymentMethod[] = ["Cash", "Bank Transfer", "Online Payment"];
 const NEEDS_REF: PaymentMethod[] = ["Bank Transfer", "Online Payment"];
@@ -23,6 +32,7 @@ const NEEDS_REF: PaymentMethod[] = ["Bank Transfer", "Online Payment"];
 const EMPTY: CreatePaymentPayload = {
   paymentType: "Advance",
   uom: null,
+  month: null,
   quantity: null,
   pricePerUnit: 0,
   paymentDate: null,
@@ -36,7 +46,11 @@ const EMPTY: CreatePaymentPayload = {
 };
 
 function fmt(n: number) {
-  return new Intl.NumberFormat("si-LK", { style: "currency", currency: "LKR", maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat("si-LK", {
+    style: "currency",
+    currency: "LKR",
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
@@ -45,19 +59,21 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const create = useCreatePayment(projectId);
   const update = useUpdatePayment(projectId);
+  const { data: crsData } = useGetProjectCRs(projectId);
 
   useEffect(() => {
     if (editing) {
       setForm({
         paymentType: editing.paymentType,
         uom: editing.uom,
+        month: editing.month,
         quantity: editing.quantity,
         pricePerUnit: editing.pricePerUnit,
         paymentDate: editing.paymentDate,
         dueDate: editing.dueDate,
         paymentStatus: editing.paymentStatus,
-        paymentMethod: editing.paymentMethod,
-        referenceNumber: editing.referenceNumber,
+        paymentMethod: editing.paymentStatus === "Pending" ? null : editing.paymentMethod,
+        referenceNumber: editing.paymentStatus === "Pending" ? null : editing.referenceNumber,
         notes: editing.notes,
         partiallyPaidAmount: editing.partiallyPaidAmount,
         attachment: null,
@@ -71,21 +87,20 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
   const set = <K extends keyof CreatePaymentPayload>(key: K, val: CreatePaymentPayload[K]) =>
     setForm((p) => ({ ...p, [key]: val }));
 
-  const isUOM = form.paymentType === "UOM Based";
   const isPaid = form.paymentStatus === "Paid";
   const isPartiallyPaid = form.paymentStatus === "Partially Paid";
   const needsRef = !!form.paymentMethod && NEEDS_REF.includes(form.paymentMethod as PaymentMethod);
-
-  const totalAmount = isUOM
-    ? (form.quantity || 0) * (form.pricePerUnit || 0)
-    : form.pricePerUnit || 0;
+  const totalAmount = form.pricePerUnit || 0;
+  const isCRBased = form.paymentType === "CR Based";
+  const isOther = form.paymentType === "Other";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload: CreatePaymentPayload = {
       ...form,
-      // Clear fields that shouldn't be sent based on current state
-      paymentDate: isPaid ? form.paymentDate : null,
+      uom: (isCRBased || isOther || form.paymentType === "UOM Based") ? form.uom : null,
+      quantity: null,
+      paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
       referenceNumber: needsRef ? form.referenceNumber : null,
       attachment: attachmentFile ?? null,
@@ -105,68 +120,113 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Payment" : "Add Payment"}</DialogTitle>
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            UOM Based payments are auto-created when a monthly snapshot is finalised.
+          </p>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
 
-          {/* Payment Type toggle */}
+          {/* Payment Type */}
           <div className="space-y-1.5">
             <Label>Payment Type</Label>
-            <div className="flex gap-2">
-              {(["Advance", "UOM Based"] as PaymentType[]).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set("paymentType", t)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.paymentType === t
-                      ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                      : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
+            {editing?.isSystemGenerated ? (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border border-[rgba(99,102,241,0.2)] bg-[rgba(99,102,241,0.05)] text-[var(--primary)] w-fit">
+                <Zap className="h-4 w-4" /> UOM Based (System Generated)
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {PAYMENT_TYPES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      // Clear uom when switching away from types that use it
+                      const clearsUom = value !== "CR Based" && value !== "Other";
+                      setForm((p) => ({
+                        ...p,
+                        paymentType: value,
+                        uom: clearsUom ? null : p.uom,
+                      }));
+                    }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      form.paymentType === value
+                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                        : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* UOM Based: UOM (text) + Quantity */}
-          {isUOM && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Unit of Measure</Label>
-                <Input
-                  value={form.uom ?? ""}
-                  onChange={(e) => set("uom", e.target.value || null)}
-                  placeholder="e.g. Hour, Task, Sprint..."
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Quantity</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={form.quantity ?? ""}
-                  onChange={(e) => set("quantity", parseFloat(e.target.value) || null)}
-                  required
-                />
-              </div>
+          {/* UOM Snapshot Description (Read-Only) */}
+          {editing?.isSystemGenerated && form.uom && (
+            <div className="space-y-1">
+              <Label>UOM Snapshot</Label>
+              <Input
+                value={form.uom}
+                disabled
+                className="bg-[var(--surface-hover)]"
+              />
             </div>
           )}
 
-          {/* Price */}
+          {/* CR Based — CR reference input */}
+          {isCRBased && (
+            <div className="space-y-1">
+              <Label>CR Reference *</Label>
+              <Select
+                options={[
+                  { label: "Select CR...", value: "" },
+                  ...(crsData?.data || []).map((cr) => ({
+                    label: `${cr.crNumber} - ${cr.title}`,
+                    value: cr.crNumber,
+                  })),
+                ]}
+                value={form.uom ?? ""}
+                onChange={(v) => set("uom", v || null)}
+                placeholder="Select CR..."
+                required
+              />
+              <p className="text-[10px] text-[var(--text-tertiary)]">Select the CR this payment relates to.</p>
+            </div>
+          )}
+
+          {/* Other — description input */}
+          {isOther && (
+            <div className="space-y-1">
+              <Label>Payment Description *</Label>
+              <Input
+                value={form.uom ?? ""}
+                onChange={(e) => set("uom", e.target.value || null)}
+                placeholder="e.g. Domain renewal, hosting fee…"
+                required
+              />
+              <p className="text-[10px] text-[var(--text-tertiary)]">Briefly describe what this payment covers.</p>
+            </div>
+          )}
+
+          {/* Amount */}
           <div className="space-y-1">
-            <Label>{isUOM ? "Price per Unit (LKR)" : "Amount (LKR)"}</Label>
-            <Input
-              type="number"
-              min={0}
-              step="any"
-              value={form.pricePerUnit || ""}
-              onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
-              required
-            />
+            <Label>Amount (LKR) *</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[var(--text-tertiary)] pointer-events-none">
+                LKR
+              </span>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={form.pricePerUnit || ""}
+                onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                className="pl-10"
+                required
+              />
+            </div>
           </div>
 
           {/* Total preview */}
@@ -175,7 +235,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
             <span className="text-base font-bold text-[var(--primary-text)]">{fmt(totalAmount)}</span>
           </div>
 
-          {/* Due Date — always shown */}
+          {/* Due Date */}
           <div className="space-y-1">
             <Label>Due Date</Label>
             <Input
@@ -192,7 +252,17 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
               <Select
                 options={STATUSES.map((s) => ({ label: s, value: s }))}
                 value={form.paymentStatus ?? "Pending"}
-                onChange={(v) => set("paymentStatus", v as PaymentStatus)}
+                onChange={(v) => {
+                  if (v === "Pending") {
+                    setForm((p) => ({
+                      ...p,
+                      paymentStatus: "Pending",
+                      paymentMethod: null,
+                    }));
+                  } else {
+                    set("paymentStatus", v as PaymentStatus);
+                  }
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -204,14 +274,15 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 ]}
                 value={form.paymentMethod ?? ""}
                 onChange={(v) => set("paymentMethod", (v as PaymentMethod) || null)}
+                disabled={form.paymentStatus === "Pending"}
               />
             </div>
           </div>
 
-          {/* Payment Date — only when Paid */}
-          {isPaid && (
+          {/* Payment Date — only when Paid or Partially Paid */}
+          {(isPaid || isPartiallyPaid) && (
             <div className="space-y-1">
-              <Label>Payment Date</Label>
+              <Label>Payment Date *</Label>
               <Input
                 type="date"
                 value={form.paymentDate?.slice(0, 10) ?? ""}
@@ -221,7 +292,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
             </div>
           )}
 
-          {/* Partially Paid Amount — only when Partially Paid */}
+          {/* Partially Paid Amount */}
           {isPartiallyPaid && (
             <div className="space-y-1">
               <Label>Partially Paid Amount (LKR)</Label>
@@ -232,7 +303,8 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 max={totalAmount}
                 value={form.partiallyPaidAmount ?? ""}
                 onChange={(e) => set("partiallyPaidAmount", parseFloat(e.target.value) || null)}
-                placeholder="Enter amount paid so far"
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                placeholder="Amount paid so far"
                 required
               />
               {form.partiallyPaidAmount != null && totalAmount > 0 && (
@@ -245,7 +317,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
           {/* Reference + Attachment — only for Bank Transfer / Online Payment */}
           {needsRef && (
-            <div className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+            <>
               <div className="space-y-1">
                 <Label>Reference / Invoice Number</Label>
                 <Input
@@ -265,46 +337,38 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                   onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
                 />
                 {attachmentFile ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                    <Paperclip className="h-4 w-4 text-[var(--text-secondary)] shrink-0" />
-                    <span className="flex-1 truncate text-[var(--text-primary)]">{attachmentFile.name}</span>
-                    <button type="button" onClick={() => setAttachmentFile(null)}>
-                      <X className="h-4 w-4 text-[var(--text-secondary)] hover:text-[var(--destructive)]" />
+                  <div className="flex items-center gap-2 h-9 rounded-md border border-[var(--border)] bg-[var(--surface-hover)] px-3 min-w-0">
+                    <Paperclip className="h-3.5 w-3.5 text-[var(--text-secondary)] shrink-0" />
+                    <span className="flex-1 truncate text-xs text-[var(--text-primary)] min-w-0">{attachmentFile.name}</span>
+                    <span className="text-[10px] text-[var(--text-secondary)] shrink-0 whitespace-nowrap">
+                      {(attachmentFile.size / 1024).toFixed(0)} KB
+                    </span>
+                    <button type="button" onClick={() => setAttachmentFile(null)}
+                      className="ml-1 shrink-0 rounded p-0.5 hover:bg-[var(--destructive-light)]">
+                      <X className="h-3.5 w-3.5 text-[var(--text-secondary)] hover:text-[var(--destructive)]" />
                     </button>
                   </div>
                 ) : editing?.attachment ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm">
-                    <Paperclip className="h-4 w-4 text-[var(--text-secondary)] shrink-0" />
-                    <a
-                      href={editing.attachment}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 truncate text-[var(--primary)] underline"
-                    >
+                  <div className="flex items-center gap-2 h-9 rounded-md border border-[var(--border)] bg-[var(--surface-hover)] px-3 min-w-0">
+                    <Paperclip className="h-3.5 w-3.5 text-[var(--primary)] shrink-0" />
+                    <a href={editing.attachment} target="_blank" rel="noopener noreferrer"
+                      className="flex-1 truncate text-xs text-[var(--primary)] underline underline-offset-2 min-w-0">
                       View existing attachment
                     </a>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)]"
-                    >
+                    <button type="button" onClick={() => fileInputRef.current?.click()}
+                      className="shrink-0 text-[10px] text-[var(--text-secondary)] hover:text-[var(--primary)] whitespace-nowrap">
                       Replace
                     </button>
                   </div>
                 ) : (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Paperclip className="h-3.5 w-3.5" />
-                    Attach File
-                  </Button>
+                  <button type="button" onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 w-full h-9 rounded-md border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-colors">
+                    <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-xs">Attach file…</span>
+                  </button>
                 )}
               </div>
-            </div>
+            </>
           )}
 
           {/* Notes */}
@@ -322,7 +386,8 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
             <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending}
+              className="bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
               {isPending ? "Saving..." : editing ? "Update" : "Add Payment"}
             </Button>
           </div>
