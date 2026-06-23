@@ -1,7 +1,7 @@
 import type { GlobalRecords } from "@/types/global-types";
 import type { Project } from "@/api/services/project-management/project-service";
 
-export type PaymentType = "Advance" | "UOM Based";
+export type PaymentType = "Advance" | "Project Fixed Price" | "CR Based" | "UOM Based" | "Other";
 export type PaymentStatus = "Pending" | "Paid" | "Partially Paid" | "Overdue" | "Cancelled";
 export type PaymentMethod = "Bank Transfer" | "Cash" | "Online Payment";
 
@@ -23,6 +23,9 @@ export interface Payment extends GlobalRecords {
   partiallyPaidAmount: number | null;
   attachment: string | null;
   transactions?: PaymentTransaction[];
+  // UOM auto-payment fields
+  uomSnapshot: string | null;
+  isSystemGenerated: boolean;
 }
 
 export interface CreatePaymentPayload {
