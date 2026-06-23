@@ -28,15 +28,8 @@ import type { User } from "@/api/services/user-management/user-service";
 import useSessionStore from "@/store/session-store";
 import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 import { validateTaskTransition, WORKFLOW_TRANSITIONS } from "@/lib/task-workflow";
-import { useStartTimer, useStopTimer } from "@/api/services/time-tracking/time-log-service";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useStartTimer, useStopTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 // ──────────────────────────────────────────────────────────────
 // Constants
@@ -424,7 +417,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                   </span>
                 )}
               </div>
-              <h2 className="text-base font-bold text-[var(--text-primary)] leading-tight">{task.name}</h2>
+              <DialogTitle className="text-base font-bold text-[var(--text-primary)] leading-tight">{task.name}</DialogTitle>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {canEdit && (
@@ -435,57 +428,9 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
               )}
               <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] transition-colors"><X className="h-4 w-4" /></button>
             </div>
-          </div>
+          </DialogHeader>
 
           {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-5">
-
-            {/* Workflow: allowed transitions */}
-            {canEdit && (
-              <div className="space-y-2">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to</Label>
-                {task.submittedForReview ? (
-                  <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-500 text-xs font-semibold text-center animate-pulse-soft">
-                    Submitted for Senior SE review. Status locked.
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex gap-1.5 flex-wrap">
-                      {KANBAN_STATUSES.map((s) => {
-                        const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
-                        if (isDevOrIntern) {
-                          if (s === "Done") return null;
-                          if (s === "To Do" && task.status !== "To Do") return null;
-                        }
-                        const isCurrent = task.status === s;
-                        const { valid, hints } = validateTaskTransition(task, s, userInfo);
-                        return (
-                          <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                              isCurrent
-                                ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
-                                : valid
-                                  ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
-                                  : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
-                            }`}>
-                            {s}
-                            {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
-                            {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="text-[10px] text-[var(--text-tertiary)]">
-                      Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-            <DialogTitle className="text-xl font-bold text-[var(--text-primary)] leading-snug">
-              {task.name}
-            </DialogTitle>
-          </DialogHeader>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
             {/* Left Column */}
@@ -579,28 +524,41 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
               {canEdit && (
                 <div className="space-y-2">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to</Label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {KANBAN_STATUSES.map((s) => {
-                      const isCurrent = task.status === s;
-                      const { valid, hints } = validateTaskTransition(task, s, userInfo);
-                      return (
-                        <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
-                              ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
-                              : valid
-                                ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
-                                : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
-                            }`}>
-                          {s}
-                          {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
-                          {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
-                  </p>
+                  {task.submittedForReview ? (
+                    <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-500 text-xs font-semibold text-center animate-pulse-soft">
+                      Submitted for Senior SE review. Status locked.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {KANBAN_STATUSES.map((s) => {
+                          const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
+                          if (isDevOrIntern) {
+                            if (s === "Done") return null;
+                            if (s === "To Do" && task.status !== "To Do") return null;
+                          }
+                          const isCurrent = task.status === s;
+                          const { valid, hints } = validateTaskTransition(task, s, userInfo);
+                          return (
+                            <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
+                                  ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
+                                  : valid
+                                    ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                                    : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
+                                }`}>
+                              {s}
+                              {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
+                              {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-[var(--text-tertiary)]">
+                        Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -713,57 +671,6 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
 
             <Separator className="bg-[var(--border)]" />
 
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-3">
-              {(["startDate", "endDate"] as const).map((field) => (
-                <div key={field} className="space-y-1.5">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">{field === "startDate" ? "Start Date" : "End Date"}</Label>
-                  {canEdit ? (
-                    <Input type="date"
-                      defaultValue={task[field] ? (task[field] as string).split("T")[0] : ""}
-                      onBlur={(e) => handleDateChange(field, e.target.value)}
-                      className={`h-9 bg-[var(--background)] border-[var(--border)] text-xs ${field === "endDate" && overdue ? "border-red-300 text-red-600" : ""}`} />
-                  ) : (
-                    <p className={`text-sm font-medium ${field === "endDate" && overdue ? "text-red-500" : "text-[var(--text-primary)]"}`}>{fmtDate(task[field]) || "—"}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {/* Description */}
-            {task.description && (
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Description</Label>
-                <p className="text-sm text-[var(--text-primary)] leading-relaxed whitespace-pre-wrap bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">{task.description}</p>
-              </div>
-            )}
-
-            {/* Assignees */}
-            <div className="space-y-2">
-              <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Assignees</Label>
-              {task.assignees.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {task.assignees.map((a, idx) => (
-                    <div key={a._id ? `${a._id}-${idx}` : `assignee-${idx}`} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[var(--background)] border border-[var(--border)]">
-                      <div className="h-5 w-5 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">{(a.name || "U").charAt(0).toUpperCase()}</div>
-                      <span className="text-xs font-medium text-[var(--text-primary)]">{a.name || "Unknown"}</span>
-                      {canEdit && <button onClick={() => handleToggleAssignee(a._id)} className="text-[var(--text-tertiary)] hover:text-red-500 transition-colors"><X className="h-3 w-3" /></button>}
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-xs text-[var(--text-tertiary)]">No assignees</p>}
-              {canEdit && members.filter((m) => (m.role === "senior_engineer" || m.role === "engineer" || m.role === "intern") && !task.assignees.find((a) => a._id === m._id)).length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {members
-                    .filter((m) => (m.role === "senior_engineer" || m.role === "engineer" || m.role === "intern") && !task.assignees.find((a) => a._id === m._id))
-                    .map((m) => (
-                      <button key={m._id} onClick={() => handleToggleAssignee(m._id)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border border-dashed border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all">
-                        <Plus className="h-3 w-3" />{m.name.split(" ")[0]}
-                      </button>
-                    ))}
-                </div>
-              )}
 
               {/* Dates */}
               <div className="grid grid-cols-2 gap-3">

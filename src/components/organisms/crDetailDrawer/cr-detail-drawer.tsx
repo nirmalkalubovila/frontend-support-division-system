@@ -10,10 +10,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   useUpdateCR, useUploadCRAttachments, useDeleteCRAttachment,
   type ChangeRequest, type CRStatus, type CRPriority,
@@ -152,7 +151,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
   const devNames = cr.assignedDevelopers?.map((d) => (typeof d === "object" ? d.name : d)) ?? [];
 
-  return (
+  const drawer = (
     <Dialog open={!!cr} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh] flex flex-col">
         
@@ -431,7 +430,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
                   </div>
                 )}
               </div>
-            </div>
+            </>
           )}
 
           {/* ── Tasks ── */}

@@ -26,8 +26,6 @@ import { useGetProjectsMonthlyUsage } from "@/api/services/project-management/pr
 import { Progress } from "@/components/ui/progress";
 import { useGetAllTasks } from "@/api/services/project-management/task-service";
 import { useGetAllCRs } from "@/api/services/project-management/cr-service";
-import { useUpdateIssue } from "@/api/services/issue-management/issue-service";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance from "@/lib/axios";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
 import { toast } from "sonner";
@@ -44,7 +42,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useUpdateIssue, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
 import type { Project } from "@/api/services/project-management/project-service";
 import type { UserInfo } from "@/types/global-types";
 

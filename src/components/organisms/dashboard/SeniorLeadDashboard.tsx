@@ -1,6 +1,5 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
 import React, { useState, useEffect, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -16,12 +15,6 @@ import {
   History,
   Clock,
   RotateCcw,
-} from "lucide-react";
-import { Badge, Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
-import { StatCard } from "@/components/atoms/statCard";
-import { useUpdateIssue, type Issue } from "@/api/services/issue-management/issue-service";
-import { useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
-import { useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -30,6 +23,8 @@ import { StatCard } from "@/components/atoms/statCard";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
 import { toast } from "sonner";
 import { useUpdateIssue, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
+import { useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
 import type { UserInfo } from "@/types/global-types";
 import {
   ResponsiveContainer,
@@ -40,8 +35,6 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
-import { toast } from "sonner";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axiosInstance from "@/lib/axios";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";

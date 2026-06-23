@@ -31,16 +31,11 @@ import {
   useDeleteTimeLog,
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
-import { useUpdateIssue, useNotifyTimeExceeded, type Issue } from "@/api/services/issue-management/issue-service";
-import { useGetAssignedTasks, useGetAllTasks, type Task } from "@/api/services/project-management/task-service";
-import { useGetAssignedCRs, useGetAllCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
-import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { useUpdateIssue, useNotifyTimeExceeded, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAssignedTasks, useGetAllTasks, useUpdateTask, type Task } from "@/api/services/project-management/task-service";
+import { useGetAssignedCRs, useGetAllCRs, useUpdateCR, type ChangeRequest } from "@/api/services/project-management/cr-service";
+import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
-import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
-import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
-import { useUpdateTask } from "@/api/services/project-management/task-service";
-import { useUpdateCR } from "@/api/services/project-management/cr-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -165,13 +160,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [logsPage, setLogsPage] = useState(1);
   const [resolvedIssuesPage, setResolvedIssuesPage] = useState(1);
 
-  // Detail popup states
-  const [detailedTask, setDetailedTask] = useState<Task | null>(null);
-  const [detailedCR, setDetailedCR] = useState<ChangeRequest | null>(null);
-
-  // Fetch all users for drawer members lists
-  const { data: usersData } = useGetAllUsers();
-  const allUsers = useMemo(() => usersData ?? [], [usersData]);
 
   const handleClearSelectedLogs = async () => {
     setIsDeletingLogs(true);
