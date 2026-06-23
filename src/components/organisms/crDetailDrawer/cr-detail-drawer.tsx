@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import {
@@ -77,6 +77,28 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<{ id: string; text: string; author: string; time: string }[]>([]);
 
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  const handleApprovalSubmit = async () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    try {
+      await updateMutation.mutateAsync({
+        crId: cr._id,
+        data: { submittedForReview: true }
+      });
+      setShowApprovalDialog(false);
+      setConfirmCheckbox(false);
+      toast.success("Submitted for Senior SE review.");
+      onClose();
+    } catch {
+      toast.error("Failed to submit for review");
+    }
+  };
+
   const handleStatusChange = async (status: CRStatus) => {
     if (!canEdit) return;
     try {
@@ -129,7 +151,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
   const pmName = typeof cr.assignedProjectManager === "object" ? cr.assignedProjectManager?.name : null;
   const devNames = cr.assignedDevelopers?.map((d) => (typeof d === "object" ? d.name : d)) ?? [];
 
-  return (
+  const drawer = (
     <Dialog open={!!cr} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-6xl bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] shadow-2xl p-6 overflow-y-auto max-h-[90vh] flex flex-col">
         
@@ -175,10 +197,101 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
 
           {/* ── Overview ── */}
           {activeTab === "overview" && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left Column */}
-              <div className="lg:col-span-7 space-y-6">
-                {/* Text fields */}
+            <>
+              {/* Status transitions */}
+              {canEdit && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to Status</Label>
+                  {cr.submittedForReview ? (
+                    <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-500 text-xs font-semibold text-center">
+                      Submitted for Senior SE review. Status locked.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {CR_STATUSES.map((s) => {
+                          const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
+                          if (isDevOrIntern) {
+                            if (s === "Done") return null;
+                            if (s === "To Do" && cr.status !== "To Do") return null;
+                          }
+                          return (
+                            <button key={s} onClick={() => handleStatusChange(s)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                cr.status === s
+                                  ? (STATUS_BADGE[s] ?? "") + " ring-1 ring-current"
+                                  : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                              }`}>
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {cr.status === "Review" && (
+                        <Button
+                          onClick={() => {
+                            setConfirmCheckbox(false);
+                            setShowApprovalDialog(true);
+                          }}
+                          className="w-full text-xs h-8 bg-[var(--accent)] hover:opacity-90 text-white font-bold transition-all shadow-sm mt-2"
+                        >
+                          Send for Senior SE Approval
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Priority */}
+              {canEdit && (
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Priority</Label>
+                  <div className="flex gap-1.5">
+                    {CR_PRIORITIES.map((p) => (
+                      <button key={p} onClick={() => handlePriorityChange(p)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-all ${
+                          cr.priority === p
+                            ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
+                            : "bg-transparent border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                        }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Separator className="bg-[var(--border)]" />
+
+              {/* Task progress quick view */}
+              {(cr.taskProgress?.total ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
+                      <CheckSquare className="h-3.5 w-3.5" /> Task Progress
+                    </Label>
+                    <button onClick={() => setActiveTab("tasks")}
+                      className="text-[10px] text-[var(--primary)] font-semibold hover:underline">
+                      View Tasks →
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 rounded-full bg-[var(--surface-hover)] overflow-hidden border border-[var(--border)]/30">
+                      <div
+                        className="h-full bg-gradient-to-r from-[var(--primary)] to-emerald-500 transition-all duration-500 rounded-full"
+                        style={{ width: `${cr.taskProgress?.completionPercentage ?? 0}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-[var(--primary)] shrink-0">
+                      {cr.taskProgress?.done}/{cr.taskProgress?.total} done
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Key info grid */}
+              <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: "Description", value: cr.description },
                   { label: "Business Justification", value: cr.businessJustification },
@@ -317,7 +430,7 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
                   </div>
                 )}
               </div>
-            </div>
+            </>
           )}
 
           {/* ── Tasks ── */}
@@ -408,4 +521,59 @@ export function CRDetailDrawer({ cr, projectId, members, onClose, onEdit, onDele
       </DialogContent>
     </Dialog>
   );
+
+  const approvalDialog = (
+    <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+      <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] z-[99999]">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">
+            Send for Senior SE Approval
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+          </p>
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+            <input
+              type="checkbox"
+              id="confirmCheckboxCR"
+              checked={confirmCheckbox}
+              onChange={(e) => setConfirmCheckbox(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+            />
+            <Label htmlFor="confirmCheckboxCR" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+              I confirm task/cr/issue implemented and reviewed to check by senior SE
+            </Label>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowApprovalDialog(false);
+              setConfirmCheckbox(false);
+            }}
+            className="text-xs h-9 rounded-lg border-[var(--border)] bg-transparent hover:bg-[var(--surface-hover)] text-[var(--text-secondary)]"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleApprovalSubmit}
+            disabled={!confirmCheckbox || updateMutation.isPending}
+            className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-xs h-9 rounded-lg"
+          >
+            Confirm & Submit
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  return typeof document !== "undefined" ? (
+    <>
+      {createPortal(drawer, document.body)}
+      {approvalDialog}
+    </>
+  ) : null;
 }

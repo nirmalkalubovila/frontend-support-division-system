@@ -200,6 +200,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       console.log("Notification socket connected");
     });
 
+    (window as any).globalSocket = socket;
+
     socket.on("new_notification", (notification: any) => {
       queryClient.invalidateQueries({ queryKey: ["/notifications"] });
 
@@ -215,7 +217,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       });
     });
 
+    // Real-time timer synchronization
+    socket.on("timer:started", (data: any) => {
+      const { itemId, workType, startTime } = data;
+      
+      localStorage.setItem(`timer_ticking_${itemId}`, "true");
+      localStorage.setItem(`timer_timestamp_${itemId}`, String(new Date(startTime).getTime()));
+      localStorage.setItem(`timer_worktype_${itemId}`, workType);
+      if (!localStorage.getItem(`timer_time_${itemId}`)) {
+        localStorage.setItem(`timer_time_${itemId}`, "0");
+      }
+      queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
+      window.dispatchEvent(new Event("local-timer-update"));
+    });
+
+    socket.on("timer:paused", (data: any) => {
+      const { itemId, time } = data;
+      localStorage.setItem(`timer_ticking_${itemId}`, "false");
+      localStorage.removeItem(`timer_timestamp_${itemId}`);
+      if (time !== undefined) {
+        localStorage.setItem(`timer_time_${itemId}`, String(time));
+      }
+      window.dispatchEvent(new Event("local-timer-update"));
+    });
+
+    socket.on("timer:resumed", (data: any) => {
+      const { itemId, timestamp } = data;
+
+      localStorage.setItem(`timer_ticking_${itemId}`, "true");
+      localStorage.setItem(`timer_timestamp_${itemId}`, String(timestamp || Date.now()));
+      window.dispatchEvent(new Event("local-timer-update"));
+    });
+
+    socket.on("timer:stopped", (data: any) => {
+      const { itemId } = data;
+      localStorage.removeItem(`timer_time_${itemId}`);
+      localStorage.removeItem(`timer_ticking_${itemId}`);
+      localStorage.removeItem(`timer_timestamp_${itemId}`);
+      localStorage.removeItem(`timer_worktype_${itemId}`);
+      localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
+      queryClient.invalidateQueries({ queryKey: ["/time-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/issues"] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/crs"] });
+      window.dispatchEvent(new Event("local-timer-update"));
+    });
+
     return () => {
+      (window as any).globalSocket = null;
+      socket.off("new_notification");
+      socket.off("timer:started");
+      socket.off("timer:paused");
+      socket.off("timer:resumed");
+      socket.off("timer:stopped");
       socket.disconnect();
     };
   }, [accessToken, queryClient]);

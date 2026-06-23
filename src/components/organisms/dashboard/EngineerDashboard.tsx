@@ -32,11 +32,10 @@ import {
   type WorkType,
 } from "@/api/services/time-tracking/time-log-service";
 import { useUpdateIssue, useNotifyTimeExceeded, useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
+import { useGetAssignedTasks, useGetAllTasks, useUpdateTask, type Task } from "@/api/services/project-management/task-service";
+import { useGetAssignedCRs, useGetAllCRs, useUpdateCR, type ChangeRequest } from "@/api/services/project-management/cr-service";
+import { useGetAllUsers, type User } from "@/api/services/user-management/user-service";
 import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
-import { useGetAssignedTasks, type Task } from "@/api/services/project-management/task-service";
-import { useGetAssignedCRs, type ChangeRequest } from "@/api/services/project-management/cr-service";
-import { useUpdateTask } from "@/api/services/project-management/task-service";
-import { useUpdateCR } from "@/api/services/project-management/cr-service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,7 +43,6 @@ import { toast } from "sonner";
 import { IssueDetailsModal } from "../issueDetailsModal/issue-details-modal";
 import { TaskDetailDrawer } from "@/components/organisms/kanbanBoard/kanban-board";
 import { CRDetailDrawer } from "@/components/organisms/crDetailDrawer/cr-detail-drawer";
-import { useGetAllUsers } from "@/api/services/user-management/user-service";
 
 interface EngineerDashboardProps {
   issues: Issue[];
@@ -162,13 +160,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [logsPage, setLogsPage] = useState(1);
   const [resolvedIssuesPage, setResolvedIssuesPage] = useState(1);
 
-  // Detail popup states
-  const [detailedTask, setDetailedTask] = useState<Task | null>(null);
-  const [detailedCR, setDetailedCR] = useState<ChangeRequest | null>(null);
-
-  // Fetch all users for drawer members lists
-  const { data: usersData } = useGetAllUsers();
-  const allUsers = useMemo(() => usersData ?? [], [usersData]);
 
   const handleClearSelectedLogs = async () => {
     setIsDeletingLogs(true);
@@ -204,12 +195,18 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     }
   };
 
-  // Fetch assigned tasks & CRs
+  // Fetch assigned and all tasks & CRs, and users
   const { data: tasksData, refetch: refetchTasks } = useGetAssignedTasks(currentUserId);
   const { data: crsData, refetch: refetchCRs } = useGetAssignedCRs(currentUserId);
+  const { data: allTasksData, refetch: refetchAllTasks } = useGetAllTasks();
+  const { data: allCRsData, refetch: refetchAllCRs } = useGetAllCRs();
+  const { data: allUsersData } = useGetAllUsers();
 
   const assignedTasks = useMemo(() => tasksData ?? [], [tasksData]);
   const assignedCRs = useMemo(() => crsData ?? [], [crsData]);
+  const allTasks = useMemo(() => allTasksData ?? [], [allTasksData]);
+  const allCRs = useMemo(() => allCRsData ?? [], [allCRsData]);
+  const allUsers = useMemo(() => allUsersData ?? [], [allUsersData]);
 
   // Generic mutations for task and CR updates
   const updateTaskMutation = useMutation({
@@ -220,7 +217,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/tasks"] });
       queryClient.invalidateQueries({ queryKey: ["/tasks", variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/tasks/all"] });
       refetchTasks();
+      refetchAllTasks();
     }
   });
 
@@ -232,7 +231,9 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/crs"] });
       queryClient.invalidateQueries({ queryKey: ["/crs", variables.projectId] });
+      queryClient.invalidateQueries({ queryKey: ["/crs/all"] });
       refetchCRs();
+      refetchAllCRs();
     }
   });
 
@@ -247,11 +248,47 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const recentLogs = useMemo(() => logsData?.data ?? [], [logsData]);
 
   // Tabs for the Focus Queue
-  const [activeQueueTab, setActiveQueueTab] = useState<'issues' | 'tasks' | 'crs'>('issues');
+  const [activePrimaryTab, setActivePrimaryTab] = useState<'new' | 'started'>('new');
+  const [activeSubTab, setActiveSubTab] = useState<'issues' | 'tasks' | 'crs'>('issues');
+
+  // Re-assignment dialog state
+  const [reassignModalOpen, setReassignModalOpen] = useState(false);
+  const [itemToReassign, setItemToReassign] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; project?: string } | null>(null);
+  const [reassignTo, setReassignTo] = useState("");
+  const [reassignReason, setReassignReason] = useState("");
+
+  // Approval modal state
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [itemToApprove, setItemToApprove] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; project?: string } | null>(null);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  // Claim modal state
+  const [claimConfirmOpen, setClaimConfirmOpen] = useState(false);
+  const [itemToClaim, setItemToClaim] = useState<{ id: string; type: 'issue' | 'task' | 'cr'; taskObj?: Task; crObj?: ChangeRequest } | null>(null);
+
+  // Fetch active time logs for current user to track concurrent timers
+  const { data: activeLogsData } = useGetTimeLogs({
+    user: currentUserId,
+    active: true,
+  });
+  const activeLogs = useMemo(() => activeLogsData?.data ?? [], [activeLogsData]);
 
   // ──────────────────────────────────────────────────────────────
-  // Stopwatch Engine State
+  // Stopwatch Engine State (Concurrent Multi-timer support)
   // ──────────────────────────────────────────────────────────────
+  interface ActiveTimer {
+    itemId: string;
+    logId: string;
+    type: 'issue' | 'task' | 'cr';
+    itemObj: any;
+    workType: WorkType;
+    time: number;
+    isTicking: boolean;
+  }
+
+  const [activeTimers, setActiveTimers] = useState<ActiveTimer[]>([]);
+  const [itemBeingStopped, setItemBeingStopped] = useState<ActiveTimer | null>(null);
+
   const [trackingType, setTrackingType] = useState<'issue' | 'task' | 'cr'>('issue');
   const [selectedItemId, setSelectedItemId] = useState<string>("");
   const [selectedWorkType, setSelectedWorkType] = useState<WorkType>("In Progress");
@@ -263,6 +300,8 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   const [submitNote, setSubmitNote] = useState("");
   const [detailedIssue, setDetailedIssue] = useState<Issue | null>(null);
+  const [detailedTask, setDetailedTask] = useState<Task | null>(null);
+  const [detailedCR, setDetailedCR] = useState<ChangeRequest | null>(null);
 
   // Issues filtering
   const myAssignedIssues = useMemo(() => {
@@ -317,34 +356,74 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     return assignedCRs.filter((c) => c.status === "Done" || c.status === "Closed" || c.status === "Rejected");
   }, [assignedCRs]);
 
-  // Focus queues
-  const queueIssues = useMemo(() => {
-    return [...myActiveIssues].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveIssues]);
+  const priorityOrder = { Critical: 0, High: 1, Medium: 2, Low: 3 };
 
-  const queueTasks = useMemo(() => {
-    return [...myActiveTasks].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveTasks]);
+  // "New" Tab Lists (status === 'To Do', assigned to current user)
+  const newIssues = useMemo(() => {
+    return issues
+      .filter((i) => {
+        const assigneeId = typeof i.assignedTo === "object" && i.assignedTo !== null
+          ? i.assignedTo._id
+          : i.assignedTo;
+        return assigneeId === currentUserId && i.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [issues, currentUserId]);
 
-  const queueCRs = useMemo(() => {
-    return [...myActiveCRs].sort((a, b) => {
-      const priorityWeight = { Critical: 4, High: 3, Medium: 2, Low: 1 };
-      return (priorityWeight[b.priority] || 0) - (priorityWeight[a.priority] || 0);
-    });
-  }, [myActiveCRs]);
+  const newTasks = useMemo(() => {
+    return allTasks
+      .filter((t) => {
+        const isAssigned = t.assignees?.some((a) => (typeof a === "object" && a !== null ? a._id : a) === currentUserId);
+        return isAssigned && t.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allTasks, currentUserId]);
+
+  const newCRs = useMemo(() => {
+    return allCRs
+      .filter((c) => {
+        const isAssigned = c.assignedDevelopers?.some((d) => (typeof d === "object" && d !== null ? d._id : d) === currentUserId);
+        return isAssigned && c.status === "To Do";
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allCRs, currentUserId]);
+
+  // "Started" Tab Lists (assigned to current user, and status is 'In Progress' or 'Review')
+  const startedIssues = useMemo(() => {
+    return issues
+      .filter((i) => {
+        const assigneeId = typeof i.assignedTo === "object" && i.assignedTo !== null
+          ? i.assignedTo._id
+          : i.assignedTo;
+        return assigneeId === currentUserId && (i.status === "In Progress" || i.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [issues, currentUserId]);
+
+  const startedTasks = useMemo(() => {
+    return allTasks
+      .filter((t) => {
+        const isAssigned = t.assignees?.some((a) => (typeof a === "object" && a !== null ? a._id : a) === currentUserId);
+        return isAssigned && (t.status === "In Progress" || t.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allTasks, currentUserId]);
+
+  const startedCRs = useMemo(() => {
+    return allCRs
+      .filter((c) => {
+        const isAssigned = c.assignedDevelopers?.some((d) => (typeof d === "object" && d !== null ? d._id : d) === currentUserId);
+        return isAssigned && (c.status === "In Progress" || c.status === "Review");
+      })
+      .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2));
+  }, [allCRs, currentUserId]);
 
   const selectedItemObj = useMemo(() => {
     if (trackingType === 'issue') return issues.find((i) => i._id === selectedItemId);
-    if (trackingType === 'task') return assignedTasks.find((t) => t._id === selectedItemId);
-    if (trackingType === 'cr') return assignedCRs.find((c) => c._id === selectedItemId);
+    if (trackingType === 'task') return allTasks.find((t) => t._id === selectedItemId);
+    if (trackingType === 'cr') return allCRs.find((c) => c._id === selectedItemId);
     return null;
-  }, [trackingType, selectedItemId, issues, assignedTasks, assignedCRs]);
+  }, [trackingType, selectedItemId, issues, allTasks, allCRs]);
 
   // Sync active timer from backend database on load / query change
   useEffect(() => {
@@ -399,124 +478,259 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
 
   // Sync timer state on select item change or storage event
   useEffect(() => {
-    const syncTimer = () => {
-      if (!selectedItemId) {
-        setTime(0);
-        setIsTicking(false);
-        return;
+    if (!activeLogs) return;
+
+    const localItemsMap = new Map<string, ActiveTimer>();
+
+    // 1. Populate from activeLogs (database active timers)
+    activeLogs.forEach((log) => {
+      let itemId = "";
+      let type: 'issue' | 'task' | 'cr' = 'issue';
+      let itemObj: any = null;
+
+      if (log.issue) {
+        itemId = typeof log.issue === 'object' ? log.issue._id : log.issue;
+        type = 'issue';
+        itemObj = issues.find(i => i._id === itemId) || log.issue;
+      } else if (log.task) {
+        itemId = typeof log.task === 'object' ? log.task._id : log.task;
+        type = 'task';
+        itemObj = assignedTasks.find(t => t._id === itemId) || log.task;
+      } else if (log.cr) {
+        itemId = typeof log.cr === 'object' ? log.cr._id : log.cr;
+        type = 'cr';
+        itemObj = assignedCRs.find(c => c._id === itemId) || log.cr;
       }
 
-      const savedTime = localStorage.getItem(`timer_time_${selectedItemId}`);
-      const savedTicking = localStorage.getItem(`timer_ticking_${selectedItemId}`);
-      const savedTimestamp = localStorage.getItem(`timer_timestamp_${selectedItemId}`);
-      const savedWorkType = localStorage.getItem(`timer_worktype_${selectedItemId}`) as WorkType;
+      if (!itemId) return;
 
-      if (savedTicking === "true" && savedWorkType) {
-        setSelectedWorkType(savedWorkType);
-      } else if (selectedItemObj) {
-        setSelectedWorkType((selectedItemObj.status as WorkType) || "In Progress");
-      }
+      const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
+      const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
+      const savedTimestampStr = localStorage.getItem(`timer_timestamp_${itemId}`);
+      const savedWorkType = (localStorage.getItem(`timer_worktype_${itemId}`) || log.workType) as WorkType;
 
-      if (savedTicking === "true" && savedTimestamp) {
-        const elapsed = Math.floor((Date.now() - parseInt(savedTimestamp, 10)) / 1000);
-        setTime((savedTime ? parseInt(savedTime, 10) : 0) + elapsed);
-        setIsTicking(true);
+      let currentTime = 0;
+      let isTicking = true;
+
+      if (savedTickingStr === "false") {
+        isTicking = false;
+        currentTime = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+      } else if (savedTimestampStr) {
+        const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+        currentTime = (savedTimeStr ? parseInt(savedTimeStr, 10) : 0) + elapsed;
       } else {
-        setTime(savedTime ? parseInt(savedTime, 10) : 0);
-        setIsTicking(false);
+        const dbStart = new Date(log.startTime).getTime();
+        currentTime = Math.floor((Date.now() - dbStart) / 1000);
+        if (currentTime < 0) currentTime = 0;
+        localStorage.setItem(`timer_time_${itemId}`, String(currentTime));
+        localStorage.setItem(`timer_ticking_${itemId}`, "true");
+        localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+        localStorage.setItem(`timer_worktype_${itemId}`, log.workType);
       }
-    };
 
-    syncTimer();
-    window.addEventListener("storage", syncTimer);
-    return () => {
-      window.removeEventListener("storage", syncTimer);
-    };
-  }, [selectedItemId, selectedItemObj?.status]);
+      localItemsMap.set(itemId, {
+        itemId,
+        logId: log._id,
+        type,
+        itemObj,
+        workType: savedWorkType,
+        time: currentTime,
+        isTicking,
+      });
+    });
 
-  // Tick the timer
+    // 2. Scan localStorage for any other timers (paused locally)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("timer_time_")) {
+        const itemId = key.replace("timer_time_", "");
+        if (localItemsMap.has(itemId)) continue; // already added from activeLogs
+
+        let type: 'issue' | 'task' | 'cr' = 'issue';
+        let itemObj: any = issues.find(x => x._id === itemId);
+        if (!itemObj) {
+          itemObj = assignedTasks.find(x => x._id === itemId);
+          type = 'task';
+        }
+        if (!itemObj) {
+          itemObj = assignedCRs.find(x => x._id === itemId);
+          type = 'cr';
+        }
+
+        if (itemObj) {
+          const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
+          const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
+          const savedTimestampStr = localStorage.getItem(`timer_timestamp_${itemId}`);
+          const savedWorkType = (localStorage.getItem(`timer_worktype_${itemId}`) || 
+            (type === 'cr' ? 'In Development' : 'In Progress')) as WorkType;
+
+          let currentTime = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+          let isTicking = savedTickingStr === "true";
+
+          if (isTicking && savedTimestampStr) {
+            const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+            currentTime += elapsed;
+          }
+
+          localItemsMap.set(itemId, {
+            itemId,
+            logId: `local-${itemId}`,
+            type,
+            itemObj,
+            workType: savedWorkType,
+            time: currentTime,
+            isTicking,
+          });
+        }
+      }
+    }
+
+    setActiveTimers(Array.from(localItemsMap.values()));
+  }, [activeLogs, issues, assignedTasks, assignedCRs]);
+
+  // Concurrent ticking for active timers
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    let tickCount = 0;
-    if (isTicking && selectedItemId) {
+    const hasTicking = activeTimers.some((t) => t.isTicking);
+
+    if (hasTicking) {
       interval = setInterval(() => {
-        tickCount += 1;
-        setTime((prev) => {
-          const newTime = prev + 1;
-          
-          // Check for auto-stop based on estimatedHours (only for issues, or task/cr if they have it)
-          const estH = trackingType === 'issue' ? (selectedItemObj as any)?.estimatedHours || 0 : 0;
-          if (estH > 0 && newTime >= estH * 3600) {
-            setIsTicking(false);
-            if (interval) clearInterval(interval);
-            Promise.resolve().then(async () => {
-              try {
-                await stopTimerMutation.mutateAsync({
-                  issueId: trackingType === 'issue' ? selectedItemId : null,
-                  taskId: trackingType === 'task' ? selectedItemId : null,
-                  crId: trackingType === 'cr' ? selectedItemId : null,
-                  note: "[Ended automatically]"
-                });
-                toast.success("Work ended automatically (Allocated estimate reached).");
-              } catch (err: any) {
-                toast.error("Failed to stop timer: " + (err.response?.data?.message || err.message));
-              }
-              setTime(0);
-              localStorage.removeItem(`timer_time_${selectedItemId}`);
-              localStorage.removeItem(`timer_ticking_${selectedItemId}`);
-              localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
-              localStorage.removeItem(`timer_worktype_${selectedItemId}`);
-              localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
-              window.dispatchEvent(new Event("storage"));
-              refetchLogs();
-            });
-            return 0;
-          }
+        setActiveTimers((prevTimers) =>
+          prevTimers.map((t) => {
+            if (!t.isTicking) return t;
 
-          localStorage.setItem(`timer_time_${selectedItemId}`, String(newTime));
-          localStorage.setItem(`timer_timestamp_${selectedItemId}`, String(Date.now()));
+            const newTime = t.time + 1;
+            localStorage.setItem(`timer_time_${t.itemId}`, String(newTime));
+            localStorage.setItem(`timer_timestamp_${t.itemId}`, String(Date.now()));
 
-          // SLA estimate alert only for issues
-          if (trackingType === 'issue' && tickCount % 10 === 0 && selectedItemObj) {
-            const estHVal = (selectedItemObj as any).estimatedHours || 0;
-            if (estHVal > 0 && newTime > estHVal * 3600) {
-              const notifiedKey = `timer_exceeded_notified_${selectedItemId}`;
-              const alreadyNotified = localStorage.getItem(notifiedKey);
-              if (!alreadyNotified) {
-                localStorage.setItem(notifiedKey, "true");
-                notifyTimeExceededMutation.mutate({
-                  issueId: selectedItemId,
-                  activeDuration: newTime,
-                });
+            if (t.type === 'issue' && newTime % 10 === 0 && t.itemObj) {
+              const estH = t.itemObj.estimatedHours || 0;
+              if (estH > 0 && newTime > estH * 3600) {
+                const notifiedKey = `timer_exceeded_notified_${t.itemId}`;
+                if (!localStorage.getItem(notifiedKey)) {
+                  localStorage.setItem(notifiedKey, "true");
+                  notifyTimeExceededMutation.mutate({
+                    issueId: t.itemId,
+                    activeDuration: newTime,
+                  });
+                }
               }
             }
-          }
 
-          return newTime;
-        });
+            return { ...t, time: newTime };
+          })
+        );
       }, 1000);
     }
+
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isTicking, selectedItemId, selectedItemObj, trackingType, notifyTimeExceededMutation, stopTimerMutation, refetchLogs]);
+  }, [activeTimers.some((t) => t.isTicking), notifyTimeExceededMutation]);
+
+  // Synchronize state from websocket events (stored in localStorage)
+  useEffect(() => {
+    const handleTimerSync = () => {
+      setActiveTimers((prev) =>
+        prev.map((t) => {
+          const savedTimeStr = localStorage.getItem(`timer_time_${t.itemId}`);
+          const savedTickingStr = localStorage.getItem(`timer_ticking_${t.itemId}`);
+          const savedTimestampStr = localStorage.getItem(`timer_timestamp_${t.itemId}`);
+          const savedWorkType = (localStorage.getItem(`timer_worktype_${t.itemId}`) || t.workType) as WorkType;
+
+          let currentTime = t.time;
+          let isTicking = t.isTicking;
+
+          if (savedTickingStr === "false") {
+            isTicking = false;
+            currentTime = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+          } else if (savedTimestampStr) {
+            isTicking = true;
+            const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+            currentTime = (savedTimeStr ? parseInt(savedTimeStr, 10) : 0) + elapsed;
+          }
+
+          return {
+            ...t,
+            workType: savedWorkType,
+            time: currentTime,
+            isTicking,
+          };
+        })
+      );
+    };
+
+    window.addEventListener("local-timer-update", handleTimerSync);
+    return () => {
+      window.removeEventListener("local-timer-update", handleTimerSync);
+    };
+  }, []);
+
+  // Filter out issues/tasks/CRs that already have active timers or are submitted for review from the dropdown selectors
+  const filteredActiveIssues = useMemo(() => {
+    return myActiveIssues.filter(
+      (issue) => !activeTimers.some((t) => t.itemId === issue._id) && !issue.submittedForReview
+    );
+  }, [myActiveIssues, activeTimers]);
+
+  const filteredActiveTasks = useMemo(() => {
+    return myActiveTasks.filter(
+      (task) => !activeTimers.some((t) => t.itemId === task._id) && !task.submittedForReview
+    );
+  }, [myActiveTasks, activeTimers]);
+
+  const filteredActiveCRs = useMemo(() => {
+    return myActiveCRs.filter(
+      (cr) => !activeTimers.some((t) => t.itemId === cr._id) && !cr.submittedForReview
+    );
+  }, [myActiveCRs, activeTimers]);
 
   // Auto-select active item when category changes
   useEffect(() => {
     if (trackingType === 'issue') {
-      if (myActiveIssues.length > 0 && !myActiveIssues.some(i => i._id === selectedItemId)) {
-        setSelectedItemId(myActiveIssues[0]._id);
+      if (filteredActiveIssues.length > 0 && !filteredActiveIssues.some(i => i._id === selectedItemId)) {
+        setSelectedItemId(filteredActiveIssues[0]._id);
+      } else if (filteredActiveIssues.length === 0) {
+        setSelectedItemId("");
       }
     } else if (trackingType === 'task') {
-      if (myActiveTasks.length > 0 && !myActiveTasks.some(t => t._id === selectedItemId)) {
-        setSelectedItemId(myActiveTasks[0]._id);
+      if (filteredActiveTasks.length > 0 && !filteredActiveTasks.some(t => t._id === selectedItemId)) {
+        setSelectedItemId(filteredActiveTasks[0]._id);
+      } else if (filteredActiveTasks.length === 0) {
+        setSelectedItemId("");
       }
     } else if (trackingType === 'cr') {
-      if (myActiveCRs.length > 0 && !myActiveCRs.some(c => c._id === selectedItemId)) {
-        setSelectedItemId(myActiveCRs[0]._id);
+      if (filteredActiveCRs.length > 0 && !filteredActiveCRs.some(c => c._id === selectedItemId)) {
+        setSelectedItemId(filteredActiveCRs[0]._id);
+      } else if (filteredActiveCRs.length === 0) {
+        setSelectedItemId("");
       }
     }
-  }, [trackingType, myActiveIssues, myActiveTasks, myActiveCRs]);
+  }, [trackingType, filteredActiveIssues, filteredActiveTasks, filteredActiveCRs]);
+
+  // Unified stopwatch gating logic for workTypes (statuses)
+  const stopwatchWorkTypeOptions = useMemo(() => {
+    if (!selectedItemObj) return [];
+    if (selectedItemObj.submittedForReview) return [];
+
+    const hasPastLogs = ((selectedItemObj as any).totalTimeSpent && (selectedItemObj as any).totalTimeSpent > 0) ||
+                        selectedItemObj.status === 'In Progress' ||
+                        selectedItemObj.status === 'Review';
+
+    if (selectedItemObj.status === 'To Do' && !hasPastLogs) {
+      return ['In Progress'];
+    }
+    return ['In Progress', 'Review'];
+  }, [selectedItemObj]);
+
+  // Keep selectedWorkType in sync with stopwatchWorkTypeOptions
+  useEffect(() => {
+    if (stopwatchWorkTypeOptions.length > 0) {
+      if (!stopwatchWorkTypeOptions.includes(selectedWorkType)) {
+        setSelectedWorkType(stopwatchWorkTypeOptions[0] as WorkType);
+      }
+    }
+  }, [stopwatchWorkTypeOptions, selectedWorkType]);
 
   // ──────────────────────────────────────────────────────────────
   // Stopwatch Actions
@@ -610,46 +824,113 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     );
   };
 
-  const handlePauseTimer = () => {
-    if (!selectedItemId) return;
-    setIsTicking(false);
-    localStorage.setItem(`timer_ticking_${selectedItemId}`, "false");
-    localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
+  const handlePauseTimerForItem = (itemId: string) => {
+    localStorage.setItem(`timer_ticking_${itemId}`, "false");
+    localStorage.removeItem(`timer_timestamp_${itemId}`);
     window.dispatchEvent(new Event("storage"));
+
+    setActiveTimers((prev) =>
+      prev.map((t) => (t.itemId === itemId ? { ...t, isTicking: false } : t))
+    );
+
+    // Broadcast via WebSockets
+    if ((window as any).globalSocket) {
+      (window as any).globalSocket.emit("timer:pause", {
+        itemId,
+        time: localStorage.getItem(`timer_time_${itemId}`) ? parseInt(localStorage.getItem(`timer_time_${itemId}`)!, 10) : 0
+      });
+    }
+
     toast.info("Timer paused locally.");
   };
 
-  const handleStopTimerClick = () => {
-    if (time < 300) { // less than 5 mins
-      toast.warning("Duration is less than 5 minutes. The session will be discarded by the server.");
+  const handleResumeTimerForItem = (itemId: string, type: 'issue' | 'task' | 'cr', workType: WorkType) => {
+    localStorage.setItem(`timer_ticking_${itemId}`, "true");
+    localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
+    window.dispatchEvent(new Event("storage"));
+
+    setActiveTimers((prev) =>
+      prev.map((t) => (t.itemId === itemId ? { ...t, isTicking: true } : t))
+    );
+
+    // Broadcast via WebSockets
+    if ((window as any).globalSocket) {
+      (window as any).globalSocket.emit("timer:resume", { itemId, timestamp: Date.now() });
     }
+
+    toast.success("Timer resumed locally.");
+  };
+
+  const handleStopTimerForItem = (t: ActiveTimer) => {
+    setItemBeingStopped(t);
     setSubmitNote("");
+
+    // If it's a local-only paused timer (no active log on the backend)
+    if (t.logId.startsWith("local-")) {
+      const itemId = t.itemId;
+      localStorage.removeItem(`timer_time_${itemId}`);
+      localStorage.removeItem(`timer_ticking_${itemId}`);
+      localStorage.removeItem(`timer_timestamp_${itemId}`);
+      localStorage.removeItem(`timer_worktype_${itemId}`);
+      localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
+      window.dispatchEvent(new Event("storage"));
+      setActiveTimers((prev) => prev.filter((x) => x.itemId !== itemId));
+      toast.info("Tracker closed. Session time was already saved.");
+      setItemBeingStopped(null);
+      return;
+    }
+
     setIsSubmitOpen(true);
   };
 
+  const handleResetTimerForItem = (itemId: string) => {
+    localStorage.setItem(`timer_time_${itemId}`, "0");
+    localStorage.setItem(`timer_ticking_${itemId}`, "false");
+    localStorage.removeItem(`timer_timestamp_${itemId}`);
+    localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
+    window.dispatchEvent(new Event("storage"));
+
+    setActiveTimers((prev) =>
+      prev.map((t) => (t.itemId === itemId ? { ...t, time: 0, isTicking: false } : t))
+    );
+    toast.info("Timer reset.");
+  };
+
   const handleSaveTimeLog = () => {
-    if (!selectedItemId) return;
+    if (!itemBeingStopped) return;
+
+    const itemId = itemBeingStopped.itemId;
+    const savedTimeStr = localStorage.getItem(`timer_time_${itemId}`);
+    let activeDuration = savedTimeStr ? parseInt(savedTimeStr, 10) : 0;
+
+    const savedTickingStr = localStorage.getItem(`timer_ticking_${itemId}`);
+    const savedTimestampStr = localStorage.getItem(`timer_timestamp_${itemId}`);
+    if (savedTickingStr === "true" && savedTimestampStr) {
+      const elapsed = Math.floor((Date.now() - parseInt(savedTimestampStr, 10)) / 1000);
+      activeDuration += elapsed;
+    }
 
     const stopPayload = {
-      issueId: trackingType === 'issue' ? selectedItemId : null,
-      taskId: trackingType === 'task' ? selectedItemId : null,
-      crId: trackingType === 'cr' ? selectedItemId : null,
+      issueId: itemBeingStopped.type === 'issue' ? itemId : null,
+      taskId: itemBeingStopped.type === 'task' ? itemId : null,
+      crId: itemBeingStopped.type === 'cr' ? itemId : null,
       note: submitNote,
+      activeDuration,
     };
 
     stopTimerMutation.mutate(
       stopPayload,
       {
         onSuccess: () => {
-          setIsTicking(false);
-          setTime(0);
-          localStorage.removeItem(`timer_time_${selectedItemId}`);
-          localStorage.removeItem(`timer_ticking_${selectedItemId}`);
-          localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
-          localStorage.removeItem(`timer_worktype_${selectedItemId}`);
-          localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
+          const itemId = itemBeingStopped.itemId;
+          localStorage.removeItem(`timer_time_${itemId}`);
+          localStorage.removeItem(`timer_ticking_${itemId}`);
+          localStorage.removeItem(`timer_timestamp_${itemId}`);
+          localStorage.removeItem(`timer_worktype_${itemId}`);
+          localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
           window.dispatchEvent(new Event("storage"));
           setIsSubmitOpen(false);
+          setItemBeingStopped(null);
           refetchLogs();
           toast.success("Time log submitted successfully.");
         },
@@ -657,32 +938,19 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           const msg = err?.response?.data?.message || "Failed to stop timer on server.";
           toast.error(msg);
           if (err?.response?.status === 400 && msg.includes("discarded")) {
-            setIsTicking(false);
-            setTime(0);
-            localStorage.removeItem(`timer_time_${selectedItemId}`);
-            localStorage.removeItem(`timer_ticking_${selectedItemId}`);
-            localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
-            localStorage.removeItem(`timer_worktype_${selectedItemId}`);
-            localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
+            const itemId = itemBeingStopped.itemId;
+            localStorage.removeItem(`timer_time_${itemId}`);
+            localStorage.removeItem(`timer_ticking_${itemId}`);
+            localStorage.removeItem(`timer_timestamp_${itemId}`);
+            localStorage.removeItem(`timer_worktype_${itemId}`);
+            localStorage.removeItem(`timer_exceeded_notified_${itemId}`);
             window.dispatchEvent(new Event("storage"));
             setIsSubmitOpen(false);
+            setItemBeingStopped(null);
           }
         },
       }
     );
-  };
-
-  const handleResetTimer = () => {
-    if (!selectedItemId) return;
-    setIsTicking(false);
-    setTime(0);
-    localStorage.removeItem(`timer_time_${selectedItemId}`);
-    localStorage.removeItem(`timer_ticking_${selectedItemId}`);
-    localStorage.removeItem(`timer_timestamp_${selectedItemId}`);
-    localStorage.removeItem(`timer_worktype_${selectedItemId}`);
-    localStorage.removeItem(`timer_exceeded_notified_${selectedItemId}`);
-    window.dispatchEvent(new Event("storage"));
-    toast.info("Timer reset.");
   };
 
   const formatStopwatchTime = (sec: number) => {
@@ -745,6 +1013,229 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
     };
   }, [myActiveIssues, myAssignedIssues, recentLogs]);
 
+  // Claim items ("Added to You")
+  const handleClaimIssue = (issueId: string) => {
+    updateIssueMutation.mutate(
+      { id: issueId, data: { assignedTo: currentUserId, status: "In Progress" } },
+      {
+        onSuccess: () => {
+          toast.success("Issue claimed successfully!");
+          queryClient.invalidateQueries({ queryKey: ["/issues"] });
+        },
+        onError: () => {
+          toast.error("Failed to claim issue.");
+        }
+      }
+    );
+  };
+
+  const handleClaimTask = (task: Task) => {
+    const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
+    updateTaskMutation.mutate(
+      {
+        projectId: projId,
+        taskId: task._id,
+        data: { assignees: [currentUserId], status: "In Progress" }
+      },
+      {
+        onSuccess: () => {
+          toast.success("Task claimed successfully!");
+          refetchAllTasks();
+          refetchTasks();
+        },
+        onError: () => {
+          toast.error("Failed to claim task.");
+        }
+      }
+    );
+  };
+
+  const handleClaimCR = (cr: ChangeRequest) => {
+    const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
+    updateCRMutation.mutate(
+      {
+        projectId: projId,
+        crId: cr._id,
+        data: { assignedDevelopers: [currentUserId], status: "In Progress" }
+      },
+      {
+        onSuccess: () => {
+          toast.success("CR claimed successfully!");
+          refetchAllCRs();
+          refetchCRs();
+        },
+        onError: () => {
+          toast.error("Failed to claim CR.");
+        }
+      }
+    );
+  };
+
+  const confirmClaimAction = () => {
+    if (!itemToClaim) return;
+    if (itemToClaim.type === 'issue') {
+      handleClaimIssue(itemToClaim.id);
+    } else if (itemToClaim.type === 'task' && itemToClaim.taskObj) {
+      handleClaimTask(itemToClaim.taskObj);
+    } else if (itemToClaim.type === 'cr' && itemToClaim.crObj) {
+      handleClaimCR(itemToClaim.crObj);
+    }
+    setClaimConfirmOpen(false);
+    setItemToClaim(null);
+  };
+
+  // Submit Re-assignment request
+  const handleReassignSubmit = () => {
+    if (!itemToReassign || !reassignReason) {
+      toast.error("Please provide a reason.");
+      return;
+    }
+
+    const payload = {
+      reassignRequest: {
+        requestedTo: reassignTo || null,
+        reason: reassignReason,
+        requestedBy: currentUserId,
+        status: 'Pending',
+        requestedAt: new Date()
+      }
+    };
+
+    if (itemToReassign.type === 'issue') {
+      updateIssueMutation.mutate(
+        { id: itemToReassign.id, data: payload },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            queryClient.invalidateQueries({ queryKey: ["/issues"] });
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    } else if (itemToReassign.type === 'task') {
+      updateTaskMutation.mutate(
+        {
+          projectId: itemToReassign.project!,
+          taskId: itemToReassign.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            refetchAllTasks();
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    } else if (itemToReassign.type === 'cr') {
+      updateCRMutation.mutate(
+        {
+          projectId: itemToReassign.project!,
+          crId: itemToReassign.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Re-assignment request sent to Manager.");
+            setReassignModalOpen(false);
+            setItemToReassign(null);
+            setReassignTo("");
+            setReassignReason("");
+            refetchAllCRs();
+          },
+          onError: () => {
+            toast.error("Failed to submit re-assignment request.");
+          }
+        }
+      );
+    }
+  };
+
+  // Submit Approval request (Send for Senior SE Approval)
+  const handleApprovalSubmit = () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    if (!itemToApprove) return;
+
+    const payload = {
+      submittedForReview: true
+    };
+
+    if (itemToApprove.type === 'issue') {
+      updateIssueMutation.mutate(
+        { id: itemToApprove.id, data: payload },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            queryClient.invalidateQueries({ queryKey: ["/issues"] });
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    } else if (itemToApprove.type === 'task') {
+      updateTaskMutation.mutate(
+        {
+          projectId: itemToApprove.project!,
+          taskId: itemToApprove.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            refetchAllTasks();
+            refetchTasks();
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    } else if (itemToApprove.type === 'cr') {
+      updateCRMutation.mutate(
+        {
+          projectId: itemToApprove.project!,
+          crId: itemToApprove.id,
+          data: payload
+        },
+        {
+          onSuccess: () => {
+            toast.success("Submitted for Senior SE review.");
+            setApprovalModalOpen(false);
+            setItemToApprove(null);
+            setConfirmCheckbox(false);
+            refetchAllCRs();
+            refetchCRs();
+          },
+          onError: () => {
+            toast.error("Failed to submit for review.");
+          }
+        }
+      );
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────
   // Focus Queue updates
   // ──────────────────────────────────────────────────────────────
@@ -778,7 +1269,6 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             },
             {
               onSuccess: () => {
-                setIsTicking(true);
                 localStorage.setItem(`timer_ticking_${issue._id}`, "true");
                 localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
                 localStorage.setItem(`timer_worktype_${issue._id}`, "In Progress");
@@ -854,360 +1344,666 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             </div>
             <div className="flex bg-[var(--background)] p-1 rounded-lg border border-[var(--border)]">
               <button
-                onClick={() => setActiveQueueTab('issues')}
+                onClick={() => {
+                  setActivePrimaryTab('new');
+                  setActiveSubTab('issues');
+                }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'issues'
+                  activePrimaryTab === 'new'
                     ? 'bg-[var(--primary)] text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Issues ({queueIssues.length})
+                New ({newIssues.length + newTasks.length + newCRs.length})
               </button>
               <button
-                onClick={() => setActiveQueueTab('tasks')}
+                onClick={() => {
+                  setActivePrimaryTab('started');
+                  setActiveSubTab('issues');
+                }}
                 className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'tasks'
+                  activePrimaryTab === 'started'
                     ? 'bg-[var(--primary)] text-white shadow-xs'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                Tasks ({queueTasks.length})
-              </button>
-              <button
-                onClick={() => setActiveQueueTab('crs')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                  activeQueueTab === 'crs'
-                    ? 'bg-[var(--primary)] text-white shadow-xs'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                CRs ({queueCRs.length})
+                Started ({startedIssues.length + startedTasks.length + startedCRs.length})
               </button>
             </div>
           </CardHeader>
           <CardContent>
-            {activeQueueTab === 'issues' && (
-              queueIssues.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active issues assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueIssues.map((issue) => {
-                    const client = typeof issue.client === "object" ? issue.client : null;
-                    return (
-                      <div
-                        key={issue._id}
-                        onClick={() => setDetailedIssue(issue)}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              Issue
-                            </Badge>
-                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                              {issue.issueId}
-                            </span>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                issue.priority === "Critical"
-                                  ? "destructive"
-                                  : issue.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {issue.priority}
-                            </Badge>
-                          </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {issue.title}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
-                          </p>
-                        </div>
-                        {/* Quick Action transitions */}
-                        <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDetailedIssue(issue)}
-                            className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
-                            title="View details of this ticket"
+            {/* Nested Sub-Tabs Navigation */}
+            <div className="flex gap-2 mb-4 border-b border-[var(--border)] pb-2">
+              <button
+                onClick={() => setActiveSubTab('issues')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'issues'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Issues ({activePrimaryTab === 'new' ? newIssues.length : startedIssues.length})
+              </button>
+              <button
+                onClick={() => setActiveSubTab('tasks')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'tasks'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                Tasks ({activePrimaryTab === 'new' ? newTasks.length : startedTasks.length})
+              </button>
+              <button
+                onClick={() => setActiveSubTab('crs')}
+                className={`pb-2 px-2 text-xs font-semibold border-b-2 transition-all ${
+                  activeSubTab === 'crs'
+                    ? 'border-[var(--primary)] text-[var(--primary)]'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                CRs ({activePrimaryTab === 'new' ? newCRs.length : startedCRs.length})
+              </button>
+            </div>
+
+            {/* List rendering */}
+            {activePrimaryTab === 'new' && (
+              <>
+                {activeSubTab === 'issues' && (
+                  newIssues.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new issues in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newIssues.map((issue) => {
+                        const client = typeof issue.client === "object" ? issue.client : null;
+                        const assignee = typeof issue.assignedTo === "object" && issue.assignedTo !== null
+                          ? issue.assignedTo
+                          : null;
+                        const assigneeName = assignee
+                          ? (assignee._id === currentUserId ? "You" : assignee.name)
+                          : null;
+                        return (
+                          <div
+                            key={issue._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
                           >
-                            View
-                          </Button>
-                          {issue.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedItemId(issue._id);
-                                setTrackingType('issue');
-                                handleStartWork(issue);
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                              title="Start work on this ticket and open the details stopwatch modal"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {issue.status === "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateStatus(issue._id, "Review")}
-                              className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-[10px] h-8 px-2.5 rounded-lg"
-                              title="Submit this ticket to your manager for review"
-                            >
-                              Send to Review
-                            </Button>
-                          )}
-                          {issue.status !== "Done" && issue.status !== "Review" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleUpdateStatus(issue._id, "Done")}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                              title="Mark this ticket as successfully resolved"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            {activeQueueTab === 'tasks' && (
-              queueTasks.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active tasks assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueTasks.map((task) => {
-                    return (
-                      <div
-                        key={task._id}
-                        onClick={() => setDetailedTask(task)}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              Task
-                            </Badge>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                task.priority === "Critical"
-                                  ? "destructive"
-                                  : task.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {task.priority}
-                            </Badge>
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Issue
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {issue.issueId}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={issue.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {issue.priority}
+                                </Badge>
+                                {assigneeName && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {assigneeName}
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {issue.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedIssue(issue)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: issue._id, type: 'issue' });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: issue._id, type: 'issue' });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
                           </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {task.name}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Project: <span className="font-semibold text-[var(--text-primary)]">{(task.project as any)?.name || "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{task.status}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {task.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const itemId = task._id; // capture before any async state change
-                                setSelectedItemId(itemId);
-                                setTrackingType('task');
-                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
-                                updateTaskMutation.mutate({
-                                  projectId: projId,
-                                  taskId: itemId,
-                                  data: { status: "In Progress" }
-                                }, {
-                                  onSuccess: () => {
-                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
-                                    startTimerMutation.mutate(
-                                      { taskId: itemId, workType: "In Progress" },
-                                      {
-                                        onSuccess: () => {
-                                          setTime(0);
-                                          setIsTicking(true);
-                                          localStorage.setItem(`timer_time_${itemId}`, "0");
-                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
-                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
-                                          window.dispatchEvent(new Event("storage"));
-                                          toast.success("Timer started for task.");
-                                        },
-                                        onError: (err: any) => {
-                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
-                                        },
-                                      }
-                                    );
-                                  }
-                                });
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {task.status !== "Done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const projId = typeof task.project === 'object' ? (task.project as any)._id : task.project;
-                                updateTaskMutation.mutate({
-                                  projectId: projId,
-                                  taskId: task._id,
-                                  data: { status: "Done" }
-                                }, {
-                                  onSuccess: () => {
-                                    toast.success("Task marked as Done");
-                                  }
-                                });
-                              }}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
-            )}
-            {activeQueueTab === 'crs' && (
-              queueCRs.length === 0 ? (
-                <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
-                  You have no active CRs assigned. Good job!
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {queueCRs.map((cr) => {
-                    return (
-                      <div
-                        key={cr._id}
-                        onClick={() => setDetailedCR(cr)}
-                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 cursor-pointer"
-                      >
-                        <div className="min-w-0 pr-3">
-                          <div className="flex items-center gap-2">
-                            <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
-                              CR
-                            </Badge>
-                            <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
-                              {cr.crNumber}
-                            </span>
-                            <span className="text-xs text-[var(--text-secondary)]">•</span>
-                            <Badge
-                              variant={
-                                cr.priority === "Critical"
-                                  ? "destructive"
-                                  : cr.priority === "High"
-                                  ? "default"
-                                  : "secondary"
-                              }
-                              className="text-[9px] uppercase tracking-wide scale-90"
-                            >
-                              {cr.priority}
-                            </Badge>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'tasks' && (
+                  newTasks.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new tasks in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newTasks.map((task) => {
+                        const projName = typeof task.project === 'object' && task.project ? (task.project as any).name : 'N/A';
+                        const projId = typeof task.project === 'object' && task.project ? (task.project as any)._id : task.project;
+                        const assigneeNames = task.assignees && task.assignees.length > 0
+                          ? task.assignees.map(a => {
+                              const id = typeof a === 'object' && a ? a._id : a;
+                              const name = typeof a === 'object' && a ? a.name : a;
+                              return id === currentUserId ? 'You' : name;
+                            }).join(', ')
+                          : null;
+                        return (
+                          <div
+                            key={task._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Task
+                                </Badge>
+                                <Badge
+                                  variant={task.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {task.priority}
+                                </Badge>
+                                {assigneeNames && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {assigneeNames}
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {task.name}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedTask(task)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: task._id, type: 'task', taskObj: task });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: task._id, type: 'task', project: projId });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
                           </div>
-                          <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
-                            {cr.title}
-                          </p>
-                          <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
-                            Project: <span className="font-semibold text-[var(--text-primary)]">{(cr.project as any)?.name || "N/A"}</span> • Current Status:{" "}
-                            <span className="font-bold text-[var(--primary-text)]">{cr.status}</span>
-                          </p>
-                        </div>
-                        <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {cr.status !== "In Progress" && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                const itemId = cr._id; // capture before any async state change
-                                setSelectedItemId(itemId);
-                                setTrackingType('cr');
-                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
-                                updateCRMutation.mutate({
-                                  projectId: projId,
-                                  crId: itemId,
-                                  data: { status: "In Progress" }
-                                }, {
-                                  onSuccess: () => {
-                                    // Use itemId directly — do NOT rely on selectedItemId state (it's async)
-                                    startTimerMutation.mutate(
-                                      { crId: itemId, workType: "In Progress" },
-                                      {
-                                        onSuccess: () => {
-                                          setTime(0);
-                                          setIsTicking(true);
-                                          localStorage.setItem(`timer_time_${itemId}`, "0");
-                                          localStorage.setItem(`timer_ticking_${itemId}`, "true");
-                                          localStorage.setItem(`timer_timestamp_${itemId}`, String(Date.now()));
-                                          localStorage.setItem(`timer_worktype_${itemId}`, "In Progress");
-                                          window.dispatchEvent(new Event("storage"));
-                                          toast.success("Timer started for CR.");
-                                        },
-                                        onError: (err: any) => {
-                                          toast.error(err?.response?.data?.message || "Failed to start timer.");
-                                        },
-                                      }
-                                    );
-                                  }
-                                });
-                              }}
-                              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm animate-pulse-soft"
-                            >
-                              Start Work
-                            </Button>
-                          )}
-                          {cr.status !== "Done" && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const projId = typeof cr.project === 'object' ? (cr.project as any)._id : cr.project;
-                                updateCRMutation.mutate({
-                                  projectId: projId,
-                                  crId: cr._id,
-                                  data: { status: "Done" }
-                                }, {
-                                  onSuccess: () => {
-                                    toast.success("CR marked as Done");
-                                  }
-                                });
-                              }}
-                              className="text-[10px] h-8 px-2.5 border-[var(--success)] text-[var(--success)] hover:bg-[rgba(34,197,94,0.05)] rounded-lg"
-                            >
-                              Mark Done
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'crs' && (
+                  newCRs.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No new Change Requests in To Do status.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {newCRs.map((cr) => {
+                        const projName = typeof cr.project === 'object' && cr.project ? (cr.project as any).name : 'N/A';
+                        const projId = typeof cr.project === 'object' && cr.project ? (cr.project as any)._id : cr.project;
+                        const devNames = cr.assignedDevelopers && cr.assignedDevelopers.length > 0
+                          ? cr.assignedDevelopers.map(d => {
+                              const id = typeof d === 'object' && d ? d._id : d;
+                              const name = typeof d === 'object' && d ? d.name : d;
+                              return id === currentUserId ? 'You' : name;
+                            }).join(', ')
+                          : null;
+                        return (
+                          <div
+                            key={cr._id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3"
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  CR
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {cr.crNumber}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={cr.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {cr.priority}
+                                </Badge>
+                                {devNames && (
+                                  <Badge variant="outline" className="text-[9px] bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    Assigned: {devNames}
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {cr.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedCR(cr)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setItemToClaim({ id: cr._id, type: 'cr', crObj: cr });
+                                  setClaimConfirmOpen(true);
+                                }}
+                                className="bg-[#84cc16] hover:bg-[#76b813] text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold shadow-sm"
+                              >
+                                Add to You
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setItemToReassign({ id: cr._id, type: 'cr', project: projId });
+                                  setReassignModalOpen(true);
+                                }}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                Request Re-assignment
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
+            )}
+
+            {activePrimaryTab === 'started' && (
+              <>
+                {activeSubTab === 'issues' && (
+                  startedIssues.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active issues currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedIssues.map((issue) => {
+                        const client = typeof issue.client === "object" ? issue.client : null;
+                        const activeTimer = activeTimers.find(t => t.itemId === issue._id);
+                        return (
+                          <div
+                            key={issue._id}
+                            onClick={() => {
+                              if (issue.submittedForReview) return;
+                              setSelectedItemId(issue._id);
+                              setTrackingType('issue');
+                              toast.info(`Selected issue [${issue.issueId}] for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${issue.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-blue-500/10 text-blue-500 border border-blue-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Issue
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {issue.issueId}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={issue.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {issue.priority}
+                                </Badge>
+                                {issue.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {issue.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {issue.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {issue.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Client: <span className="font-semibold text-[var(--text-primary)]">{client?.name ?? "N/A"}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{issue.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedIssue(issue)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {issue.status === "Review" && !issue.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: issue._id, type: 'issue' });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'tasks' && (
+                  startedTasks.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active tasks currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedTasks.map((task) => {
+                        const projName = typeof task.project === 'object' && task.project ? (task.project as any).name : 'N/A';
+                        const projId = typeof task.project === 'object' && task.project ? (task.project as any)._id : task.project;
+                        const activeTimer = activeTimers.find(t => t.itemId === task._id);
+                        return (
+                          <div
+                            key={task._id}
+                            onClick={() => {
+                              if (task.submittedForReview) return;
+                              setSelectedItemId(task._id);
+                              setTrackingType('task');
+                              toast.info(`Selected task "${task.name}" for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${task.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  Task
+                                </Badge>
+                                <Badge
+                                  variant={task.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {task.priority}
+                                </Badge>
+                                {task.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {task.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {task.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {task.name}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{task.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedTask(task)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {task.status === "Review" && !task.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: task._id, type: 'task', project: projId });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+                {activeSubTab === 'crs' && (
+                  startedCRs.length === 0 ? (
+                    <div className="text-center py-12 text-sm text-[var(--text-tertiary)]">
+                      No active Change Requests currently in progress or review.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {startedCRs.map((cr) => {
+                        const projName = typeof cr.project === 'object' && cr.project ? (cr.project as any).name : 'N/A';
+                        const projId = typeof cr.project === 'object' && cr.project ? (cr.project as any)._id : cr.project;
+                        const activeTimer = activeTimers.find(t => t.itemId === cr._id);
+                        return (
+                          <div
+                            key={cr._id}
+                            onClick={() => {
+                              if (cr.submittedForReview) return;
+                              setSelectedItemId(cr._id);
+                              setTrackingType('cr');
+                              toast.info(`Selected CR [${cr.crNumber}] for timer widget`);
+                            }}
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:shadow-xs transition-all gap-3 ${cr.submittedForReview ? "opacity-75 cursor-not-allowed" : "cursor-pointer"}`}
+                          >
+                            <div className="min-w-0 pr-3">
+                              <div className="flex items-center gap-2">
+                                <Badge className="bg-purple-500/10 text-purple-500 border border-purple-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                  CR
+                                </Badge>
+                                <span className="text-xs font-mono font-medium text-[var(--text-tertiary)]">
+                                  {cr.crNumber}
+                                </span>
+                                <span className="text-xs text-[var(--text-secondary)]">•</span>
+                                <Badge
+                                  variant={cr.priority === "Critical" ? "destructive" : "default"}
+                                  className="text-[9px] uppercase tracking-wide scale-90"
+                                >
+                                  {cr.priority}
+                                </Badge>
+                                {cr.isReopened && (
+                                  <Badge className="bg-rose-500/10 text-rose-500 border border-rose-500/20 text-[9px] uppercase tracking-wide animate-pulse">
+                                    Reopened
+                                  </Badge>
+                                )}
+                                {cr.submittedForReview && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide animate-pulse-soft">
+                                    Pending SE Approval
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Pending" && (
+                                  <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Requested
+                                  </Badge>
+                                )}
+                                {cr.reassignRequest?.status === "Rejected" && (
+                                  <Badge className="bg-red-500/10 text-red-500 border border-red-500/20 text-[9px] uppercase tracking-wide scale-90">
+                                    Re-assignment Rejected
+                                  </Badge>
+                                )}
+                                {activeTimer && (
+                                  <div className="flex items-center gap-1 bg-rose-500/10 text-rose-500 border border-rose-500/20 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-bold ml-1 animate-pulse-soft">
+                                    <span className="relative flex h-1.5 w-1.5 mr-0.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-rose-500"></span>
+                                    </span>
+                                    {formatStopwatchTime(activeTimer.time)}
+                                  </div>
+                                )}
+                              </div>
+                              <p className="text-sm font-semibold text-[var(--text-primary)] truncate mt-1">
+                                {cr.title}
+                              </p>
+                              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 truncate">
+                                Project: <span className="font-semibold text-[var(--text-primary)]">{projName}</span> • Current Status:{" "}
+                                <span className="font-bold text-[var(--primary-text)]">{cr.status}</span>
+                              </p>
+                            </div>
+                            <div className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDetailedCR(cr)}
+                                className="text-[10px] h-8 px-2.5 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] rounded-lg font-semibold"
+                              >
+                                View Details
+                              </Button>
+                              {cr.status === "Review" && !cr.submittedForReview && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    setItemToApprove({ id: cr._id, type: 'cr', project: projId });
+                                    setApprovalModalOpen(true);
+                                  }}
+                                  className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-[10px] h-8 px-2.5 rounded-lg font-semibold"
+                                >
+                                  Send for Senior SE approval
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -1217,183 +2013,194 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           <CardHeader>
             <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
               <Timer className="h-4.5 w-4.5 text-[var(--primary-text)] animate-pulse-soft" />
-              Live Stopwatch Widget
+              Live Stopwatch Engine
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="text-center py-4 bg-[var(--background)] rounded-xl border border-[var(--border)] shadow-xs relative overflow-hidden">
-              <p className="text-4xl font-mono font-bold text-[var(--text-primary)] tracking-wider">
-                {formatStopwatchTime(time)}
-              </p>
-              {selectedItemObj ? (
-                <p className="text-xs text-[var(--text-secondary)] font-semibold mt-1.5 truncate max-w-full px-2" title={(selectedItemObj as any).title || (selectedItemObj as any).name}>
-                  Tracking: <span className="font-mono text-[var(--primary-text)]">{(selectedItemObj as any).issueId || (selectedItemObj as any).crNumber || "Task"}</span>
-                </p>
+            
+            {/* Active Sessions List */}
+            <div className="space-y-2.5">
+              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                Active Tracking Sessions ({activeTimers.length})
+              </Label>
+              {activeTimers.length === 0 ? (
+                <div className="text-center py-4 bg-[var(--background)] rounded-xl border border-dashed border-[var(--border)] text-xs text-[var(--text-tertiary)]">
+                  No active running timers.
+                </div>
               ) : (
-                <p className="text-xs text-[var(--text-secondary)] mt-1.5 font-medium">
-                  No active item selected
-                </p>
-              )}
-            </div>
-
-            {/* Select Type Selector */}
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Select Work Category
-              </Label>
-              <select
-                value={trackingType}
-                onChange={(e) => setTrackingType(e.target.value as 'issue' | 'task' | 'cr')}
-                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
-              >
-                <option value="issue">Issues</option>
-                <option value="task">Tasks</option>
-                <option value="cr">Change Requests (CRs)</option>
-              </select>
-            </div>
-
-            {/* Select item */}
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Select Active {trackingType === 'issue' ? 'Issue' : trackingType === 'task' ? 'Task' : 'CR'}
-              </Label>
-              <select
-                value={selectedItemId}
-                onChange={(e) => setSelectedItemId(e.target.value)}
-                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
-              >
-                <option value="">-- Choose active {trackingType} --</option>
-                {trackingType === 'issue' && myActiveIssues.map((issue) => (
-                  <option key={issue._id} value={issue._id}>
-                    [{issue.issueId}] {issue.title}
-                  </option>
-                ))}
-                {trackingType === 'task' && myActiveTasks.map((task) => (
-                  <option key={task._id} value={task._id}>
-                    {task.name}
-                  </option>
-                ))}
-                {trackingType === 'cr' && myActiveCRs.map((cr) => (
-                  <option key={cr._id} value={cr._id}>
-                    [{cr.crNumber}] {cr.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Select Work Type (Status) */}
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                Status / Work Type
-              </Label>
-              <select
-                value={selectedWorkType}
-                onChange={(e) => {
-                  const newStatus = e.target.value as WorkType;
-                  setSelectedWorkType(newStatus);
-                  if (selectedItemId) {
-                    localStorage.setItem(`timer_worktype_${selectedItemId}`, newStatus);
-                    if (trackingType === 'issue') {
-                      updateIssueMutation.mutate(
-                        { id: selectedItemId, data: { status: newStatus } },
-                        {
-                          onSuccess: () => toast.success(`Issue status updated to ${newStatus}`),
-                          onError: () => toast.error("Failed to update status on server.")
-                        }
-                      );
-                    } else if (trackingType === 'task') {
-                      const t = myActiveTasks.find(x => x._id === selectedItemId);
-                      if (t) {
-                        const projId = typeof t.project === 'object' ? (t.project as any)._id : t.project;
-                        updateTaskMutation.mutate(
-                          { projectId: projId, taskId: selectedItemId, data: { status: newStatus } },
-                          {
-                            onSuccess: () => toast.success(`Task status updated to ${newStatus}`),
-                            onError: () => toast.error("Failed to update status on server.")
-                          }
-                        );
-                      }
-                    } else if (trackingType === 'cr') {
-                      const c = myActiveCRs.find(x => x._id === selectedItemId);
-                      if (c) {
-                        const projId = typeof c.project === 'object' ? (c.project as any)._id : c.project;
-                        updateCRMutation.mutate(
-                          { projectId: projId, crId: selectedItemId, data: { status: newStatus } },
-                          {
-                            onSuccess: () => toast.success(`CR status updated to ${newStatus}`),
-                            onError: () => toast.error("Failed to update status on server.")
-                          }
-                        );
-                      }
+                <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                  {activeTimers.map((t) => {
+                    let code = "Task";
+                    let title = "Task";
+                    if (t.type === 'issue' && t.itemObj) {
+                      code = t.itemObj.issueId || "Issue";
+                      title = t.itemObj.title || "";
+                    } else if (t.type === 'task' && t.itemObj) {
+                      code = "Task";
+                      title = t.itemObj.name || "";
+                    } else if (t.type === 'cr' && t.itemObj) {
+                      code = t.itemObj.crNumber || "CR";
+                      title = t.itemObj.title || "";
                     }
-                  }
-                }}
-                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] disabled:opacity-60 transition-colors"
-              >
-                {trackingType === 'issue' ? (
-                  <>
-                    <option value="To Do">To Do</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Review">Review</option>
-                    <option value="Done">Done</option>
-                  </>
-                ) : trackingType === 'task' ? (
-                  <>
-                    <option value="To Do">To Do</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Review">Review</option>
-                    <option value="Done">Done</option>
-                  </>
-                ) : (
-                  <>
-                    <option value="To Do">To Do</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Review">Review</option>
-                    <option value="Done">Done</option>
-                    <option value="Closed">Closed</option>
-                    <option value="Rejected">Rejected</option>
-                  </>
-                )}
-              </select>
+
+                    return (
+                      <div key={t.logId} className="p-3 bg-[var(--background)] rounded-xl border border-[var(--border)] shadow-xs relative overflow-hidden transition-all hover:border-[var(--border-hover)]">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              {t.isTicking ? (
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                                </span>
+                              ) : (
+                                <span className="h-2 w-2 rounded-full bg-gray-400"></span>
+                              )}
+                              <span className="text-xs font-mono font-bold text-[var(--primary-text)] uppercase tracking-wide truncate">
+                                {code}
+                              </span>
+                            </div>
+                            <p className="text-xs font-medium text-[var(--text-primary)] truncate mt-0.5" title={title}>
+                              {title}
+                            </p>
+                            <p className="text-[10px] text-[var(--text-secondary)]">
+                              Status: <span className="font-semibold text-[var(--primary-text)]">{t.workType}</span>
+                            </p>
+                          </div>
+                          
+                          <div className="text-right">
+                            <p className="text-lg font-mono font-bold text-[var(--text-primary)] tracking-wider">
+                              {formatStopwatchTime(t.time)}
+                            </p>
+                            <div className="flex gap-1.5 mt-1 justify-end">
+                              {t.isTicking ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handlePauseTimerForItem(t.itemId)}
+                                  className="h-6 w-6 p-0 rounded-md bg-yellow-500 hover:bg-yellow-600 text-white flex items-center justify-center"
+                                  title="Pause timer locally"
+                                >
+                                  <Pause className="h-3 w-3 fill-current" />
+                                </Button>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleResumeTimerForItem(t.itemId, t.type, t.workType)}
+                                  className="h-6 w-6 p-0 rounded-md bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center"
+                                  title="Resume timer"
+                                >
+                                  <Play className="h-3 w-3 fill-current" />
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                onClick={() => handleStopTimerForItem(t)}
+                                className="h-6 w-6 p-0 rounded-md bg-rose-500 hover:bg-rose-600 text-white flex items-center justify-center"
+                                title="Stop and Submit Log"
+                              >
+                                <Square className="h-2.5 w-2.5 fill-current" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleResetTimerForItem(t.itemId)}
+                                className="h-6 w-6 p-0 rounded-md border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] flex items-center justify-center"
+                                title="Reset timer value"
+                              >
+                                <Undo className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
-            {/* Stopwatch Actions */}
-            <div className="flex gap-2">
-              {!isTicking ? (
-                <Button
-                  onClick={handleStartTimer}
-                  disabled={!selectedItemId}
-                  className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  title="Start counting work hours for this ticket (Auto-sets ticket status to In Progress on server)"
+            <hr className="border-[var(--border)] my-2" />
+
+            {/* Start a New Tracker */}
+            <div className="space-y-3">
+              <Label className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider block">
+                Start a New Tracker
+              </Label>
+              
+              {/* Select Type Selector */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Select Work Category
+                </Label>
+                <select
+                  value={trackingType}
+                  onChange={(e) => setTrackingType(e.target.value as 'issue' | 'task' | 'cr')}
+                  className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
                 >
-                  <Play className="h-3.5 w-3.5 fill-current" />
-                  Start Tracker
-                </Button>
-              ) : (
-                <Button
-                  onClick={handlePauseTimer}
-                  className="flex-1 flex items-center justify-center gap-1.5 h-10 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-semibold transition-all"
-                  title="Freeze the active timer clock locally"
+                  <option value="issue">Issues</option>
+                  <option value="task">Tasks</option>
+                  <option value="cr">Change Requests (CRs)</option>
+                </select>
+              </div>
+
+              {/* Select item */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Select Active {trackingType === 'issue' ? 'Issue' : trackingType === 'task' ? 'Task' : 'CR'}
+                </Label>
+                <select
+                  value={selectedItemId}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
+                  className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
                 >
-                  <Pause className="h-3.5 w-3.5 fill-current" />
-                  Pause Tracker
-                </Button>
-              )}
+                  <option value="">-- Choose active {trackingType} --</option>
+                  {trackingType === 'issue' && filteredActiveIssues.map((issue) => (
+                    <option key={issue._id} value={issue._id}>
+                      [{issue.issueId}] {issue.title}
+                    </option>
+                  ))}
+                  {trackingType === 'task' && filteredActiveTasks.map((task) => (
+                    <option key={task._id} value={task._id}>
+                      {task.name}
+                    </option>
+                  ))}
+                  {trackingType === 'cr' && filteredActiveCRs.map((cr) => (
+                    <option key={cr._id} value={cr._id}>
+                      [{cr.crNumber}] {cr.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Select Work Type (Status) */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Status / Work Type
+                </Label>
+                <select
+                  value={selectedWorkType}
+                  onChange={(e) => {
+                    const newStatus = e.target.value as WorkType;
+                    setSelectedWorkType(newStatus);
+                  }}
+                  className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
+                >
+                  {stopwatchWorkTypeOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <Button
-                onClick={handleStopTimerClick}
-                disabled={time === 0}
-                className="flex items-center justify-center h-10 w-12 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                title="Stop timer & Submit logged hours to timesheet"
+                onClick={handleStartTimer}
+                disabled={!selectedItemId || selectedItemObj?.submittedForReview || startTimerMutation.isPending}
+                className="w-full flex items-center justify-center gap-1.5 h-10 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                title="Start counting work hours for this ticket"
               >
-                <Square className="h-3.5 w-3.5 fill-current" />
-              </Button>
-              <Button
-                onClick={handleResetTimer}
-                disabled={time === 0 || isTicking}
-                className="flex items-center justify-center h-10 w-12 rounded-lg border border-[var(--border)] bg-[var(--surface-hover)] text-[var(--text-primary)] hover:bg-[var(--border)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                title="Reset stopwatch and discard current session hours"
-              >
-                <Undo className="h-3.5 w-3.5" />
+                <Play className="h-3.5 w-3.5 fill-current" />
+                {startTimerMutation.isPending ? "Starting..." : "Start Tracker"}
               </Button>
             </div>
           </CardContent>
@@ -1669,7 +2476,10 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
       </Card>
 
       {/* Stopwatch Submission Dialog */}
-      <Dialog open={isSubmitOpen} onOpenChange={setIsSubmitOpen}>
+      <Dialog open={isSubmitOpen} onOpenChange={(open) => {
+        setIsSubmitOpen(open);
+        if (!open) setItemBeingStopped(null);
+      }}>
         <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
           <DialogHeader>
             <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
@@ -1680,19 +2490,33 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-[var(--text-secondary)]">Item</Label>
               <p className="text-xs font-semibold text-[var(--text-primary)]">
-                [{selectedItemObj ? ((selectedItemObj as any).issueId || (selectedItemObj as any).crNumber || "Task") : ""}] {selectedItemObj ? ((selectedItemObj as any).title || (selectedItemObj as any).name) : ""}
+                {itemBeingStopped ? (
+                  <>
+                    [{itemBeingStopped.type === 'issue' && itemBeingStopped.itemObj
+                      ? itemBeingStopped.itemObj.issueId
+                      : itemBeingStopped.type === 'cr' && itemBeingStopped.itemObj
+                      ? itemBeingStopped.itemObj.crNumber
+                      : "Task"}] {itemBeingStopped.itemObj
+                      ? (itemBeingStopped.itemObj.title || itemBeingStopped.itemObj.name)
+                      : ""}
+                  </>
+                ) : ""}
               </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-[var(--text-secondary)]">Work Type</Label>
               <p className="text-xs font-semibold text-[var(--text-primary)]">
-                {selectedWorkType}
+                {itemBeingStopped?.workType}
               </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-[var(--text-secondary)]">Tracked Time</Label>
               <p className="text-sm font-mono font-bold text-[var(--primary-text)]">
-                {formatStopwatchTime(time)} ({parseFloat((time / 3600).toFixed(2))} hrs)
+                {itemBeingStopped ? (
+                  <>
+                    {formatStopwatchTime(itemBeingStopped.time)} ({parseFloat((itemBeingStopped.time / 3600).toFixed(2))} hrs)
+                  </>
+                ) : ""}
               </p>
             </div>
             <div className="space-y-1.5">
@@ -1710,7 +2534,10 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
           <DialogFooter className="flex gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => setIsSubmitOpen(false)}
+              onClick={() => {
+                setIsSubmitOpen(false);
+                setItemBeingStopped(null);
+              }}
               className="text-xs h-9 rounded-lg"
             >
               Cancel
@@ -1750,26 +2577,209 @@ export function EngineerDashboard({ issues, currentUserId }: EngineerDashboardPr
         open={!!detailedIssue}
         onOpenChange={(open: boolean) => !open && setDetailedIssue(null)}
       />
+
       {detailedTask && (
         <TaskDetailDrawer
           task={detailedTask}
-          projectId={typeof detailedTask.project === 'object' ? (detailedTask.project as any)._id : detailedTask.project}
+          projectId={typeof detailedTask.project === 'object' && detailedTask.project ? (detailedTask.project as any)._id : (detailedTask.project as string)}
           members={allUsers}
           onClose={() => setDetailedTask(null)}
-          onEdit={() => {}}
-          onDelete={() => {}}
+          onEdit={() => {
+            setDetailedTask(null);
+            queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+            refetchTasks();
+            refetchAllTasks();
+          }}
+          onDelete={() => {
+            setDetailedTask(null);
+            queryClient.invalidateQueries({ queryKey: ["/tasks"] });
+            refetchTasks();
+            refetchAllTasks();
+          }}
         />
       )}
+
       {detailedCR && (
         <CRDetailDrawer
           cr={detailedCR}
-          projectId={typeof detailedCR.project === 'object' ? (detailedCR.project as any)._id : detailedCR.project}
+          projectId={typeof detailedCR.project === 'object' && detailedCR.project ? (detailedCR.project as any)._id : (detailedCR.project as string)}
           members={allUsers}
           onClose={() => setDetailedCR(null)}
-          onEdit={() => {}}
-          onDelete={() => {}}
+          onEdit={() => {
+            setDetailedCR(null);
+            queryClient.invalidateQueries({ queryKey: ["/crs"] });
+            refetchCRs();
+            refetchAllCRs();
+          }}
+          onDelete={() => {
+            setDetailedCR(null);
+            queryClient.invalidateQueries({ queryKey: ["/crs"] });
+            refetchCRs();
+            refetchAllCRs();
+          }}
         />
       )}
+
+      {/* Reassign Dialog */}
+      <Dialog open={reassignModalOpen} onOpenChange={(open) => {
+        setReassignModalOpen(open);
+        if (!open) {
+          setItemToReassign(null);
+          setReassignTo("");
+          setReassignReason("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Request Re-assignment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="reassignTo" className="text-xs font-medium text-[var(--text-secondary)]">Reassign To</Label>
+              <select
+                id="reassignTo"
+                value={reassignTo}
+                onChange={(e) => setReassignTo(e.target.value)}
+                className="w-full text-xs h-9.5 rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)] transition-colors"
+              >
+                <option value="">-- Select Developer (Optional) --</option>
+                {allUsers
+                  .filter((user) => user._id !== currentUserId && ["intern", "engineer", "senior_engineer", "manager"].includes(user.role))
+                  .map((user) => (
+                    <option key={user._id} value={user._id}>
+                      {user.name} ({user.role})
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="reassignReason" className="text-xs font-medium text-[var(--text-secondary)]">Reason for Re-assignment</Label>
+              <Textarea
+                id="reassignReason"
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                placeholder="Explain why you are requesting re-assignment..."
+                className="text-xs bg-[var(--background)] border-[var(--border)] focus-visible:ring-[var(--primary)]"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setReassignModalOpen(false);
+                setItemToReassign(null);
+                setReassignTo("");
+                setReassignReason("");
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReassignSubmit}
+              disabled={updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+              className="bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-white text-xs h-9 rounded-lg"
+            >
+              Submit Request
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approval Dialog */}
+      <Dialog open={approvalModalOpen} onOpenChange={(open) => {
+        setApprovalModalOpen(open);
+        if (!open) {
+          setItemToApprove(null);
+          setConfirmCheckbox(false);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Send for Senior SE Approval
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+            </p>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+              <input
+                type="checkbox"
+                id="confirmCheckbox"
+                checked={confirmCheckbox}
+                onChange={(e) => setConfirmCheckbox(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+              />
+              <Label htmlFor="confirmCheckbox" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+                I confirm task/cr/issue implemented and reviewed to check by senior SE
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApprovalModalOpen(false);
+                setItemToApprove(null);
+                setConfirmCheckbox(false);
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApprovalSubmit}
+              disabled={!confirmCheckbox || updateIssueMutation.isPending || updateTaskMutation.isPending || updateCRMutation.isPending}
+              className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-xs h-9 rounded-lg"
+            >
+              Confirm & Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim Confirmation Dialog */}
+      <Dialog open={claimConfirmOpen} onOpenChange={(open) => {
+        setClaimConfirmOpen(open);
+        if (!open) {
+          setItemToClaim(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[400px] bg-[var(--surface)] border-[var(--border)]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-[var(--text-primary)]">
+              Claim Work Item
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 text-xs text-[var(--text-secondary)] leading-relaxed">
+            Are you sure you want to add this item to your queue and start working on it? This will set its status to "In Progress" and assign it to you.
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setClaimConfirmOpen(false);
+                setItemToClaim(null);
+              }}
+              className="text-xs h-9 rounded-lg"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmClaimAction}
+              className="bg-[#84cc16] hover:bg-[#76b813] text-white text-xs h-9 rounded-lg font-semibold shadow-sm"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

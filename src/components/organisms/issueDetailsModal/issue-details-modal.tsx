@@ -19,8 +19,6 @@ import {
   Folder,
   UserCheck,
   ChevronDown,
-  History,
-  Mail,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,26 +36,20 @@ import {
   useDeleteIssue,
   useNotifyTimeExceeded,
   type Issue,
-  type IssueAttachment,
 } from "@/api/services/issue-management/issue-service";
-import { useStopTimer, useStartTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
+import { useStopTimer, useStartTimer } from "@/api/services/time-tracking/time-log-service";
 import { useGetAllUsers } from "@/api/services/user-management/user-service";
 import { KANBAN_COLUMNS, ISSUE_STATUSES, PRIORITIES, ISSUE_TYPES, ROLE_LABELS } from "@/lib/constants";
 import useSessionStore from "@/store/session-store";
 
 const STATUS_SELECT_COLORS: Record<string, string> = {
-  "To Do":            "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
+  "Backlog":          "border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/10 text-slate-700 dark:text-slate-300 focus:border-slate-400 focus:ring-slate-400/20",
+  "Assigned":         "border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10 text-blue-700 dark:text-blue-300 focus:border-blue-400 focus:ring-blue-400/20",
+  "Planned Solution": "border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 text-amber-700 dark:text-amber-300 focus:border-amber-400 focus:ring-amber-400/20",
   "In Progress":      "border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-700 dark:text-indigo-300 focus:border-indigo-400 focus:ring-indigo-400/20",
-  "Review":           "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
-  "Done":             "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
+  "Testing":          "border-purple-200 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-900/10 text-purple-700 dark:text-purple-300 focus:border-purple-400 focus:ring-purple-400/20",
+  "Resolved":         "border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 text-green-700 dark:text-green-300 focus:border-green-400 focus:ring-green-400/20",
   "Closed":           "border-rose-200 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-900/10 text-rose-700 dark:text-rose-300 focus:border-rose-400 focus:ring-rose-400/20",
-};
-
-const formatDuration = (decimalHours: number): string => {
-  const totalMins = Math.round(decimalHours * 60);
-  const hrs = Math.floor(totalMins / 60);
-  const mins = totalMins % 60;
-  return `${hrs}h ${mins}m`;
 };
 
 interface IssueDetailsModalProps {
@@ -84,8 +76,6 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const stopTimerMutation = useStopTimer();
   const startTimerMutation = useStartTimer();
   const { data: users = [] } = useGetAllUsers();
-  const { data: issueLogsData } = useGetTimeLogs({ issue: issue?._id || undefined });
-  const issueLogs = useMemo(() => issueLogsData?.data ?? [], [issueLogsData]);
   
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -104,6 +94,32 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [pendingAssigneeId, setPendingAssigneeId] = useState("");
   const [pendingAssigneeName, setPendingAssigneeName] = useState("");
 
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  const handleApprovalSubmit = async () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    if (!issue?._id) return;
+
+    try {
+      await updateIssueMutation.mutateAsync({
+        id: issue._id,
+        data: {
+          submittedForReview: true
+        }
+      });
+      toast.success("Submitted for Senior SE review.");
+      setShowApprovalDialog(false);
+      setConfirmCheckbox(false);
+      onOpenChange(false);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to submit for review.");
+    }
+  };
+
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Form & Fields State
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -111,36 +127,6 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
   const [priority, setPriority] = useState<string>("");
   const [assignedTo, setAssignedTo] = useState<string>("");
   const [estimatedHours, setEstimatedHours] = useState<string>("");
-  
-  const estH = estimatedHours ? Number(estimatedHours) : 0;
-  const hoursVal = estimatedHours ? String(Math.floor(estH)) : "";
-  const minutesVal = estimatedHours ? String(Math.round((estH - Math.floor(estH)) * 60)) : "";
-
-  const handleHoursChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const h = e.target.value;
-    const m = minutesVal || "0";
-    if (h === "" && m === "0") {
-      setEstimatedHours("");
-    } else {
-      const dec = Number(h || 0) + Number(m) / 60;
-      setEstimatedHours(String(dec));
-    }
-  };
-
-  const handleMinutesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let mVal = e.target.value;
-    if (mVal !== "") {
-      const mNum = Math.min(59, Math.max(0, Number(mVal)));
-      mVal = String(mNum);
-    }
-    const h = hoursVal || "0";
-    if (h === "0" && mVal === "") {
-      setEstimatedHours("");
-    } else {
-      const dec = Number(h) + Number(mVal || 0) / 60;
-      setEstimatedHours(String(dec));
-    }
-  };
   const [technicalApproach, setTechnicalApproach] = useState<string>("");
   
   const [isUploading, setIsUploading] = useState(false);
@@ -201,6 +187,33 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     }
   }, [open, issue]);
 
+  // Synchronize state from websocket events (stored in localStorage)
+  useEffect(() => {
+    const handleTimerSync = () => {
+      if (!open || !issue?._id) return;
+      const savedTime = localStorage.getItem(`timer_time_${issue._id}`);
+      let initialTime = savedTime ? parseInt(savedTime, 10) : 0;
+      
+      const savedTicking = localStorage.getItem(`timer_ticking_${issue._id}`);
+      const savedTimestamp = localStorage.getItem(`timer_timestamp_${issue._id}`);
+      
+      if (savedTicking === "true" && savedTimestamp) {
+        const elapsed = Math.floor((Date.now() - parseInt(savedTimestamp, 10)) / 1000);
+        initialTime = initialTime + elapsed;
+        setIsTicking(true);
+      } else {
+        setIsTicking(false);
+      }
+      timeRef.current = initialTime;
+      setTime(initialTime);
+    };
+
+    window.addEventListener("local-timer-update", handleTimerSync);
+    return () => {
+      window.removeEventListener("local-timer-update", handleTimerSync);
+    };
+  }, [open, issue?._id]);
+
   // Ref-based interval: updates DOM directly, syncs React state only every 10 seconds
   useEffect(() => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
@@ -221,27 +234,6 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           if (progressPctRef.current) progressPctRef.current.textContent = `${pct}%`;
           if (progressBarRef.current) progressBarRef.current.style.width = `${Math.min(100, (newTime / (estH * 3600)) * 100)}%`;
           if (loggedMinsRef.current) loggedMinsRef.current.textContent = `${Math.floor(newTime / 60)} mins logged`;
-
-          if (newTime >= estH * 3600) {
-            setIsTicking(false);
-            if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-            Promise.resolve().then(async () => {
-              try {
-                await stopTimerMutation.mutateAsync({ issueId: issue._id, note: "[Ended automatically]" });
-                toast.success("Work ended automatically (Allocated estimate reached).");
-              } catch (err: any) {
-                toast.error("Failed to stop timer: " + (err.response?.data?.message || err.message));
-              }
-              timeRef.current = 0;
-              setTime(0);
-              localStorage.removeItem(`timer_time_${issue._id}`);
-              localStorage.removeItem(`timer_ticking_${issue._id}`);
-              localStorage.removeItem(`timer_timestamp_${issue._id}`);
-              localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
-              window.dispatchEvent(new Event("storage"));
-            });
-            return;
-          }
         }
 
         // Write to localStorage every 5 seconds instead of every second
@@ -270,74 +262,82 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     }
     return () => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
+  }, [isTicking, issue?._id, formatStopwatchTime, estimatedHours, notifyTimeExceededMutation]);
+
 
   const handleStartTimer = useCallback(async () => {
     if (!issue?._id) return;
-    try {
-      await startTimerMutation.mutateAsync({
-        issueId: issue._id,
-        workType: 'In Progress',
-      });
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to start timer.');
-      return;
+    
+    const savedTime = localStorage.getItem(`timer_time_${issue._id}`);
+    const isResume = (savedTime && parseInt(savedTime, 10) > 0) || timeRef.current > 0;
+
+    if (!isResume) {
+      try {
+        await startTimerMutation.mutateAsync({
+          issueId: issue._id,
+          workType: 'In Progress', // Always 'In Progress' — issue.status may contain legacy DB values
+        });
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || 'Failed to start timer.');
+        return;
+      }
     }
+
     setIsTicking(true);
     localStorage.setItem(`timer_ticking_${issue._id}`, 'true');
     localStorage.setItem(`timer_timestamp_${issue._id}`, String(Date.now()));
+    localStorage.setItem(`timer_worktype_${issue._id}`, issue.status || 'In Progress');
     window.dispatchEvent(new Event('storage'));
   }, [issue?._id, startTimerMutation]);
 
-  const handlePauseTimer = useCallback(async () => {
+  const handlePauseTimer = useCallback(() => {
     if (!issue?._id) return;
-    // Stop the local interval first
+    // Persist current time before pausing
+    localStorage.setItem(`timer_time_${issue._id}`, String(timeRef.current));
     setIsTicking(false);
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    const currentTime = timeRef.current;
-    setTime(currentTime);
-    localStorage.setItem(`timer_time_${issue._id}`, String(currentTime));
-    localStorage.setItem(`timer_ticking_${issue._id}`, 'false');
+    setTime(timeRef.current);
+    localStorage.setItem(`timer_ticking_${issue._id}`, "false");
     localStorage.removeItem(`timer_timestamp_${issue._id}`);
-    window.dispatchEvent(new Event('storage'));
-    // Save the segment to the backend so duration is persisted
-    try {
-      await stopTimerMutation.mutateAsync({ issueId: issue._id });
-    } catch {
-      // Silently ignore — backend may reject if segment < 5 min
+
+    // Broadcast via WebSockets
+    if ((window as any).globalSocket) {
+      (window as any).globalSocket.emit("timer:pause", { itemId: issue._id, time: timeRef.current });
     }
-  }, [issue?._id, stopTimerMutation]);
+
+    window.dispatchEvent(new Event("storage"));
+  }, [issue?._id]);
 
   const handleEndWork = useCallback(async () => {
     if (!issue?._id) return;
-    const wasTickingNow = isTicking;
+    // Stop the local interval and capture current time before clearing
     setIsTicking(false);
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     try {
-      if (wasTickingNow) {
-        // Timer is actively running — stop it and save the segment
-        await stopTimerMutation.mutateAsync({ issueId: issue._id });
-      } else {
-        // Timer was paused — handlePauseTimer already saved the last segment.
-        // Try to stop any lingering active log (edge case: re-started briefly then ended)
-        try {
-          await stopTimerMutation.mutateAsync({ issueId: issue._id });
-        } catch {
-          // No active log is expected when paused — that's fine
-        }
-      }
-      toast.success('Work ended. Issue moved to Review.');
+      await stopTimerMutation.mutateAsync({
+        issueId: issue._id,
+        activeDuration: timeRef.current,
+      });
+      toast.success("Work ended. Issue moved to Testing.");
     } catch (err: any) {
-      toast.error(err.response?.data?.message || 'Failed to end work session.');
+      const status = err.response?.status;
+      const message = err.response?.data?.message;
+      if (status === 404 || (message && message.includes("No active timer"))) {
+        toast.info("Work ended. Session was already saved.");
+      } else {
+        toast.error(message || "Failed to end work session.");
+        return; // Do not clear if failed due to other errors
+      }
     }
+    // Always clear localStorage
     timeRef.current = 0;
     setTime(0);
     localStorage.removeItem(`timer_time_${issue._id}`);
     localStorage.removeItem(`timer_ticking_${issue._id}`);
     localStorage.removeItem(`timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`timer_worktype_${issue._id}`);
     localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
-    window.dispatchEvent(new Event('storage'));
-  }, [issue?._id, isTicking, stopTimerMutation]);
+    window.dispatchEvent(new Event("storage"));
+  }, [issue?._id, stopTimerMutation]);
 
   const handleStopTimer = useCallback(() => {
     if (!issue?._id) return;
@@ -347,6 +347,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
     localStorage.removeItem(`timer_time_${issue._id}`);
     localStorage.removeItem(`timer_ticking_${issue._id}`);
     localStorage.removeItem(`timer_timestamp_${issue._id}`);
+    localStorage.removeItem(`timer_worktype_${issue._id}`);
     localStorage.removeItem(`timer_exceeded_notified_${issue._id}`);
     window.dispatchEvent(new Event("storage"));
   }, [issue?._id]);
@@ -672,7 +673,7 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               {/* Attachments List */}
               {issue.attachments && issue.attachments.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {issue.attachments.map((file: IssueAttachment) => {
+                  {issue.attachments.map((file) => {
                     const isImg = file.mimetype.startsWith("image/");
                     const fileUrl = `http://localhost:5001${file.path}`;
 
@@ -754,15 +755,21 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     <select
                       id="status"
                       value={status}
-                      disabled={issue.status === "Closed" && userInfo?.role !== "super_admin"}
+                      disabled={issue.submittedForReview || (issue.status === "Closed" && userInfo?.role !== "super_admin")}
                       onChange={(e) => setStatus(e.target.value)}
                       className={`w-full h-9 appearance-none rounded-lg border px-3 pr-10 text-xs font-bold focus:outline-none transition-all duration-200 disabled:opacity-75 disabled:cursor-not-allowed ${
                         STATUS_SELECT_COLORS[status] || "border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)]"
                       }`}
                     >
                       {ISSUE_STATUSES.map((col) => {
-                        if (col === "Closed" && userInfo?.role !== "super_admin" && issue.status !== "Closed") {
-                          return null;
+                        const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
+                        if (isDevOrIntern) {
+                          if (col as string === "Done") {
+                            return null;
+                          }
+                          if (col as string === "To Do" && issue.status !== "To Do") {
+                            return null;
+                          }
                         }
                         return (
                           <option key={col} value={col}>
@@ -785,39 +792,58 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                   <p className="text-[9px] text-[var(--text-tertiary)] font-medium mt-1 uppercase tracking-wider">Tracked Duration</p>
                 </div>
 
-                {/* Timer Controls */}
-                <div className="flex gap-2">
-                  {!isTicking ? (
-                    <button
-                      onClick={handleStartTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                    >
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                      Start Work
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handlePauseTimer}
-                      className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                    >
-                      <Pause className="h-3.5 w-3.5 fill-current" />
-                      Pause Timer
-                    </button>
-                  )}
-                  <button
-                    onClick={handleEndWork}
-                    disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
-                    title="End Work"
-                    className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
-                  >
-                    {stopTimerMutation.isPending ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Square className="h-3.5 w-3.5 fill-current" />
+                {issue.submittedForReview ? (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-center text-xs font-semibold">
+                    Submitted for Senior SE review. Timer locked.
+                  </div>
+                ) : (
+                  <>
+                    {/* Timer Controls */}
+                    <div className="flex gap-2">
+                      {!isTicking ? (
+                        <button
+                          onClick={handleStartTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                          Start Work
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handlePauseTimer}
+                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                        >
+                          <Pause className="h-3.5 w-3.5 fill-current" />
+                          Pause Timer
+                        </button>
+                      )}
+                      <button
+                        onClick={handleEndWork}
+                        disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
+                        title="End Work"
+                        className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
+                      >
+                        {stopTimerMutation.isPending ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Square className="h-3.5 w-3.5 fill-current" />
+                        )}
+                        End Work
+                      </button>
+                    </div>
+                    {status === "Review" && (
+                      <button
+                        onClick={() => {
+                          setConfirmCheckbox(false);
+                          setShowApprovalDialog(true);
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[var(--accent)] hover:opacity-90 text-white text-xs font-bold transition-all shadow-sm cursor-pointer mt-2"
+                      >
+                        Send for Senior SE Approval
+                      </button>
                     )}
-                    End Work
-                  </button>
-                </div>
+                  </>
+                )}
 
                 {/* Estimate Progress Bar */}
                 {Number(estimatedHours || 0) > 0 && (
@@ -959,44 +985,26 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
               </div>
 
               {/* Estimated Hours */}
-              <div className="space-y-1.5 p-3 rounded-lg bg-[var(--surface-hover)]/20 border border-[var(--border)]/30 col-span-1 sm:col-span-2">
+              <div className="space-y-1.5 p-3 rounded-lg bg-[var(--surface-hover)]/20 border border-[var(--border)]/30">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                    Est. Time
+                  <Label htmlFor="estimatedHoursHoriz" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                    Est. Hours
                   </Label>
                   {estimatedHours && (
                     <span className="text-[10px] font-bold text-[var(--text-tertiary)]">
-                      ({Math.round(Number(estimatedHours) * 60)} mins)
+                      ({Number(estimatedHours) * 60} mins)
                     </span>
                   )}
                 </div>
-                <div className="flex gap-2 mt-0.5">
-                  <div className="flex-1 relative">
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder="Hrs"
-                      value={hoursVal}
-                      disabled={!isManager}
-                      onChange={handleHoursChange}
-                      className="h-8 pl-1.5 pr-6 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed"
-                    />
-                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[var(--text-tertiary)] pointer-events-none">h</span>
-                  </div>
-                  <div className="flex-1 relative">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={59}
-                      placeholder="Mins"
-                      value={minutesVal}
-                      disabled={!isManager}
-                      onChange={handleMinutesChange}
-                      className="h-8 pl-1.5 pr-6 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed"
-                    />
-                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[var(--text-tertiary)] pointer-events-none">m</span>
-                  </div>
-                </div>
+                <Input
+                  id="estimatedHoursHoriz"
+                  type="number"
+                  placeholder="e.g. 4.5"
+                  value={estimatedHours}
+                  disabled={!isManager}
+                  onChange={(e) => setEstimatedHours(e.target.value)}
+                  className="h-8 bg-[var(--surface)] border-[var(--border)] focus-visible:ring-[var(--primary)] text-[11px] font-bold disabled:opacity-75 disabled:cursor-not-allowed mt-0.5"
+                />
               </div>
 
               {/* Time Actions */}
@@ -1023,9 +1031,9 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                       setRequestReasonInput("");
                       setShowRequestDialog(true);
                     }}
-                    className="flex-1 h-9 text-[11px] font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)] flex items-center justify-center gap-1"
+                    className="flex-1 h-9 text-[11px] font-bold border-[var(--border)] hover:bg-[var(--surface-hover)] bg-[var(--surface)] text-[var(--text-primary)]"
                   >
-                    <Mail className="h-3.5 w-3.5" /> Request
+                    âœ‰ Request
                   </Button>
                 </div>
               </div>
@@ -1078,72 +1086,6 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Work Session History Table */}
-        <Card className="bg-[var(--background)] border-[var(--border)] shadow-sm overflow-hidden mt-6">
-          <CardHeader className="pb-3 border-b border-[var(--border)]/50 bg-[var(--surface-hover)]/10 p-4">
-            <CardTitle className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)] flex items-center gap-1.5">
-              <History className="h-4 w-4 text-[var(--primary)]" />
-              Work Session History (Time Logs)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4">
-            {issueLogs.length === 0 ? (
-              <div className="text-center py-6 text-xs text-[var(--text-tertiary)] italic">
-                No work sessions recorded for this issue.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-[var(--border)] bg-[var(--surface)]">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[var(--surface-hover)] border-b border-[var(--border)] text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-                      <th className="py-2.5 px-3">Date</th>
-                      <th className="py-2.5 px-3">Started Time</th>
-                      <th className="py-2.5 px-3">Ended Time</th>
-                      <th className="py-2.5 px-3">Duration</th>
-                      <th className="py-2.5 px-3">Note / Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border)]">
-                    {issueLogs.map((log: any) => {
-                      const isAutoEnded = log.note && log.note.includes("Ended automatically");
-                      return (
-                        <tr key={log._id} className="hover:bg-[var(--surface-hover)]/40 transition-colors">
-                          <td className="py-2.5 px-3 text-[var(--text-primary)]">
-                            {new Date(log.startTime).toLocaleDateString()}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
-                            {new Date(log.startTime).toLocaleTimeString()}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-medium text-[var(--text-secondary)]">
-                            {log.endTime ? (
-                              new Date(log.endTime).toLocaleTimeString()
-                            ) : (
-                              <span className="text-emerald-500 font-semibold animate-pulse">Running...</span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-[var(--text-primary)]">
-                            {formatDuration(log.duration)}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-[var(--text-secondary)]">{log.note || <span className="text-[var(--text-tertiary)] italic">No note</span>}</span>
-                              {isAutoEnded && (
-                                <span className="text-[10px] font-semibold text-red-500 bg-red-500/10 px-1.5 py-0.5 rounded w-fit uppercase tracking-wider">
-                                  Ended automatically
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
               </div>
             )}
           </CardContent>
@@ -1327,6 +1269,53 @@ export function IssueDetailsModal({ issue, open, onOpenChange }: IssueDetailsMod
           </Button>
           <Button onClick={handleHandoverSubmit} className="h-9 text-xs bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white">
             Confirm Handover
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Approval Dialog */}
+    <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+      <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)]">
+        <DialogHeader>
+          <DialogTitle className="text-base font-semibold">
+            Send for Senior SE Approval
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+            Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+          </p>
+          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+            <input
+              type="checkbox"
+              id="confirmCheckboxHoriz"
+              checked={confirmCheckbox}
+              onChange={(e) => setConfirmCheckbox(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+            />
+            <Label htmlFor="confirmCheckboxHoriz" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+              I confirm task/cr/issue implemented and reviewed to check by senior SE
+            </Label>
+          </div>
+        </div>
+        <DialogFooter className="flex gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowApprovalDialog(false);
+              setConfirmCheckbox(false);
+            }}
+            className="text-xs h-9 rounded-lg"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleApprovalSubmit}
+            disabled={!confirmCheckbox || updateIssueMutation.isPending}
+            className="bg-[var(--accent)] hover:bg-[var(--accent)]/90 text-white text-xs h-9 rounded-lg"
+          >
+            Confirm & Submit
           </Button>
         </DialogFooter>
       </DialogContent>

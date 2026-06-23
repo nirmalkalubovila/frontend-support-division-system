@@ -1,12 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { 
   BarChart3, DollarSign, Award, TrendingUp, AlertTriangle, 
   Activity, CheckCircle2, BarChart2, Briefcase, Info, 
   ShieldAlert, Clock 
 } from "lucide-react";
 import { 
-  Card, CardContent, CardHeader, CardTitle, Badge, Button 
+  Card, CardContent, CardHeader, CardTitle, Badge, Button,
+  Tabs, TabsList, TabsTrigger, TabsContent
 } from "@/components";
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -28,6 +30,8 @@ export function ProjectPerformanceView({
   refetch,
   daysCount
 }: ProjectPerformanceViewProps) {
+  const [activeSection, setActiveSection] = useState("summary");
+
   if (isLoading) {
     return (
       <div className="h-96 flex flex-col items-center justify-center space-y-4">
@@ -131,10 +135,39 @@ export function ProjectPerformanceView({
         </Card>
       </div>
 
+      {/* Sub-navigation for sections */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-[var(--surface)] border border-[var(--border)] rounded-xl w-fit shadow-sm">
+        {[
+          { id: "summary", label: "Summary", icon: Briefcase, color: "text-[var(--primary)]" },
+          { id: "issues", label: "Issues", icon: Activity, color: "text-[var(--info)]" },
+          { id: "crs", label: "Change Requests", icon: TrendingUp, color: "text-[var(--secondary)]" },
+          { id: "tasks", label: "Tasks", icon: CheckCircle2, color: "text-[var(--success)]" },
+          { id: "finance", label: "Finance", icon: DollarSign, color: "text-[var(--success)]" }
+        ].map((sec) => {
+          const Icon = sec.icon;
+          const isActive = activeSection === sec.id;
+          return (
+            <button
+              key={sec.id}
+              onClick={() => setActiveSection(sec.id)}
+              className={`inline-flex items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 gap-2 ${
+                isActive
+                  ? "bg-[var(--background)] text-[var(--primary-text)] border border-[var(--border)] shadow-sm font-bold scale-[1.02]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--background)]/50"
+              }`}
+            >
+              <Icon className={`h-4 w-4 ${isActive ? "text-[var(--primary)]" : sec.color}`} />
+              {sec.label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Accordion Panels for Details */}
       <div className="grid grid-cols-1 gap-6">
         
         {/* 1.1 ISSUES SECTION */}
+        {activeSection === "issues" && (
         <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
           <CardHeader className="border-b border-[var(--border)] py-4">
             <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -320,8 +353,10 @@ export function ProjectPerformanceView({
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* 1.2 CHANGE REQUESTS SECTION */}
+        {activeSection === "crs" && (
         <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
           <CardHeader className="border-b border-[var(--border)] py-4">
             <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -449,8 +484,10 @@ export function ProjectPerformanceView({
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* 1.3 TASKS SECTION */}
+        {activeSection === "tasks" && (
         <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
           <CardHeader className="border-b border-[var(--border)] py-4">
             <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -510,8 +547,10 @@ export function ProjectPerformanceView({
             </div>
           </CardContent>
         </Card>
+        )}
 
         {/* 1.4 FINANCE SECTION */}
+        {activeSection === "finance" && (
         <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
           <CardHeader className="border-b border-[var(--border)] py-4">
             <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -656,8 +695,10 @@ export function ProjectPerformanceView({
             )}
           </CardContent>
         </Card>
+        )}
 
         {/* 1.5 PROJECT HEALTH SUMMARY */}
+        {activeSection === "summary" && (
         <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
           <CardHeader className="border-b border-[var(--border)] py-4">
             <CardTitle className="text-base font-bold text-[var(--text-primary)] flex items-center gap-2">
@@ -725,6 +766,7 @@ export function ProjectPerformanceView({
             </div>
           </CardContent>
         </Card>
+        )}
 
       </div>
     </div>

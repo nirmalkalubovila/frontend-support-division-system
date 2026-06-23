@@ -83,14 +83,8 @@ export interface SelectOption {
 
 /** Issue / Ticket workflow statuses */
 export type IssueStatus =
-  | "backlog"
-  | "assigned"
-  | "planned"
-  | "in_progress"
-  | "testing"
-  | "on_hold"
-  | "pending_client"
-  | "resolved"
-  | "closed"
-  | "reopened";
+  | "To Do"
+  | "In Progress"
+  | "Review"
+  | "Done";
 

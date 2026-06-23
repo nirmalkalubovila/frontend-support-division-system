@@ -24,10 +24,6 @@ export const ISSUE_STATUSES = [
   "In Progress",
   "Review",
   "Done",
-  "On Hold",
-  "Pending Client",
-  "Closed",
-  "Reopened",
 ] as const;
 
 // Kanban column statuses (subset for board display)
@@ -80,10 +76,7 @@ export const WORK_TYPES = [
   "In Progress",
   "Review",
   "Done",
-  "Closed",
   "Reopened",
-  "On Hold",
-  "Pending Client",
 ] as const;
 
 // User roles (5-tier hierarchy)

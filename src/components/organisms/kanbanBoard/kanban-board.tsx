@@ -29,12 +29,7 @@ import useSessionStore from "@/store/session-store";
 import { useKanbanSocket } from "@/hooks/use-kanban-socket";
 import { validateTaskTransition, WORKFLOW_TRANSITIONS } from "@/lib/task-workflow";
 import { useStartTimer, useStopTimer, useGetTimeLogs } from "@/api/services/time-tracking/time-log-service";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 // ──────────────────────────────────────────────────────────────
 // Constants
@@ -115,8 +110,8 @@ function AssigneeAvatars({ assignees, max = 3 }: { assignees: TaskAssignee[]; ma
   const rest = assignees.length - max;
   return (
     <div className="flex -space-x-1.5">
-      {visible.map((a) => (
-        <div key={a._id} title={a.name || "Unknown"}
+      {visible.map((a, idx) => (
+        <div key={a._id ? `${a._id}-${idx}` : `assignee-${idx}`} title={a.name || "Unknown"}
           className="h-6 w-6 rounded-full bg-gradient-to-br from-[var(--primary)] to-[var(--secondary)] border-2 border-[var(--surface)] flex items-center justify-center text-white text-[8px] font-bold shrink-0">
           {(a.name || "U").charAt(0).toUpperCase()}
         </div>
@@ -162,6 +157,28 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
   const userInfo = useSessionStore((s) => s.userInfo);
   const [newComment, setNewComment] = useState("");
   const [comments, setComments] = useState<Array<{ id: string; text: string; author: string; time: string }>>([]);
+
+  const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [confirmCheckbox, setConfirmCheckbox] = useState(false);
+
+  const handleApprovalSubmit = async () => {
+    if (!confirmCheckbox) {
+      toast.error("You must confirm the checkbox before submitting.");
+      return;
+    }
+    try {
+      await updateMutation.mutateAsync({
+        taskId: task?._id || '',
+        data: { submittedForReview: true }
+      });
+      setShowApprovalDialog(false);
+      setConfirmCheckbox(false);
+      toast.success("Submitted for Senior SE review.");
+      onClose();
+    } catch {
+      toast.error("Failed to submit for review");
+    }
+  };
 
   // Workflow rejection state
   const [rejection, setRejection] = useState<{ fromStatus: TaskStatus; toStatus: TaskStatus; reason: string } | null>(null);
@@ -237,7 +254,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
     try {
       await startTimerMutation.mutateAsync({
         taskId: task._id,
-        workType: 'In Progress',
+        workType: (task.status || 'In Progress') as any,
       });
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to start timer.');
@@ -247,7 +264,7 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
     localStorage.setItem(`timer_ticking_${task._id}`, 'true');
     localStorage.setItem(`timer_timestamp_${task._id}`, String(Date.now()));
     window.dispatchEvent(new Event('storage'));
-  }, [task?._id, startTimerMutation]);
+  }, [task?._id, startTimerMutation, task?.status]);
 
   const handlePauseTimer = useCallback(async () => {
     if (!task?._id) return;
@@ -400,19 +417,20 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-1">
-                {canEdit && (
-                  <>
-                    <button onClick={() => onEdit(task)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors" title="Edit"><Pencil className="h-4 w-4" /></button>
-                    <button onClick={() => onDelete(task)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-red-500 transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
-                  </>
-                )}
-              </div>
+              <DialogTitle className="text-base font-bold text-[var(--text-primary)] leading-tight">{task.name}</DialogTitle>
             </div>
-            <DialogTitle className="text-xl font-bold text-[var(--text-primary)] leading-snug">
-              {task.name}
-            </DialogTitle>
+            <div className="flex items-center gap-1 shrink-0">
+              {canEdit && (
+                <>
+                  <button onClick={() => onEdit(task)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors"><Pencil className="h-4 w-4" /></button>
+                  <button onClick={() => onDelete(task)} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-red-500 transition-colors"><Trash2 className="h-4 w-4" /></button>
+                </>
+              )}
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] transition-colors"><X className="h-4 w-4" /></button>
+            </div>
           </DialogHeader>
+
+          {/* Scrollable body */}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 py-4 items-start">
             {/* Left Column */}
@@ -506,28 +524,41 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
               {canEdit && (
                 <div className="space-y-2">
                   <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Move to</Label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {KANBAN_STATUSES.map((s) => {
-                      const isCurrent = task.status === s;
-                      const { valid, hints } = validateTaskTransition(task, s, userInfo);
-                      return (
-                        <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
-                              ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
-                              : valid
-                                ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
-                                : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
-                            }`}>
-                          {s}
-                          {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
-                          {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <p className="text-[10px] text-[var(--text-tertiary)]">
-                    Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
-                  </p>
+                  {task.submittedForReview ? (
+                    <div className="p-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-500 text-xs font-semibold text-center animate-pulse-soft">
+                      Submitted for Senior SE review. Status locked.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {KANBAN_STATUSES.map((s) => {
+                          const isDevOrIntern = userInfo?.role === "engineer" || userInfo?.role === "intern";
+                          if (isDevOrIntern) {
+                            if (s === "Done") return null;
+                            if (s === "To Do" && task.status !== "To Do") return null;
+                          }
+                          const isCurrent = task.status === s;
+                          const { valid, hints } = validateTaskTransition(task, s, userInfo);
+                          return (
+                            <button key={s} onClick={() => handleStatusChange(s)} disabled={isCurrent}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${isCurrent
+                                  ? COL_CONFIG[s].badge + " ring-1 ring-current cursor-default"
+                                  : valid
+                                    ? "bg-[var(--background)] border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--primary)] hover:text-[var(--primary)]"
+                                    : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] opacity-40 cursor-not-allowed"
+                                }`}>
+                              {s}
+                              {!valid && !isCurrent && <ShieldAlert className="inline h-2.5 w-2.5 ml-1 opacity-60" />}
+                              {valid && !isCurrent && hints.length > 0 && <span className="inline ml-1 text-yellow-400 text-[10px]" title={hints.join(' ')}>⚠</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[10px] text-[var(--text-tertiary)]">
+                        Greyed steps are blocked by workflow rules. ⚠ = advisory hints.
+                      </p>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -558,39 +589,58 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                       <p className="text-[9px] text-[var(--text-tertiary)] font-medium mt-1 uppercase tracking-wider">Tracked Duration</p>
                     </div>
 
-                    {/* Timer Controls */}
-                    <div className="flex gap-2">
-                      {!isTicking ? (
-                        <button
-                          onClick={handleStartTimer}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                        >
-                          <Play className="h-3.5 w-3.5 fill-current" />
-                          Start Work
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handlePauseTimer}
-                          className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
-                        >
-                          <Pause className="h-3.5 w-3.5 fill-current" />
-                          Pause Timer
-                        </button>
-                      )}
-                      <button
-                        onClick={handleEndWork}
-                        disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
-                        title="End Work"
-                        className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
-                      >
-                        {stopTimerMutation.isPending ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Square className="h-3.5 w-3.5 fill-current" />
+                    {task.submittedForReview ? (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl text-center text-xs font-semibold">
+                        Submitted for Senior SE review. Timer locked.
+                      </div>
+                    ) : (
+                      <>
+                        {/* Timer Controls */}
+                        <div className="flex gap-2">
+                          {!isTicking ? (
+                            <button
+                              onClick={handleStartTimer}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#84cc16] hover:bg-[#76b813] text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              <Play className="h-3.5 w-3.5 fill-current" />
+                              Start Work
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handlePauseTimer}
+                              className="flex-1 flex items-center justify-center gap-1.5 h-9 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold transition-all shadow-sm cursor-pointer"
+                            >
+                              <Pause className="h-3.5 w-3.5 fill-current" />
+                              Pause Timer
+                            </button>
+                          )}
+                          <button
+                            onClick={handleEndWork}
+                            disabled={(time === 0 && !isTicking) || stopTimerMutation.isPending}
+                            title="End Work"
+                            className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-primary)] hover:bg-red-50 hover:border-red-300 hover:text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer text-xs font-bold"
+                          >
+                            {stopTimerMutation.isPending ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Square className="h-3.5 w-3.5 fill-current" />
+                            )}
+                            End Work
+                          </button>
+                        </div>
+                        {task.status === "Review" && (
+                          <Button
+                            onClick={() => {
+                              setConfirmCheckbox(false);
+                              setShowApprovalDialog(true);
+                            }}
+                            className="w-full text-xs h-9 bg-[var(--accent)] hover:opacity-90 text-white font-bold transition-all shadow-sm mt-2"
+                          >
+                            Send for Senior SE Approval
+                          </Button>
                         )}
-                        End Work
-                      </button>
-                    </div>
+                      </>
+                    )}
                     {task.totalTimeSpent !== undefined && task.totalTimeSpent > 0 && (
                       <div className="text-[10px] text-center text-[var(--text-secondary)] font-medium bg-[var(--surface-hover)]/40 py-1.5 px-3 rounded-lg border border-[var(--border)]/20">
                         Total Logged: <span className="font-bold text-[var(--text-primary)]">{fmtDuration(task.totalTimeSpent)}</span>
@@ -600,23 +650,27 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
                 </div>
               )}
 
-              {/* Priority */}
-              {canEdit && (
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Priority</Label>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {PRIORITIES.map((p) => (
-                      <button key={p} onClick={() => handlePriorityChange(p)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${task.priority === p
-                            ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
-                            : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
-                          }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
-                      </button>
-                    ))}
-                  </div>
+            {/* Priority */}
+            {canEdit && (
+              <div className="space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Priority</Label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {PRIORITIES.map((p) => (
+                    <button key={p} onClick={() => handlePriorityChange(p)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1 ${
+                        task.priority === p
+                          ? PRIORITY_CONFIG[p].badge + " ring-1 ring-current"
+                          : "bg-[var(--background)] border-[var(--border)] text-[var(--text-tertiary)] hover:border-[var(--primary)]"
+                      }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_CONFIG[p].dot}`} />{p}
+                    </button>
+                  ))}
                 </div>
-              )}
+              </div>
+            )}
+
+            <Separator className="bg-[var(--border)]" />
+
 
               {/* Dates */}
               <div className="grid grid-cols-2 gap-3">
@@ -765,6 +819,52 @@ export function TaskDetailDrawer({ task, projectId, members, onClose, onEdit, on
         reason={rejection?.reason ?? null}
         onClose={() => setRejection(null)}
       />
+      {/* Approval Dialog */}
+      <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
+        <DialogContent className="sm:max-w-[425px] bg-[var(--surface)] border-[var(--border)] text-[var(--text-primary)] z-[99999]">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold">
+              Send for Senior SE Approval
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+              Before submitting this work item for verification by a Senior Engineer, please confirm that you have completed and thoroughly tested the implementation.
+            </p>
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-[var(--background)] border border-[var(--border)]">
+              <input
+                type="checkbox"
+                id="confirmCheckboxTask"
+                checked={confirmCheckbox}
+                onChange={(e) => setConfirmCheckbox(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
+              />
+              <Label htmlFor="confirmCheckboxTask" className="text-xs text-[var(--text-primary)] font-medium leading-tight cursor-pointer select-none">
+                I confirm task/cr/issue implemented and reviewed to check by senior SE
+              </Label>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowApprovalDialog(false);
+                setConfirmCheckbox(false);
+              }}
+              className="text-xs h-9 rounded-lg border-[var(--border)] bg-transparent hover:bg-[var(--surface-hover)] text-[var(--text-secondary)]"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApprovalSubmit}
+              disabled={!confirmCheckbox || updateMutation.isPending}
+              className="bg-[var(--accent)] hover:bg-[var(--accent)]/95 text-white text-xs h-9 rounded-lg"
+            >
+              Confirm & Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
