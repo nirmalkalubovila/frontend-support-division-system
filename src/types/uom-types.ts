@@ -1,5 +1,6 @@
 import type { GlobalRecords } from "@/types/global-types";
 import type { Project } from "@/api/services/project-management/project-service";
+import type { Payment } from "@/types/finance-types";
 
 // ─────────────────────────────────────────────────────────────
 // Baseline Types
@@ -86,7 +87,7 @@ export interface SnapshotOverride {
 
 export interface SnapshotAudit {
   _id: string;
-  action: "generated" | "count_updated" | "finalized" | "unlocked" | "override_added" | "payment_linked";
+  action: "generated" | "count_updated" | "finalized" | "unlocked" | "override_added" | "payment_linked" | "payment_created" | "payment_voided";
   changedBy: string | null;
   changes: Record<string, unknown> | null;
   notes: string | null;
@@ -107,7 +108,7 @@ export interface UomSnapshot extends GlobalRecords {
   seededFromPrevious: boolean;
   finalizedAt: string | null;
   finalizedBy: string | null;
-  linkedPayment: string | null;
+  linkedPayment: string | Payment | null;
   overrides: SnapshotOverride[];
   auditLog: SnapshotAudit[];
   notes: string | null;
@@ -137,6 +138,7 @@ export interface ConfigureBaselinePayload {
 
 export interface UpdateUomPricePayload {
   pricePerUnit: number;
+  defaultCount?: number;
   effectiveFrom?: string;
   notes?: string | null;
 }

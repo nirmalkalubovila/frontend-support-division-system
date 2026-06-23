@@ -170,8 +170,9 @@ function ProjectTasksCard({
   const { data: assignedTasks = [] } = useGetAssignedTasks(userInfo?._id);
 
   const hasNewAssignment = useMemo(() => {
-    return assignedTasks.some((t) => {
-      const projId = typeof t.project === "object" && t.project ? t.project._id : t.project;
+    return ((assignedTasks || []) as Task[]).some((t) => {
+      const proj = t.project as any;
+      const projId = typeof proj === "object" && proj ? proj._id : proj;
       return String(projId) === String(group.id) && t.status === "To Do";
     });
   }, [assignedTasks, group.id]);

@@ -8,16 +8,22 @@ import {
 import {
   CheckCircle2, Lock, LockOpen, ShieldAlert,
   Loader2, TrendingUp, TrendingDown, Minus,
-  ChevronDown, ChevronUp, RefreshCw, Zap, CreditCard,
+  ChevronDown, ChevronUp, RefreshCw, Zap, CreditCard, Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useFinalizeSnapshot,
   useUnlockSnapshot,
   useRefreshSnapshotPrices,
 } from "@/api/services/finance/uom-service";
 import { SnapshotOverrideModal } from "./snapshot-override-modal";
+import { FinalizePaymentModal, type FinalizePayload } from "./finalize-payment-modal";
+import { AllocatePaymentModal } from "@/components/organisms/financeModule/allocate-payment-modal";
+import { PaymentHistoryDrawer } from "@/components/organisms/financeModule/payment-history-drawer";
+import { PaymentStatusBadge } from "@/components/organisms/financeModule/payment-status-badge";
 import type { UomSnapshot } from "@/types/uom-types";
+import type { Payment } from "@/types/finance-types";
 import type { UserRole } from "@/types/global-types";
 
 interface Props {
@@ -58,6 +64,9 @@ export function SnapshotDetailDrawer({
   projectId, snapshot, open, onClose, onEdit, userRole,
 }: Props) {
   const [showOverride, setShowOverride] = useState(false);
+  const [showFinalize, setShowFinalize] = useState(false);
+  const [showAllocate, setShowAllocate] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [unlockReason, setUnlockReason] = useState("");
   const [showUnlockInput, setShowUnlockInput] = useState(false);
@@ -67,13 +76,20 @@ export function SnapshotDetailDrawer({
   const finalize = useFinalizeSnapshot(projectId, snapshot?._id ?? "");
   const unlock = useUnlockSnapshot(projectId, snapshot?._id ?? "");
   const refreshPrices = useRefreshSnapshotPrices(projectId, snapshot?._id ?? "");
+  const queryClient = useQueryClient();
+
+  // Extract populated linked payment object (backend populates this)
+  const linkedPayment: Payment | null =
+    snapshot?.linkedPayment && typeof snapshot.linkedPayment === "object"
+      ? (snapshot.linkedPayment as Payment)
+      : null;
 
   const handleRefreshPrices = async () => {
     try {
       const result = await refreshPrices.mutateAsync();
       // Check audit log to see if prices actually changed
       const lastEntry = result?.auditLog?.slice().reverse().find((e: any) => e.action === "count_updated");
-      const changed = lastEntry?.changes?.pricesRefreshed?.length > 0;
+      const changed = ((lastEntry?.changes as any)?.pricesRefreshed?.length ?? 0) > 0;
       if (changed) {
         toast.success("Prices updated from current baseline.");
       } else {
@@ -84,11 +100,13 @@ export function SnapshotDetailDrawer({
     }
   };
 
-  const handleFinalize = async () => {
+  const handleFinalize = async (payload: FinalizePayload) => {
     if (!snapshot) return;
     try {
-      await finalize.mutateAsync({});
+      await finalize.mutateAsync(payload);
       toast.success("Snapshot finalised. A payment record has been auto-created in the Payments tab.");
+      setShowFinalize(false);
+      onClose();
     } catch (err: any) {
       toast.error(err?.response?.data?.message ?? "Failed to finalise.");
     }
@@ -162,17 +180,36 @@ export function SnapshotDetailDrawer({
                     <Button
                       size="sm"
                       className="gap-1.5 h-8 bg-green-600 hover:bg-green-700 text-white"
-                      onClick={handleFinalize}
-                      disabled={finalize.isPending}
+                      onClick={() => setShowFinalize(true)}
                     >
-                      {finalize.isPending
-                        ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Finalising…</>
-                        : <><CheckCircle2 className="h-3.5 w-3.5" />Finalise & Create Payment</>}
+                      <CheckCircle2 className="h-3.5 w-3.5" />Finalise & Create Payment
                     </Button>
                   </>
                 )}
                 {isFinalized && (
                   <>
+                    {linkedPayment && linkedPayment.paymentStatus !== "Paid" && linkedPayment.paymentStatus !== "Cancelled" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 h-8 text-green-700 border-green-300 hover:bg-green-50"
+                        onClick={() => setShowAllocate(true)}
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        Allocate Payment
+                      </Button>
+                    )}
+                    {linkedPayment && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 h-8"
+                        onClick={() => setShowHistory(true)}
+                      >
+                        <Clock className="h-3.5 w-3.5" />
+                        Payment History
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
@@ -214,28 +251,38 @@ export function SnapshotDetailDrawer({
             )}
 
             {/* ── Auto-payment status strip ─────────────────────────── */}
-            {isFinalized && snapshot.linkedPayment && (
+            {isFinalized && linkedPayment && (
               <div className="flex items-center gap-3 rounded-lg bg-[rgba(99,102,241,0.05)] border border-[rgba(99,102,241,0.2)] px-4 py-3">
                 <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-[rgba(99,102,241,0.1)] shrink-0">
                   <Zap className="h-4 w-4 text-[var(--primary)]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-[var(--text-primary)]">
-                    Payment auto-created
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-semibold text-[var(--text-primary)]">
+                      Payment {linkedPayment.paymentId}
+                    </p>
+                    <PaymentStatusBadge status={linkedPayment.paymentStatus} />
+                  </div>
                   <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
-                    A <span className="font-semibold text-[var(--primary)]">UOM Based</span> payment record was automatically created in the Payments tab.
-                    Allocate payments against it there.
+                    {linkedPayment.paymentStatus === "Paid"
+                      ? "Fully paid — no outstanding balance."
+                      : linkedPayment.paymentStatus === "Partially Paid"
+                      ? `Received LKR ${(linkedPayment.partiallyPaidAmount ?? 0).toLocaleString()} of LKR ${snapshot.grandTotal.toLocaleString()} — outstanding LKR ${(snapshot.grandTotal - (linkedPayment.partiallyPaidAmount ?? 0)).toLocaleString()}`
+                      : "Awaiting payment — use Allocate Payment to record received amounts."}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-bold text-[var(--primary)]">
                     LKR {snapshot.grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
-                  <div className="flex items-center gap-1 mt-0.5 justify-end">
-                    <CreditCard className="h-3 w-3 text-[var(--text-tertiary)]" />
-                    <span className="text-[10px] text-[var(--text-tertiary)]">View in Payments tab</span>
-                  </div>
+                  {linkedPayment.paymentStatus === "Partially Paid" && (
+                    <div className="mt-1 w-24 h-1.5 rounded-full bg-[var(--surface-hover)] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-green-500 transition-all"
+                        style={{ width: `${Math.min(100, ((linkedPayment.partiallyPaidAmount ?? 0) / snapshot.grandTotal) * 100)}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -382,6 +429,35 @@ export function SnapshotDetailDrawer({
         open={showOverride}
         onClose={() => setShowOverride(false)}
       />
+
+      <FinalizePaymentModal
+        open={showFinalize}
+        onClose={() => setShowFinalize(false)}
+        onConfirm={handleFinalize}
+        loading={finalize.isPending}
+        grandTotal={snapshot.grandTotal}
+      />
+
+      {linkedPayment && (
+        <>
+          <AllocatePaymentModal
+            projectId={projectId}
+            payment={showAllocate ? linkedPayment : null}
+            open={showAllocate}
+            onClose={() => {
+              setShowAllocate(false);
+              queryClient.invalidateQueries({ queryKey: ["/uom/snapshots", projectId], exact: false });
+              queryClient.invalidateQueries({ queryKey: ["/uom/snapshot"], exact: false });
+            }}
+          />
+          <PaymentHistoryDrawer
+            projectId={projectId}
+            payment={showHistory ? linkedPayment : null}
+            open={showHistory}
+            onClose={() => setShowHistory(false)}
+          />
+        </>
+      )}
     </>
   );
 }
