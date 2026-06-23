@@ -98,8 +98,9 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
     e.preventDefault();
     const payload: CreatePaymentPayload = {
       ...form,
-      uom: null,
-      quantity: null,
+      uom: (form.paymentType === "CR Based" || form.paymentType === "Other" || editing?.isSystemGenerated) ? form.uom : null,
+      month: editing?.isSystemGenerated ? form.month : null,
+      quantity: editing?.isSystemGenerated ? editing.quantity : null,
       paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
       referenceNumber: needsRef ? form.referenceNumber : null,
@@ -131,30 +132,62 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
           <div className="space-y-1.5">
             <Label>Payment Type</Label>
             <div className="flex flex-wrap gap-2">
-              {PAYMENT_TYPES.map(({ value, label }) => (
+              {editing?.isSystemGenerated ? (
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => {
-                    // Clear uom when switching away from types that use it
-                    const clearsUom = value !== "CR Based" && value !== "Other";
-                    setForm((p) => ({
-                      ...p,
-                      paymentType: value,
-                      uom: clearsUom ? null : p.uom,
-                    }));
-                  }}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.paymentType === value
-                      ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                      : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
-                  }`}
+                  className="px-3 py-2 rounded-lg text-sm font-medium border bg-[var(--primary)] text-white border-[var(--primary)] cursor-not-allowed"
+                  disabled
                 >
-                  {label}
+                  UOM Based
                 </button>
-              ))}
+              ) : (
+                PAYMENT_TYPES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      // Clear uom when switching away from types that use it
+                      const clearsUom = value !== "CR Based" && value !== "Other";
+                      setForm((p) => ({
+                        ...p,
+                        paymentType: value,
+                        uom: clearsUom ? null : p.uom,
+                      }));
+                    }}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      form.paymentType === value
+                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                        : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))
+              )}
             </div>
           </div>
+
+          {/* UOM Based metadata (month / uom snapshot reference) */}
+          {editing?.isSystemGenerated && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>Billing Month</Label>
+                <Input
+                  value={form.month ?? "—"}
+                  disabled
+                  className="bg-[var(--surface-hover)] cursor-not-allowed"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>UOM Reference</Label>
+                <Input
+                  value={form.uom ?? "—"}
+                  disabled
+                  className="bg-[var(--surface-hover)] cursor-not-allowed"
+                />
+              </div>
+            </div>
+          )}
 
           {/* CR Based — CR reference input */}
           {isCRBased && (
@@ -204,10 +237,16 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 step="any"
                 value={form.pricePerUnit || ""}
                 onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
-                className="pl-10"
+                disabled={editing?.isSystemGenerated}
+                className={`pl-10 ${editing?.isSystemGenerated ? "bg-[var(--surface-hover)] cursor-not-allowed" : ""}`}
                 required
               />
             </div>
+            {editing?.isSystemGenerated && (
+              <p className="text-[10px] text-[var(--text-tertiary)] mt-1">
+                Amount is synchronized with the UOM billing snapshot grand total.
+              </p>
+            )}
           </div>
 
           {/* Total preview */}
