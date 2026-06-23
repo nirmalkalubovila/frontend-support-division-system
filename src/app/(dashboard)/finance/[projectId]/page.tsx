@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, Pencil, Trash2,
-  Search, Paperclip, Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText, CreditCard, History,
+  Search, Paperclip, Wallet, CheckCircle2, AlertCircle, Clock, ReceiptText, CreditCard, History, RotateCcw,
 } from "lucide-react";
 import { Button, Input, Badge, Select } from "@/components";
 import { StatCard } from "@/components/atoms/statCard/statCard";
@@ -18,6 +18,7 @@ import { PaymentFormModal } from "@/components/organisms/financeModule/payment-f
 import { AllocatePaymentModal } from "@/components/organisms/financeModule/allocate-payment-modal";
 import { PaymentHistoryDrawer } from "@/components/organisms/financeModule/payment-history-drawer";
 import { PaymentStatusBadge } from "@/components/organisms/financeModule/payment-status-badge";
+import { ConfirmDialog } from "@/components/molecules/confirmDialog";
 import useSessionStore from "@/store/session-store";
 import type { UserRole } from "@/types/global-types";
 import type { Payment, PaymentStatus, PaymentType } from "@/types/finance-types";
@@ -44,9 +45,12 @@ export default function ProjectFinanceDetailPage() {
   const [editing, setEditing] = useState<Payment | null>(null);
   const [allocating, setAllocating] = useState<Payment | null>(null);
   const [viewingHistory, setViewingHistory] = useState<Payment | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [sortBy, setSortBy] = useState<"dueDate" | "totalAmount" | "createdAt">("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -61,6 +65,8 @@ export default function ProjectFinanceDetailPage() {
     let list = allPayments;
     if (statusFilter !== "all") list = list.filter((p) => p.paymentStatus === statusFilter);
     if (typeFilter !== "all") list = list.filter((p) => p.paymentType === typeFilter);
+    if (fromDate) list = list.filter((p) => p.dueDate && new Date(p.dueDate) >= new Date(fromDate));
+    if (toDate)   list = list.filter((p) => p.dueDate && new Date(p.dueDate) <= new Date(toDate + "T23:59:59"));
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((p) =>
@@ -81,12 +87,17 @@ export default function ProjectFinanceDetailPage() {
       }
       return sortOrder === "asc" ? av - bv : bv - av;
     });
-  }, [allPayments, statusFilter, typeFilter, search, sortBy, sortOrder]);
+  }, [allPayments, statusFilter, typeFilter, search, sortBy, sortOrder, fromDate, toDate]);
 
   const handleDelete = async (id: string) => {
     if (confirm("Delete this payment entry?")) await deletePayment.mutateAsync(id);
   };
 
+  const confirmDelete = async () => {
+    if (!deletingId) return;
+    await deletePayment.mutateAsync(deletingId);
+    setDeletingId(null);
+  };
   const toggleSort = (col: typeof sortBy) => {
     if (sortBy === col) setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
     else { setSortBy(col); setSortOrder("desc"); }
@@ -219,12 +230,33 @@ export default function ProjectFinanceDetailPage() {
           value={typeFilter}
           onChange={setTypeFilter}
         />
-        {(search || statusFilter !== "all" || typeFilter !== "all") && (
-          <Button variant="ghost" size="sm" className="h-9 text-xs"
-            onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); }}>
-            Clear
-          </Button>
-        )}
+        <Input
+          type="date"
+          className="h-9 text-sm w-36"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          title="Due date from"
+        />
+        <Input
+          type="date"
+          className="h-9 text-sm w-36"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          title="Due date to"
+        />
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-9 w-9 shrink-0 transition-opacity ${
+            search || statusFilter !== "all" || typeFilter !== "all" || fromDate || toDate
+              ? "opacity-100"
+              : "opacity-40"
+          }`}
+          title="Reset filters"
+          onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setFromDate(""); setToDate(""); }}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
         <Badge variant="secondary" className="ml-auto text-xs">
           {filtered.length} payment{filtered.length !== 1 ? "s" : ""}
         </Badge>
@@ -345,7 +377,7 @@ export default function ProjectFinanceDetailPage() {
                             </Button>
                             <Button
                               size="icon" variant="ghost" className="h-7 w-7 text-[var(--destructive)]"
-                              onClick={() => handleDelete(p._id)}
+                              onClick={() => setDeletingId(p._id)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -380,6 +412,17 @@ export default function ProjectFinanceDetailPage() {
         payment={viewingHistory}
         open={!!viewingHistory}
         onClose={() => setViewingHistory(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deletingId}
+        onOpenChange={(o) => { if (!o) setDeletingId(null); }}
+        title="Delete Payment"
+        description="Are you sure you want to delete this payment entry? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={confirmDelete}
+        loading={deletePayment.isPending}
       />
     </div>
   );

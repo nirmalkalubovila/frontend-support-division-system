@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Search } from "lucide-react";
+import { Search, RotateCcw } from "lucide-react";
 import { Button, Input, Select, Badge } from "@/components";
 import { useFinanceKPIs, useAllProjectsFinance } from "@/api/services/finance/finance-service";
 import { FinanceKPICards } from "@/components/organisms/financeModule/finance-kpi-cards";
@@ -19,6 +19,8 @@ export default function FinancePage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const { data: kpis, isLoading: kpisLoading } = useFinanceKPIs();
 
@@ -28,7 +30,25 @@ export default function FinancePage() {
     isActive: activeFilter === "active" ? true : activeFilter === "inactive" ? false : undefined,
   }), [search, statusFilter, activeFilter]);
 
-  const { data: projects = [], isLoading: projectsLoading } = useAllProjectsFinance(apiParams);
+  const { data: allProjects = [], isLoading: projectsLoading } = useAllProjectsFinance(apiParams);
+
+  // Client-side date range filter on project startDate
+  const projects = useMemo(() => {
+    let list = allProjects;
+    if (fromDate) list = list.filter((p) => p.startDate && new Date(p.startDate) >= new Date(fromDate));
+    if (toDate)   list = list.filter((p) => p.startDate && new Date(p.startDate) <= new Date(toDate + "T23:59:59"));
+    return list;
+  }, [allProjects, fromDate, toDate]);
+
+  const hasFilters = search || statusFilter !== "all" || activeFilter !== "all" || fromDate || toDate;
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setActiveFilter("all");
+    setFromDate("");
+    setToDate("");
+  };
 
   const canViewFull = FINANCE_VISIBLE_ROLES.includes(userRole);
 
@@ -53,7 +73,7 @@ export default function FinancePage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--text-secondary)]" />
           <Input
             className="pl-9 h-9 text-sm"
@@ -82,12 +102,30 @@ export default function FinancePage() {
           onChange={setActiveFilter}
         />
 
-        {(statusFilter !== "all" || activeFilter !== "all" || search) && (
-          <Button variant="ghost" size="sm" className="h-9 text-xs"
-            onClick={() => { setSearch(""); setStatusFilter("all"); setActiveFilter("all"); }}>
-            Clear filters
-          </Button>
-        )}
+        <Input
+          type="date"
+          className="h-9 text-sm w-36"
+          value={fromDate}
+          onChange={(e) => setFromDate(e.target.value)}
+          title="From date"
+        />
+        <Input
+          type="date"
+          className="h-9 text-sm w-36"
+          value={toDate}
+          onChange={(e) => setToDate(e.target.value)}
+          title="To date"
+        />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className={`h-9 w-9 shrink-0 transition-opacity ${hasFilters ? "opacity-100" : "opacity-40"}`}
+          title="Reset filters"
+          onClick={clearFilters}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+        </Button>
 
         <Badge variant="secondary" className="ml-auto text-xs">
           {projects.length} project{projects.length !== 1 ? "s" : ""}
