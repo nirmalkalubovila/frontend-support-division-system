@@ -837,6 +837,7 @@ function IssuesPageContent() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterType, setFilterType] = useState("");
   const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban");
@@ -889,6 +890,7 @@ function IssuesPageContent() {
 
     // Initialize groups for all projects in database
     projects.forEach((proj) => {
+      if (projectSearch && !proj.name.toLowerCase().includes(projectSearch.toLowerCase())) return;
       const clientObj = typeof proj.client === "object" ? proj.client : null;
       const clientCode = clientObj?.code || "";
       const clientName = clientObj?.name || "";
@@ -912,6 +914,7 @@ function IssuesPageContent() {
       const clientName = clientObj?.name || "";
 
       if (!groups[projectId]) {
+        if (projectSearch && !projectName.toLowerCase().includes(projectSearch.toLowerCase())) return;
         groups[projectId] = {
           id: projectId,
           name: projectName,
@@ -924,7 +927,7 @@ function IssuesPageContent() {
     });
 
     return Object.values(groups);
-  }, [projects, issues]);
+  }, [projects, issues, projectSearch]);
 
   // Active Project Group Lookup
   const activeGroup = useMemo(() => {
@@ -946,12 +949,13 @@ function IssuesPageContent() {
     setShowDetailsModal(true);
   };
 
-  const hasActiveFilters = !!filterPriority || !!filterType || !!search;
+  const hasActiveFilters = !!filterPriority || !!filterType || !!search || !!projectSearch;
 
   const clearFilters = () => {
     setFilterPriority("");
     setFilterType("");
     setSearch("");
+    setProjectSearch("");
   };
 
   return (
@@ -976,31 +980,33 @@ function IssuesPageContent() {
           </p>
         </div>
         <div className="flex items-center gap-2.5 self-end sm:self-auto">
-          {/* View Switcher Toggle */}
-          <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
-            <button
-              onClick={() => setViewMode("kanban")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "kanban"
-                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-                }`}
-              title="Kanban View"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Kanban</span>
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "list"
-                  ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
-                  : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
-                }`}
-              title="List View"
-            >
-              <List className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">List</span>
-            </button>
-          </div>
+          {/* View Switcher Toggle — only when a project is active */}
+          {activeGroup && (
+            <div className="flex items-center rounded-lg bg-[var(--surface-hover)] border border-[var(--border)] p-1 mr-1.5 shadow-sm">
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "kanban"
+                    ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                  }`}
+                title="Kanban View"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Kanban</span>
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-all ${viewMode === "list"
+                    ? "bg-[var(--surface)] text-[var(--primary-text)] shadow-sm font-semibold"
+                    : "text-[var(--text-secondary)] hover:text-[var(--primary-text)]"
+                  }`}
+                title="List View"
+              >
+                <List className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">List</span>
+              </button>
+            </div>
+          )}
 
           <Button
             variant="outline"
@@ -1016,16 +1022,20 @@ function IssuesPageContent() {
             )}
             {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
-          <ValidatePermission permission="issues.issue.create">
-            <Button
-              size="sm"
-              className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
-              onClick={() => setShowCreateModal(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New Issue
-            </Button>
-          </ValidatePermission>
+
+          {/* New Issue button — only when a project is active */}
+          {activeGroup && (
+            <ValidatePermission permission="issues.issue.create">
+              <Button
+                size="sm"
+                className="gap-1.5 bg-gradient-to-r from-[var(--primary)] to-[var(--secondary)] text-white shadow-md hover:shadow-lg hover:brightness-105 transition-all font-semibold"
+                onClick={() => setShowCreateModal(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New Issue
+              </Button>
+            </ValidatePermission>
+          )}
         </div>
       </div>
 
@@ -1034,35 +1044,50 @@ function IssuesPageContent() {
       {/* Search & Filters Bar */}
       {showFilters && (
         <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border)] shadow-sm animate-fade-in">
-          <div className="relative flex-1 min-w-[240px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
-            <Input
-              placeholder="Search by title or issue ID..."
-              className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
-              value={search}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
-            />
-          </div>
-          <Select
-            placeholder="All Priorities"
-            value={filterPriority}
-            onChange={(v) => setFilterPriority(v)}
-            options={[
-              { label: "All Priorities", value: "" },
-              ...PRIORITIES.map((p) => ({ label: p, value: p })),
-            ]}
-            className="w-44 h-9.5 bg-[var(--background)]"
-          />
-          <Select
-            placeholder="All Types"
-            value={filterType}
-            onChange={(v) => setFilterType(v)}
-            options={[
-              { label: "All Types", value: "" },
-              ...issueTypes.map((t) => ({ label: t, value: t })),
-            ]}
-            className="w-48 h-9.5 bg-[var(--background)]"
-          />
+          {!activeGroup && (
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+              <Input
+                placeholder="Search projects..."
+                className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                value={projectSearch}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProjectSearch(e.target.value)}
+              />
+            </div>
+          )}
+          {activeGroup && (
+            <>
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--text-tertiary)]" />
+                <Input
+                  placeholder="Search by title or issue ID..."
+                  className="pl-9 h-9.5 bg-[var(--background)] border-[var(--border)]"
+                  value={search}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                placeholder="All Priorities"
+                value={filterPriority}
+                onChange={(v) => setFilterPriority(v)}
+                options={[
+                  { label: "All Priorities", value: "" },
+                  ...PRIORITIES.map((p) => ({ label: p, value: p })),
+                ]}
+                className="w-44 h-9.5 bg-[var(--background)]"
+              />
+              <Select
+                placeholder="All Types"
+                value={filterType}
+                onChange={(v) => setFilterType(v)}
+                options={[
+                  { label: "All Types", value: "" },
+                  ...issueTypes.map((t) => ({ label: t, value: t })),
+                ]}
+                className="w-48 h-9.5 bg-[var(--background)]"
+              />
+            </>
+          )}
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-xs hover:bg-[var(--surface-hover)]">
               <X className="h-3.5 w-3.5" />
