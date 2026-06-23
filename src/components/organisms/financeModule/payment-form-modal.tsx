@@ -5,7 +5,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   Button, Input, Label, Select, Textarea,
 } from "@/components";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X, Zap } from "lucide-react";
 import { useCreatePayment, useUpdatePayment } from "@/api/services/finance/finance-service";
 import { useGetProjectCRs } from "@/api/services/project-management/cr-service";
 import type { Payment, CreatePaymentPayload, PaymentType, PaymentStatus, PaymentMethod } from "@/types/finance-types";
@@ -19,10 +19,10 @@ interface Props {
 
 // Manual payment types only — UOM Based is system-generated (auto-created on snapshot finalisation)
 const PAYMENT_TYPES: { value: PaymentType; label: string }[] = [
-  { value: "Advance",            label: "Advance" },
+  { value: "Advance", label: "Advance" },
   { value: "Project Fixed Price", label: "Project Fixed Price" },
-  { value: "CR Based",           label: "CR Based" },
-  { value: "Other",              label: "Other" },
+  { value: "CR Based", label: "CR Based" },
+  { value: "Other", label: "Other" },
 ];
 
 const STATUSES: PaymentStatus[] = ["Pending", "Paid", "Partially Paid", "Overdue", "Cancelled"];
@@ -98,9 +98,8 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
     e.preventDefault();
     const payload: CreatePaymentPayload = {
       ...form,
-      uom: (form.paymentType === "CR Based" || form.paymentType === "Other" || editing?.isSystemGenerated) ? form.uom : null,
-      month: editing?.isSystemGenerated ? form.month : null,
-      quantity: editing?.isSystemGenerated ? editing.quantity : null,
+      uom: null,
+      quantity: null,
       paymentDate: (isPaid || isPartiallyPaid) ? form.paymentDate : null,
       partiallyPaidAmount: isPartiallyPaid ? form.partiallyPaidAmount : null,
       referenceNumber: needsRef ? form.referenceNumber : null,
@@ -128,66 +127,33 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
 
         <form onSubmit={handleSubmit} className="space-y-4 pt-2">
 
-          {/* Payment Type — pill buttons */}
+          {/* Payment Type */}
           <div className="space-y-1.5">
             <Label>Payment Type</Label>
             <div className="flex flex-wrap gap-2">
-              {editing?.isSystemGenerated ? (
+              {PAYMENT_TYPES.map(({ value, label }) => (
                 <button
+                  key={value}
                   type="button"
-                  className="px-3 py-2 rounded-lg text-sm font-medium border bg-[var(--primary)] text-white border-[var(--primary)] cursor-not-allowed"
-                  disabled
-                >
-                  UOM Based
-                </button>
-              ) : (
-                PAYMENT_TYPES.map(({ value, label }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => {
-                      // Clear uom when switching away from types that use it
-                      const clearsUom = value !== "CR Based" && value !== "Other";
-                      setForm((p) => ({
-                        ...p,
-                        paymentType: value,
-                        uom: clearsUom ? null : p.uom,
-                      }));
-                    }}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      form.paymentType === value
-                        ? "bg-[var(--primary)] text-white border-[var(--primary)]"
-                        : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
+                  onClick={() => {
+                    // Clear uom when switching away from types that use it
+                    const clearsUom = value !== "CR Based" && value !== "Other";
+                    setForm((p) => ({
+                      ...p,
+                      paymentType: value,
+                      uom: clearsUom ? null : p.uom,
+                    }));
+                  }}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${form.paymentType === value
+                      ? "bg-[var(--primary)] text-white border-[var(--primary)]"
+                      : "bg-[var(--surface)] text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--primary)]"
                     }`}
-                  >
-                    {label}
-                  </button>
-                ))
-              )}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-
-          {/* UOM Based metadata (month / uom snapshot reference) */}
-          {editing?.isSystemGenerated && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Billing Month</Label>
-                <Input
-                  value={form.month ?? "—"}
-                  disabled
-                  className="bg-[var(--surface-hover)] cursor-not-allowed"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>UOM Reference</Label>
-                <Input
-                  value={form.uom ?? "—"}
-                  disabled
-                  className="bg-[var(--surface-hover)] cursor-not-allowed"
-                />
-              </div>
-            </div>
-          )}
 
           {/* CR Based — CR reference input */}
           {isCRBased && (
@@ -237,8 +203,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 step="any"
                 value={form.pricePerUnit || ""}
                 onChange={(e) => set("pricePerUnit", parseFloat(e.target.value) || 0)}
-                disabled={editing?.isSystemGenerated}
-                className={`pl-10 ${editing?.isSystemGenerated ? "bg-[var(--surface-hover)] cursor-not-allowed" : ""}`}
+                className="pl-10"
                 required
               />
             </div>
@@ -323,6 +288,7 @@ export function PaymentFormModal({ projectId, open, onClose, editing }: Props) {
                 max={totalAmount}
                 value={form.partiallyPaidAmount ?? ""}
                 onChange={(e) => set("partiallyPaidAmount", parseFloat(e.target.value) || null)}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 placeholder="Amount paid so far"
                 required
               />

@@ -131,6 +131,7 @@ export function AllocatePaymentModal({ projectId, payment, open, onClose }: Prop
               max={outstanding}
               value={form.amount || ""}
               onChange={(e) => handleAmountChange(e.target.value)}
+              onWheel={(e) => (e.target as HTMLInputElement).blur()}
               placeholder={`Max ${fmt(outstanding)}`}
               required
             />

@@ -114,16 +114,18 @@ export function UpdatePriceModal({ projectId, uomType, open, onClose }: Props) {
                 step="any"
                 value={pricePerUnit}
                 onChange={(e) => setPricePerUnit(Number(e.target.value))}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 required
               />
             </div>
             <div className="space-y-1.5">
-              <Label>New Default Quantity *</Label>
+              <Label>New Quantity *</Label>
               <Input
                 type="number"
                 min={0}
                 value={defaultCount}
                 onChange={(e) => setDefaultCount(Number(e.target.value))}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 required
               />
             </div>

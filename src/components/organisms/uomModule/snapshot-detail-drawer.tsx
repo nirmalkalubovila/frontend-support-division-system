@@ -308,7 +308,7 @@ export function SnapshotDetailDrawer({
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog open={open && !showFinalize} onOpenChange={(o) => !o && onClose()}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="pb-3 border-b border-[var(--border)] shrink-0">
             <DialogTitle className="flex items-center gap-2 flex-wrap">
