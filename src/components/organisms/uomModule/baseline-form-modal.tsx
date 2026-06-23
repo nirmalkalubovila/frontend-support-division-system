@@ -104,7 +104,7 @@ export function BaselineFormModal({ projectId, baseline, open, onClose }: Props)
           {/* Column headers */}
           <div className="grid grid-cols-[1fr_110px_130px_72px_36px] gap-3 px-3">
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">UOM Name</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Default Qty</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Quantity</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Price / Unit (LKR)</span>
             <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)] text-center">Active</span>
             <span />
@@ -136,6 +136,7 @@ export function BaselineFormModal({ projectId, baseline, open, onClose }: Props)
                   min={0}
                   value={r.defaultCount ?? ""}
                   onChange={(e) => set(idx, "defaultCount", Number(e.target.value))}
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
                   className="h-9 text-sm text-center"
                   placeholder="0"
                 />
@@ -151,6 +152,7 @@ export function BaselineFormModal({ projectId, baseline, open, onClose }: Props)
                     step="any"
                     value={r.baselinePrice ?? ""}
                     onChange={(e) => set(idx, "baselinePrice", Number(e.target.value))}
+                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
                     className="h-9 text-sm pl-10"
                     placeholder="0.00"
                   />

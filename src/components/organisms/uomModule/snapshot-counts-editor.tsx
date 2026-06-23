@@ -169,6 +169,7 @@ export function SnapshotCountsEditor({ projectId, snapshot, open, onClose }: Pro
                               [line.uomTypeId]: Math.max(0, Number(e.target.value)),
                             }))
                           }
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           disabled={isFinalized}
                           className="w-full h-8 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-center text-sm font-semibold text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                         />
