@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Activity,
@@ -13,10 +14,14 @@ import {
   TrendingUp,
   ShieldAlert,
   History,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
-import { Badge, Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { Badge, Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { StatCard } from "@/components/atoms/statCard";
 import { Progress } from "@/components/ui/progress";
+import { ConfirmDialog } from "@/components/molecules/confirmDialog/confirmDialog";
+import { toast } from "sonner";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -30,7 +35,7 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import type { Issue } from "@/api/services/issue-management/issue-service";
+import { useDeleteIssue, type Issue } from "@/api/services/issue-management/issue-service";
 import type { Project } from "@/api/services/project-management/project-service";
 import type { UserInfo } from "@/types/global-types";
 
@@ -40,7 +45,107 @@ interface ManagementDashboardProps {
   users: UserInfo[];
 }
 
+function PaginationControl({
+  currentPage,
+  totalPages,
+  totalResults,
+  pageSize,
+  onPageChange,
+}: {
+  currentPage: number;
+  totalPages: number;
+  totalResults: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (totalPages <= 1) return null;
+
+  const startResult = (currentPage - 1) * pageSize + 1;
+  const endResult = Math.min(currentPage * pageSize, totalResults);
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-[var(--border)] text-xs text-[var(--text-secondary)]">
+      <div>
+        Showing <span className="font-semibold text-[var(--text-primary)]">{startResult}</span> to{" "}
+        <span className="font-semibold text-[var(--text-primary)]">{endResult}</span> of{" "}
+        <span className="font-semibold text-[var(--text-primary)]">{totalResults}</span> results
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="h-8 w-8 p-0 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+          .map((p, index, arr) => {
+            const showEllipsis = index > 0 && p - arr[index - 1] > 1;
+            return (
+              <React.Fragment key={p}>
+                {showEllipsis && <span className="px-1 text-[var(--text-tertiary)] font-medium">...</span>}
+                <Button
+                  variant={p === currentPage ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => onPageChange(p)}
+                  className={`h-8 w-8 p-0 rounded-md font-semibold text-xs transition-all ${
+                    p === currentPage
+                      ? "bg-[var(--primary)] text-white"
+                      : "border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)]"
+                  }`}
+                >
+                  {p}
+                </Button>
+              </React.Fragment>
+            );
+          })}
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="h-8 w-8 p-0 border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] disabled:opacity-40"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function ManagementDashboard({ issues, projects, users }: ManagementDashboardProps) {
+  const queryClient = useQueryClient();
+  const deleteIssueMutation = useDeleteIssue();
+
+  // Selection states for clearing issues
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [isConfirmIssuesOpen, setIsConfirmIssuesOpen] = useState(false);
+  const [isDeletingIssues, setIsDeletingIssues] = useState(false);
+
+  // Pagination states
+  const [resolvedIssuesPage, setResolvedIssuesPage] = useState(1);
+
+  const handleClearSelectedIssues = async () => {
+    setIsDeletingIssues(true);
+    try {
+      await Promise.all(
+        selectedIssueIds.map((id) => deleteIssueMutation.mutateAsync(id))
+      );
+      toast.success("Successfully cleared selected resolved issues.");
+      setSelectedIssueIds([]);
+    } catch (err: any) {
+      toast.error("Failed to clear some resolved issues.");
+    } finally {
+      setIsDeletingIssues(false);
+      setIsConfirmIssuesOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/issues"] });
+    }
+  };
   // ──────────────────────────────────────────────────────────────
   // SLA & General KPIs
   // ──────────────────────────────────────────────────────────────
@@ -187,6 +292,18 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
       .filter((i) => i.status === "Resolved" || i.status === "Closed" || i.status === "Done")
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [issues]);
+
+  const paginatedResolvedIssues = useMemo(() => {
+    const start = (resolvedIssuesPage - 1) * 10;
+    return resolvedIssues.slice(start, start + 10);
+  }, [resolvedIssues, resolvedIssuesPage]);
+
+  useEffect(() => {
+    const totalPages = Math.ceil(resolvedIssues.length / 10);
+    if (resolvedIssuesPage > totalPages && totalPages > 0) {
+      setResolvedIssuesPage(totalPages);
+    }
+  }, [resolvedIssues.length, resolvedIssuesPage]);
 
   return (
     <div className="space-y-6">
@@ -508,11 +625,21 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
 
       {/* Row 4: Resolved Issues History */}
       <Card className="bg-[var(--surface)] border-[var(--border)] shadow-sm">
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base font-semibold text-[var(--text-primary)] flex items-center gap-2">
             <History className="h-4.5 w-4.5 text-[var(--success)]" />
             Resolved Issues History (Division-wide)
           </CardTitle>
+          {selectedIssueIds.length > 0 && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs h-8 px-3 rounded-lg"
+              onClick={() => setIsConfirmIssuesOpen(true)}
+            >
+              Clear Selected ({selectedIssueIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {resolvedIssues.length === 0 ? (
@@ -524,6 +651,26 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[var(--border)] text-[var(--text-secondary)] font-semibold">
+                    <th className="py-2.5 px-3 w-8">
+                      <input
+                        type="checkbox"
+                        checked={paginatedResolvedIssues.length > 0 && paginatedResolvedIssues.every((i) => selectedIssueIds.includes(i._id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedIssueIds((prev) => {
+                              const newIds = [...prev];
+                              paginatedResolvedIssues.forEach((i) => {
+                                if (!newIds.includes(i._id)) newIds.push(i._id);
+                              });
+                              return newIds;
+                            });
+                          } else {
+                            setSelectedIssueIds((prev) => prev.filter((id) => !paginatedResolvedIssues.some((i) => i._id === id)));
+                          }
+                        }}
+                        className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                      />
+                    </th>
                     <th className="py-2.5 px-3">Issue ID</th>
                     <th className="py-2.5 px-3">Title</th>
                     <th className="py-2.5 px-3">Project</th>
@@ -535,12 +682,26 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
                   </tr>
                 </thead>
                 <tbody>
-                  {resolvedIssues.map((issue) => {
+                  {paginatedResolvedIssues.map((issue) => {
                     const client = typeof issue.client === "object" ? issue.client : null;
                     const project = typeof issue.project === "object" ? issue.project : null;
                     const assignee = typeof issue.assignedTo === "object" ? issue.assignedTo : null;
                     return (
                       <tr key={issue._id} className="border-b border-[var(--border)] hover:bg-[var(--background)]/50 transition-colors">
+                        <td className="py-3 px-3 w-8">
+                          <input
+                            type="checkbox"
+                            checked={selectedIssueIds.includes(issue._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIssueIds((prev) => [...prev, issue._id]);
+                              } else {
+                                setSelectedIssueIds((prev) => prev.filter((id) => id !== issue._id));
+                              }
+                            }}
+                            className="rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)] cursor-pointer"
+                          />
+                        </td>
                         <td className="py-3 px-3 font-semibold text-[var(--text-primary)] font-mono">
                           {issue.issueId}
                         </td>
@@ -587,10 +748,27 @@ export function ManagementDashboard({ issues, projects, users }: ManagementDashb
                   })}
                 </tbody>
               </table>
+              <PaginationControl
+                currentPage={resolvedIssuesPage}
+                totalPages={Math.ceil(resolvedIssues.length / 10)}
+                totalResults={resolvedIssues.length}
+                pageSize={10}
+                onPageChange={setResolvedIssuesPage}
+              />
             </div>
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={isConfirmIssuesOpen}
+        onOpenChange={setIsConfirmIssuesOpen}
+        title="Clear Selected Resolved Issues"
+        description={`Are you sure you want to permanently delete the ${selectedIssueIds.length} selected resolved issue(s)? This action cannot be undone.`}
+        confirmLabel="Clear Issues"
+        variant="destructive"
+        onConfirm={handleClearSelectedIssues}
+        loading={isDeletingIssues}
+      />
     </div>
   );
 }
